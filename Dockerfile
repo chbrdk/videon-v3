@@ -60,11 +60,12 @@ RUN test -d /workspace/msqdx-ui/packages/ui/src \
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=6144
 # Blank secrets only for this RUN so Coolify buildtime injection cannot hit Postgres/LLM at compile.
+# AUTH_SECRET needs a non-secret ≥32-char placeholder: Next collects /api/auth at build time.
 RUN DATABASE_URL= \
     OPENROUTER_API_KEY= \
     PLEXON_SERVICE_SECRET= \
     PLEXON_AUTH_URL= \
-    AUTH_SECRET= \
+    AUTH_SECRET=videon-docker-build-placeholder-not-for-runtime \
     VIDEON_OBJECT_STORAGE_SECRET_ACCESS_KEY= \
     npm run build \
     && rm -f /workspace/msqdx-ui/node_modules
