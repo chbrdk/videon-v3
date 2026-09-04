@@ -19,7 +19,12 @@ export function LoginForm({ plexonConfigured }: { plexonConfigured: boolean }) {
     if (!plexonConfigured) return
     setLoading(true)
     setError(null)
-    const result = await signIn('credentials', { email, password, redirect: false, callbackUrl: redirect })
+    const result = await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
+      callbackUrl: redirect,
+    })
     setLoading(false)
     if (!result?.ok) {
       setError('Anmeldung bei PLEXON fehlgeschlagen.')
@@ -30,17 +35,35 @@ export function LoginForm({ plexonConfigured }: { plexonConfigured: boolean }) {
   }
 
   return (
-    <main className="videon-page">
-      <Panel>
+    <main className="videon-login">
+      <Panel className="videon-login__panel">
         <SectionChrome title="VIDEON anmelden" meta="PLEXON Identity" />
         {!plexonConfigured ? (
           <Text role="body">PLEXON Auth ist in dieser Umgebung noch nicht konfiguriert.</Text>
         ) : (
           <form onSubmit={submit} className="videon-login-form">
             {error ? <Text role="body">{error}</Text> : null}
-            <Field label="E-Mail" size="md"><Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required block /></Field>
-            <Field label="Passwort" size="md"><Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required block /></Field>
-            <Button type="submit" variant="primary" disabled={loading}>{loading ? 'Anmelden …' : 'Mit PLEXON anmelden'}</Button>
+            <Field label="E-Mail" size="md">
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                required
+                block
+              />
+            </Field>
+            <Field label="Passwort" size="md">
+              <Input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                required
+                block
+              />
+            </Field>
+            <Button type="submit" variant="primary" disabled={loading}>
+              {loading ? 'Anmelden …' : 'Mit PLEXON anmelden'}
+            </Button>
           </form>
         )}
       </Panel>

@@ -1,10 +1,34 @@
 export const paths = {
   appName: 'VIDEON v3',
-  productId: 'videon',
+  brandLabel: 'VIDEON',
+  productId: 'videon' as const,
   federationContract: '2026-05-plexon-federation-v3',
   devPort: 3010,
   defaultTheme: 'msqdx-dark',
   defaultLocale: 'de',
+  railInsetRem: 1,
+  railGapRem: 4,
+  railWidthRem: 4.25,
+  mainGutterRem: 2.5,
+  railDockEdge: 'left' as const,
+  railDockStorageKey: 'videon.v3.railDock',
+  brandCornerRadiusPx: 24,
+  ecosystemStagingPlexon: 'https://plexon-v3.projects-a.plygrnd.tech',
+  ecosystemStagingAudion: 'https://audion-v3.projects-a.plygrnd.tech',
+  ecosystemStagingCheckion: 'https://checkion-v3.projects-a.plygrnd.tech',
+  ecosystemStagingBrandion: 'https://brandion-v3.projects-a.plygrnd.tech',
+  ecosystemStagingCreation: 'https://creation-v3.projects-a.plygrnd.tech',
+  ecosystemStagingEchon: 'https://echon-v3.projects-a.plygrnd.tech',
+  ecosystemStagingVideon: 'https://videon.projects-a.plygrnd.tech',
+  ecosystemStagingSpirion: 'https://spirion.projects-a.plygrnd.tech',
+  plexonProductsPath: '/products',
+  envAudionPublicUrl: 'NEXT_PUBLIC_AUDION_URL',
+  envBrandionPublicUrl: 'NEXT_PUBLIC_BRANDION_URL',
+  envCreationPublicUrl: 'NEXT_PUBLIC_CREATION_URL',
+  envEchonPublicUrl: 'NEXT_PUBLIC_ECHON_URL',
+  envCheckionPublicUrl: 'NEXT_PUBLIC_CHECKION_URL',
+  envVideonPublicUrl: 'NEXT_PUBLIC_VIDEON_URL',
+  envSpirionPublicUrl: 'NEXT_PUBLIC_SPIRION_URL',
   envFederationMode: 'PLEXON_FEDERATION_MODE',
   envPlexonServiceSecret: 'PLEXON_SERVICE_SECRET',
   envPlexonBaseUrl: 'NEXT_PLEXON_BASE_URL',
@@ -24,7 +48,15 @@ export const paths = {
   envVisionDirectVideoEnabled: 'VIDEON_VISION_DIRECT_VIDEO_ENABLED',
   envOpenRouterDataCollection: 'VIDEON_OPENROUTER_DATA_COLLECTION',
   envOpenRouterRequireZdr: 'VIDEON_OPENROUTER_REQUIRE_ZDR',
+  routes: {
+    home: '/',
+    library: '/library',
+    analyses: '/analyses',
+    cuts: '/cuts',
+    settings: '/settings',
+    login: '/login',
+  },
 } as const
 
-export const pathLibrary = '/library'
-export const pathLogin = '/login'
+export const pathLibrary = paths.routes.library
+export const pathLogin = paths.routes.login

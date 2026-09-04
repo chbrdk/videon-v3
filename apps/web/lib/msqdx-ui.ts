@@ -1,0 +1,10 @@
+/** Curated @msqdx/ui barrel — prefer source over package dist (Next + Coolify). */
+export { Avatar } from '../../../../msqdx-ui/packages/ui/src/components/Avatar'
+export { Button, buttonClassName } from '../../../../msqdx-ui/packages/ui/src/components/Button'
+export type { ButtonProps, ButtonVariant, ButtonSize } from '../../../../msqdx-ui/packages/ui/src/components/Button'
+export { EmptyState } from '../../../../msqdx-ui/packages/ui/src/components/LoadingText'
+export { Field } from '../../../../msqdx-ui/packages/ui/src/components/Field'
+export { Input } from '../../../../msqdx-ui/packages/ui/src/components/Input'
+export { Panel } from '../../../../msqdx-ui/packages/ui/src/components/Panel'
+export { Text } from '../../../../msqdx-ui/packages/ui/src/components/Text'
+export { SectionChrome } from '../../../../msqdx-ui/packages/ui/src/SectionChrome'
