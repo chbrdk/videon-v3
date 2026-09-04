@@ -1,0 +1,20 @@
+# Dependencies & build artifacts
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+coverage
+.git
+.cursor
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+**/*.tsbuildinfo
+apps/web/__tests__
+apps/web/vitest.config.ts
+tmp
+knowledge

@@ -1,0 +1,21 @@
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+.videon-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.videon-page__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}

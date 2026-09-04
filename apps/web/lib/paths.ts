@@ -1,0 +1,30 @@
+export const paths = {
+  appName: 'VIDEON v3',
+  productId: 'videon',
+  federationContract: '2026-05-plexon-federation-v3',
+  devPort: 3010,
+  defaultTheme: 'msqdx-dark',
+  defaultLocale: 'de',
+  envFederationMode: 'PLEXON_FEDERATION_MODE',
+  envPlexonServiceSecret: 'PLEXON_SERVICE_SECRET',
+  envPlexonBaseUrl: 'NEXT_PLEXON_BASE_URL',
+  envPlexonAuthUrl: 'PLEXON_AUTH_URL',
+  envAuthSecret: 'AUTH_SECRET',
+  envDatabaseUrl: 'DATABASE_URL',
+  envObjectStorageRegion: 'VIDEON_OBJECT_STORAGE_REGION',
+  envObjectStorageBucket: 'VIDEON_OBJECT_STORAGE_BUCKET',
+  envObjectStorageEndpoint: 'VIDEON_OBJECT_STORAGE_ENDPOINT',
+  envObjectStorageAccessKeyId: 'VIDEON_OBJECT_STORAGE_ACCESS_KEY_ID',
+  envObjectStorageSecretAccessKey: 'VIDEON_OBJECT_STORAGE_SECRET_ACCESS_KEY',
+  envObjectStorageForcePathStyle: 'VIDEON_OBJECT_STORAGE_FORCE_PATH_STYLE',
+  envOpenRouterApiKey: 'OPENROUTER_API_KEY',
+  envOpenRouterApiBaseUrl: 'OPENROUTER_API_BASE_URL',
+  envVisionDefaultModel: 'VIDEON_VISION_DEFAULT_MODEL',
+  envVisionSchemaFallbackModel: 'VIDEON_VISION_SCHEMA_FALLBACK_MODEL',
+  envVisionDirectVideoEnabled: 'VIDEON_VISION_DIRECT_VIDEO_ENABLED',
+  envOpenRouterDataCollection: 'VIDEON_OPENROUTER_DATA_COLLECTION',
+  envOpenRouterRequireZdr: 'VIDEON_OPENROUTER_REQUIRE_ZDR',
+} as const
+
+export const pathLibrary = '/library'
+export const pathLogin = '/login'

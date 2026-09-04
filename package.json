@@ -1,0 +1,17 @@
+{
+  "name": "videon-v3",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w web",
+    "build": "npm run build -w @videon-v3/contracts && npm run build -w web",
+    "typecheck": "npm run typecheck -w @videon-v3/contracts && npm run typecheck -w web",
+    "test": "npm run test -w @videon-v3/contracts && npm run test -w web"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
