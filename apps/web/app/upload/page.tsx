@@ -1,29 +1,29 @@
 import Link from 'next/link'
 import { Button, Text } from '@msqdx/ui'
 import { AppShell } from '@/components/app-shell'
-import { MediaLibrary } from '@/components/media-library'
+import { MediaUploadForm } from '@/components/media-upload-form'
 import { paths } from '@/lib/paths'
 
-type LibraryPageProps = {
+type UploadPageProps = {
   searchParams: Promise<{ platformProjectId?: string }>
 }
 
 export const dynamic = 'force-dynamic'
 
-export default async function LibraryPage({ searchParams }: LibraryPageProps) {
+export default async function UploadPage({ searchParams }: UploadPageProps) {
   const params = await searchParams
   const platformProjectId = params.platformProjectId?.trim()
 
   if (!platformProjectId) {
     return (
-      <AppShell description="Wähle zuerst eine zugängliche Collection.">
+      <AppShell description="Upload ist Collection-gebunden.">
         <article className="videon-hub">
           <header>
-            <p className="videon-spread__eyebrow">Medien</p>
-            <h1 className="videon-spread__headline">Mediathek</h1>
+            <p className="videon-spread__eyebrow">Upload</p>
+            <h1 className="videon-spread__headline">Video hochladen</h1>
           </header>
           <Text role="body" as="p">
-            Ohne Collection-Kontext bleibt die Mediathek leer.
+            Wähle zuerst eine Collection.
           </Text>
           <Link href={paths.routes.collections}>
             <Button variant="primary">Collection wählen</Button>
@@ -34,18 +34,18 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   }
 
   return (
-    <AppShell description={`Collection-Kontext: ${platformProjectId}`}>
-      <article className="videon-hub videon-hub--wide">
+    <AppShell description={`Signierter Upload in Collection ${platformProjectId}`}>
+      <article className="videon-hub">
         <header className="videon-hub__header-row">
           <div>
-            <p className="videon-spread__eyebrow">Medien</p>
-            <h1 className="videon-spread__headline">Mediathek</h1>
+            <p className="videon-spread__eyebrow">Upload</p>
+            <h1 className="videon-spread__headline">Video hochladen</h1>
           </div>
-          <Link href={paths.routes.collections}>
-            <Button variant="ghost">Andere Collection</Button>
+          <Link href={paths.routes.libraryFor(platformProjectId)}>
+            <Button variant="ghost">Zur Mediathek</Button>
           </Link>
         </header>
-        <MediaLibrary platformProjectId={platformProjectId} />
+        <MediaUploadForm platformProjectId={platformProjectId} />
       </article>
     </AppShell>
   )

@@ -22,4 +22,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   pages: { signIn: pathLogin },
+  callbacks: {
+    jwt({ token, user }) {
+      if (user) {
+        token.sub = user.id
+        token.email = user.email
+        token.name = user.name
+      }
+      return token
+    },
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.sub!
+        session.user.email = token.email ?? ''
+        session.user.name = token.name ?? null
+      }
+      return session
+    },
+  },
 })

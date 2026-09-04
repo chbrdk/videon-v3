@@ -58,14 +58,14 @@ export class S3ObjectStore implements ObjectStore {
     }
     if (!/^[a-f0-9]{64}$/i.test(input.checksumSha256)) throw new Error('checksumSha256 must be a SHA-256 digest')
     const key = sourceStorageKey(input)
+    // MinIO / browser PUT: keep checksum in VIDEON DB only — provider checksum headers
+    // break many S3-compatible signed uploads.
     const url = await getSignedUrl(
       this.client,
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         ContentType: input.mimeType,
-        ContentLength: input.bytes,
-        ChecksumSHA256: input.checksumSha256,
       }),
       { expiresIn: SIGNED_URL_TTL_SECONDS },
     )
@@ -74,7 +74,6 @@ export class S3ObjectStore implements ObjectStore {
       uploadUrl: url,
       headers: {
         'content-type': input.mimeType,
-        'x-amz-checksum-sha256': input.checksumSha256,
       },
       expiresAt: new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000).toISOString(),
     }

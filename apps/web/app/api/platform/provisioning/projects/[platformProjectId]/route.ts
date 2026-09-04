@@ -5,6 +5,7 @@ import {
 } from '@videon-v3/contracts'
 import { apiError, apiJson } from '@/lib/api-response'
 import { authorizeFederationRequest, plexonUserId } from '@/lib/federation'
+import { mediaSummaryForWorkspace } from '@/lib/db/media'
 import { canReadWorkspace, findWorkspace, upsertWorkspace } from '@/lib/db/workspaces'
 import { hasDatabaseConfig } from '@/lib/db/client'
 
@@ -78,6 +79,8 @@ export async function GET(request: Request, context: RouteContext) {
       return apiError(request, 403, 'collection_access_denied', 'The user cannot access this Collection')
     }
 
+    const summary = await mediaSummaryForWorkspace(workspace.id)
+
     return apiJson(request, {
       project: {
         id: workspace.id,
@@ -86,12 +89,8 @@ export async function GET(request: Request, context: RouteContext) {
         status: workspace.status,
       },
       summary: {
-        mediaCount: 0,
-        readyMediaCount: 0,
-        processingMediaCount: 0,
-        failedMediaCount: 0,
+        ...summary,
         cutCount: 0,
-        lastActivityAt: null,
       },
       links: relativeWorkspaceLinks(workspace.platformProjectId),
       contractVersion: PLEXON_FEDERATION_CONTRACT_VERSION,

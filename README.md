@@ -4,13 +4,16 @@ Collection-bound video intelligence and editing capability for PLEXON.
 
 ## Current delivery slice
 
-This repository starts the V0–V2 foundation:
+V0–V2 foundation is live on staging:
 
 - federation contracts and secure provisioning routes;
-- Collection-bound workspace persistence schema;
+- Collection picker (PLEXON accessible-collections, Access Model B);
+- Collection-bound workspace persistence + signed object-store upload;
 - public and federation health;
 - OpenRouter/Qwen policy boundary;
-- v3 AppShell foundation using `@msqdx/ui`.
+- v3 AppShell using `@msqdx/ui`.
+
+Vision pipeline (V3/V4) and Cuts editor are not enabled yet.
 
 The normative specifications are maintained in PLEXON:
 

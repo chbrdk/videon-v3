@@ -229,6 +229,55 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   max-width: 48rem;
 }
 
+.videon-hub--wide {
+  max-width: none;
+}
+
+.videon-hub__header-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.videon-collection-list,
+.videon-media-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.videon-collection-card,
+.videon-media-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.videon-collection-card__actions,
+.videon-media-list-wrap__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.videon-upload-form {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 32rem;
+}
+
+.videon-upload-form input[type='file'] {
+  width: 100%;
+  color: var(--fg);
+}
+
 @keyframes videon-rise {
   from {
     opacity: 0;

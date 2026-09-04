@@ -19,6 +19,7 @@ import { ShellBrandCorner } from './shell-brand-corner'
 
 const PRIMARY_NAV = [
   { id: 'home', href: paths.routes.home, label: 'Übersicht', icon: <NavIconOverview /> },
+  { id: 'collections', href: paths.routes.collections, label: 'Collections', icon: <NavIconOverview /> },
   { id: 'library', href: paths.routes.library, label: 'Mediathek', icon: <NavIconLibrary /> },
   { id: 'analyses', href: paths.routes.analyses, label: 'Analysen', icon: <NavIconAnalyses /> },
   { id: 'cuts', href: paths.routes.cuts, label: 'Cuts', icon: <NavIconCuts /> },

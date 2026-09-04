@@ -29,6 +29,11 @@ export const paths = {
   envCheckionPublicUrl: 'NEXT_PUBLIC_CHECKION_URL',
   envVideonPublicUrl: 'NEXT_PUBLIC_VIDEON_URL',
   envSpirionPublicUrl: 'NEXT_PUBLIC_SPIRION_URL',
+  plexonAccessibleCollectionsPath: '/api/platform/provisioning/accessible-collections',
+  plexonProjectSyncPath: (platformProjectId: string) =>
+    `/api/platform/provisioning/projects/${encodeURIComponent(platformProjectId)}/sync`,
+  /** Browser upload cap for signed PUT (bytes). */
+  maxUploadBytes: 2 * 1024 * 1024 * 1024,
   envFederationMode: 'PLEXON_FEDERATION_MODE',
   envPlexonServiceSecret: 'PLEXON_SERVICE_SECRET',
   envPlexonBaseUrl: 'NEXT_PLEXON_BASE_URL',
@@ -51,12 +56,23 @@ export const paths = {
   routes: {
     home: '/',
     library: '/library',
+    upload: '/upload',
     analyses: '/analyses',
     cuts: '/cuts',
     settings: '/settings',
     login: '/login',
+    collections: '/collections',
+    apiCollections: '/api/collections',
+    apiMedia: '/api/media',
+    apiMediaUploadIntent: '/api/media/upload-intent',
+    apiMediaComplete: (mediaAssetId: string) => `/api/media/${encodeURIComponent(mediaAssetId)}/complete`,
+    libraryFor: (platformProjectId: string) =>
+      `/library?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    uploadFor: (platformProjectId: string) =>
+      `/upload?platformProjectId=${encodeURIComponent(platformProjectId)}`,
   },
 } as const
 
 export const pathLibrary = paths.routes.library
 export const pathLogin = paths.routes.login
+export const platformProjectQueryParam = 'platformProjectId'

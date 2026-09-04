@@ -43,25 +43,25 @@ export function HomeMagazine() {
         deck="Mediathek, Analysen und Cuts bleiben Collection-gebunden — geöffnet aus PLEXON."
       >
         <div className="videon-home-cta-row" role="group" aria-label="VIDEON Kapazitäten">
+          <Link href={paths.routes.collections} className="videon-capability-tile videon-home-cta">
+            <span className="videon-capability-tile__kicker">Zugang</span>
+            <span className="videon-capability-tile__label">Collections</span>
+            <span className="videon-capability-tile__deck">
+              Nur zugewiesene PLEXON Collections — Access Model B.
+            </span>
+          </Link>
           <Link href={paths.routes.library} className="videon-capability-tile videon-home-cta">
             <span className="videon-capability-tile__kicker">Medien</span>
             <span className="videon-capability-tile__label">Mediathek</span>
             <span className="videon-capability-tile__deck">
-              Collection-scoped Assets, Uploads und Lebenszyklus.
+              Collection-scoped Assets und signierte Uploads.
             </span>
           </Link>
           <Link href={paths.routes.analyses} className="videon-capability-tile videon-home-cta">
             <span className="videon-capability-tile__kicker">Vision</span>
             <span className="videon-capability-tile__label">Analysen</span>
             <span className="videon-capability-tile__deck">
-              OpenRouter / Qwen — durable Runs, Schema-validiert.
-            </span>
-          </Link>
-          <Link href={paths.routes.cuts} className="videon-capability-tile videon-home-cta">
-            <span className="videon-capability-tile__kicker">Editor</span>
-            <span className="videon-capability-tile__label">Cuts</span>
-            <span className="videon-capability-tile__deck">
-              Schnitte und Versionen innerhalb der Collection.
+              OpenRouter / Qwen — folgt nach der Media-Pipeline (V3/V4).
             </span>
           </Link>
         </div>
