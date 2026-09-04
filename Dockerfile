@@ -81,6 +81,12 @@ ENV HOSTNAME=0.0.0.0
 ENV PLEXON_FEDERATION_MODE=dummy
 EXPOSE 3010
 
+# Coolify Dockerfile healthchecks shell out to curl/wget.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /workspace/videon-v3/package.json ./package.json
 COPY --from=builder /workspace/videon-v3/package-lock.json ./package-lock.json
 COPY --from=builder /workspace/videon-v3/node_modules ./node_modules
