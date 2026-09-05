@@ -4,14 +4,12 @@ import { createUploadingMediaAsset } from '@/lib/db/media'
 import { paths } from '@/lib/paths'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
-import { mediaSourceStorageKey } from '@/lib/storage/object-store'
 import { pendingChecksumForMedia } from '@/lib/storage/pending-checksum'
+import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 import { randomUUID } from 'node:crypto'
 
 export const dynamic = 'force-dynamic'
-
-const UPLOAD_TTL_MS = 15 * 60 * 1000
 
 export async function POST(request: Request) {
   const userId = await requireSessionUserId()
@@ -67,7 +65,13 @@ export async function POST(request: Request) {
 
     const mediaAssetId = randomUUID()
     const checksumSha256 = pendingChecksumForMedia(mediaAssetId)
-    const storageKey = mediaSourceStorageKey(resolved.workspace.id, mediaAssetId)
+    const store = new S3ObjectStore()
+    const target = await store.createUploadTarget({
+      workspaceId: resolved.workspace.id,
+      mediaAssetId,
+      mimeType,
+      bytes,
+    })
     const media = await createUploadingMediaAsset({
       id: mediaAssetId,
       workspace: resolved.workspace,
@@ -76,7 +80,7 @@ export async function POST(request: Request) {
       mimeType,
       bytes,
       checksumSha256,
-      storageKey,
+      storageKey: target.storageKey,
     })
 
     return apiJson(
@@ -84,10 +88,8 @@ export async function POST(request: Request) {
       {
         media,
         upload: {
-          storageKey,
-          uploadUrl: paths.routes.apiMediaUpload(mediaAssetId, platformProjectId),
-          headers: { 'content-type': mimeType },
-          expiresAt: new Date(Date.now() + UPLOAD_TTL_MS).toISOString(),
+          ...target,
+          mode: 'direct' as const,
         },
       },
       201,

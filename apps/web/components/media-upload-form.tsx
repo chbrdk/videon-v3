@@ -13,8 +13,10 @@ function putFileWithProgress(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', url)
-    xhr.withCredentials = true
+    const resolvedUrl = new URL(url, window.location.href)
+    const sameOrigin = resolvedUrl.origin === window.location.origin
+    xhr.open('PUT', resolvedUrl.toString())
+    xhr.withCredentials = sameOrigin
     for (const [key, value] of Object.entries(headers)) {
       xhr.setRequestHeader(key, value)
     }
@@ -36,7 +38,14 @@ function putFileWithProgress(
       }
       reject(new Error(message))
     }
-    xhr.onerror = () => reject(new Error('Upload fehlgeschlagen (Netzwerkfehler)'))
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          sameOrigin
+            ? 'Upload fehlgeschlagen (Netzwerkfehler)'
+            : 'Upload fehlgeschlagen (Object Storage nicht erreichbar oder CORS blockiert)',
+        ),
+      )
     xhr.onabort = () => reject(new Error('Upload abgebrochen'))
     xhr.send(file)
   })

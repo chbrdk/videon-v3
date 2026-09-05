@@ -6,6 +6,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { sha256HexFromStream } from './object-checksum'
+import { ensureBrowserUploadCors } from './bucket-cors'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import type {
@@ -65,6 +66,11 @@ export class S3ObjectStore implements ObjectStore {
       throw new Error('Only a bounded video upload may receive a storage target')
     }
     const key = sourceStorageKey(input)
+    try {
+      await ensureBrowserUploadCors(this.client, this.bucket)
+    } catch {
+      // Credentials may lack PutBucketCors; direct browser upload still works when CORS is configured manually.
+    }
     // MinIO / browser PUT: keep checksum in VIDEON DB only — provider checksum headers
     // break many S3-compatible signed uploads.
     const url = await getSignedUrl(
