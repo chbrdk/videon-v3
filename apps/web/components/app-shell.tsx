@@ -13,16 +13,19 @@ import {
   type RailDockEdge,
 } from '../lib/msqdx-ui-shell'
 import { Avatar } from '@msqdx/ui'
-import { NavIconAnalyses, NavIconCuts, NavIconLibrary, NavIconOverview } from './nav-icons'
+import { useActiveCollection } from './collection-context'
+import { NavIconAnalyses, NavIconCuts, NavIconLibrary, NavIconOverview, NavIconUpload } from './nav-icons'
 import { paths } from '../lib/paths'
+import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 
 const PRIMARY_NAV = [
-  { id: 'home', href: paths.routes.home, label: 'Übersicht', icon: <NavIconOverview /> },
-  { id: 'collections', href: paths.routes.collections, label: 'Collections', icon: <NavIconOverview /> },
-  { id: 'library', href: paths.routes.library, label: 'Mediathek', icon: <NavIconLibrary /> },
-  { id: 'analyses', href: paths.routes.analyses, label: 'Analysen', icon: <NavIconAnalyses /> },
-  { id: 'cuts', href: paths.routes.cuts, label: 'Cuts', icon: <NavIconCuts /> },
+  { id: 'home', route: paths.routes.home, label: 'Übersicht', icon: <NavIconOverview /> },
+  { id: 'collections', route: paths.routes.collections, label: 'Collections', icon: <NavIconOverview /> },
+  { id: 'library', route: paths.routes.library, label: 'Mediathek', icon: <NavIconLibrary /> },
+  { id: 'upload', route: paths.routes.upload, label: 'Upload', icon: <NavIconUpload /> },
+  { id: 'analyses', route: paths.routes.analyses, label: 'Analysen', icon: <NavIconAnalyses /> },
+  { id: 'cuts', route: paths.routes.cuts, label: 'Cuts', icon: <NavIconCuts /> },
 ] as const
 
 export function AppShell({
@@ -37,6 +40,7 @@ export function AppShell({
   const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
+  const { platformProjectId } = useActiveCollection()
   const [railEdge, setRailEdge] = useState<RailDockEdge>(paths.railDockEdge)
   const displayName = session?.user?.name?.trim() || session?.user?.email?.trim() || 'VIDEON'
 
@@ -51,9 +55,25 @@ export function AppShell({
     [],
   )
 
-  function isActive(href: string): boolean {
-    return href === '/' ? pathname === href : pathname.startsWith(href)
+  function isActive(route: string, href: string): boolean {
+    if (route === paths.routes.home) return pathname === href
+    return pathname === href.split('?')[0] || pathname.startsWith(href.split('?')[0])
   }
+
+  const navItems = useMemo(
+    () =>
+      PRIMARY_NAV.map((item) => {
+        const href = workspaceHref(item.route, platformProjectId)
+        return {
+          id: item.id,
+          href,
+          label: item.label,
+          icon: item.icon,
+          active: isActive(item.route, href),
+        }
+      }),
+    [pathname, platformProjectId],
+  )
 
   return (
     <AppFrame
@@ -70,19 +90,13 @@ export function AppShell({
           logo={<MsqdxLogoMark size={26} title="MSQ DX" />}
           logoLabel={`${paths.brandLabel} Übersicht`}
           linkComponent={Link}
-          items={PRIMARY_NAV.map((item) => ({
-            id: item.id,
-            href: item.href,
-            label: item.label,
-            icon: item.icon,
-            active: isActive(item.href),
-          }))}
+          items={navItems}
           footerItems={[
             {
               id: 'settings',
               label: 'Einstellungen',
               href: paths.routes.settings,
-              active: isActive(paths.routes.settings),
+              active: pathname.startsWith(paths.routes.settings),
               ariaLabel: 'Einstellungen',
               icon: <Avatar name={displayName} size="sm" className="rail-avatar" />,
             },

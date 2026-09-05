@@ -4,13 +4,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
+import { useActiveCollection } from '@/components/collection-context'
 import { paths } from '@/lib/paths'
 
 type SceneItem = {
   sceneKey: string
   startMs: number
   endMs: number
-  insight: { summary: string; mood: string[] }
+  insight: {
+    summary: string
+    mood: string[]
+    setting?: { location: string; timeOfDay: string }
+    subjects?: Array<{ label: string }>
+  }
 }
 
 type MediaDetail = {
@@ -54,6 +60,7 @@ export function MediaEditorView({
   mediaAssetId: string
 }) {
   const router = useRouter()
+  const { setPlatformProjectId } = useActiveCollection()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [media, setMedia] = useState<MediaDetail | null>(null)
   const [analysis, setAnalysis] = useState<AnalysisState>(null)
@@ -105,6 +112,10 @@ export function MediaEditorView({
       setLoading(false)
     }
   }, [loadDetail, loadPlayback])
+
+  useEffect(() => {
+    setPlatformProjectId(platformProjectId)
+  }, [platformProjectId, setPlatformProjectId])
 
   useEffect(() => {
     void refresh()
@@ -307,6 +318,12 @@ export function MediaEditorView({
                     <Text role="body" as="span">
                       {scene.insight.summary}
                     </Text>
+                    {scene.insight.setting ? (
+                      <Text role="meta" as="span">
+                        {scene.insight.setting.location}
+                        {scene.insight.setting.timeOfDay ? ` · ${scene.insight.setting.timeOfDay}` : ''}
+                      </Text>
+                    ) : null}
                   </button>
                 </li>
               ))}

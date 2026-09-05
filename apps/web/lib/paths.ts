@@ -81,6 +81,10 @@ export const paths = {
       `/library?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     uploadFor: (platformProjectId: string) =>
       `/upload?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    analysesFor: (platformProjectId: string) =>
+      `/analyses?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    cutsFor: (platformProjectId: string) =>
+      `/cuts?platformProjectId=${encodeURIComponent(platformProjectId)}`,
   },
 } as const
 

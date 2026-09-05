@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button, EmptyState, Text } from '@msqdx/ui'
+import { useActiveCollection } from '@/components/collection-context'
 import { paths } from '@/lib/paths'
 
 type CollectionItem = {
@@ -14,6 +15,7 @@ type CollectionItem = {
 }
 
 export function CollectionPicker() {
+  const { setPlatformProjectId } = useActiveCollection()
   const [items, setItems] = useState<CollectionItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -88,10 +90,13 @@ export function CollectionPicker() {
             </Text>
           </div>
           <div className="videon-collection-card__actions">
-            <Link href={paths.routes.libraryFor(item.id)}>
+            <Link
+              href={paths.routes.libraryFor(item.id)}
+              onClick={() => setPlatformProjectId(item.id)}
+            >
               <Button variant="primary">Mediathek öffnen</Button>
             </Link>
-            <Link href={paths.routes.uploadFor(item.id)}>
+            <Link href={paths.routes.uploadFor(item.id)} onClick={() => setPlatformProjectId(item.id)}>
               <Button variant="ghost">Upload</Button>
             </Link>
           </div>

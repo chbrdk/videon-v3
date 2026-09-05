@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Field, Text } from '@msqdx/ui'
+import { useActiveCollection } from '@/components/collection-context'
 import { paths } from '@/lib/paths'
 
 function putFileWithProgress(
@@ -53,6 +54,7 @@ function putFileWithProgress(
 
 export function MediaUploadForm({ platformProjectId }: { platformProjectId: string }) {
   const router = useRouter()
+  const { setPlatformProjectId } = useActiveCollection()
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<string | null>(null)
@@ -61,8 +63,13 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!file || busy) return
+    if (file.size > paths.maxUploadBytes) {
+      setError(`Datei ist zu groß (max. ${(paths.maxUploadBytes / (1024 * 1024 * 1024)).toFixed(1)} GB).`)
+      return
+    }
     setBusy(true)
     setError(null)
+    setPlatformProjectId(platformProjectId)
     try {
       setProgress('Signierte Upload-URL wird angefordert …')
       const intentResponse = await fetch(paths.routes.apiMediaUploadIntent, {
@@ -95,12 +102,16 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platformProjectId }),
       })
-      const completeBody = (await completeResponse.json()) as { error?: { message?: string } }
+      const completeBody = (await completeResponse.json()) as {
+        media?: { id: string }
+        error?: { message?: string }
+      }
       if (!completeResponse.ok) {
         throw new Error(completeBody.error?.message || 'Upload-Abschluss fehlgeschlagen')
       }
 
-      router.push(paths.routes.libraryFor(platformProjectId))
+      const mediaId = completeBody.media?.id ?? intentBody.media.id
+      router.push(paths.routes.mediaFor(mediaId, platformProjectId))
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload fehlgeschlagen')

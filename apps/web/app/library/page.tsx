@@ -1,8 +1,5 @@
-import Link from 'next/link'
-import { Button, Text } from '@msqdx/ui'
 import { AppShell } from '@/components/app-shell'
-import { MediaLibrary } from '@/components/media-library'
-import { paths } from '@/lib/paths'
+import { LibraryWorkspace } from '@/components/library-workspace'
 
 type LibraryPageProps = {
   searchParams: Promise<{ platformProjectId?: string }>
@@ -14,39 +11,9 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const params = await searchParams
   const platformProjectId = params.platformProjectId?.trim()
 
-  if (!platformProjectId) {
-    return (
-      <AppShell description="Wähle zuerst eine zugängliche Collection.">
-        <article className="videon-hub">
-          <header>
-            <p className="videon-spread__eyebrow">Medien</p>
-            <h1 className="videon-spread__headline">Mediathek</h1>
-          </header>
-          <Text role="body" as="p">
-            Ohne Collection-Kontext bleibt die Mediathek leer.
-          </Text>
-          <Link href={paths.routes.collections}>
-            <Button variant="primary">Collection wählen</Button>
-          </Link>
-        </article>
-      </AppShell>
-    )
-  }
-
   return (
-    <AppShell description={`Collection-Kontext: ${platformProjectId}`}>
-      <article className="videon-hub videon-hub--wide">
-        <header className="videon-hub__header-row">
-          <div>
-            <p className="videon-spread__eyebrow">Medien</p>
-            <h1 className="videon-spread__headline">Mediathek</h1>
-          </div>
-          <Link href={paths.routes.collections}>
-            <Button variant="ghost">Andere Collection</Button>
-          </Link>
-        </header>
-        <MediaLibrary platformProjectId={platformProjectId} />
-      </article>
+    <AppShell description={platformProjectId ? `Collection-Kontext: ${platformProjectId}` : 'Mediathek'}>
+      <LibraryWorkspace platformProjectId={platformProjectId} />
     </AppShell>
   )
 }

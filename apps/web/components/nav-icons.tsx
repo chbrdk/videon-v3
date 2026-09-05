@@ -50,6 +50,16 @@ export function NavIconCuts() {
   )
 }
 
+export function NavIconUpload() {
+  return (
+    <NavSvg>
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M4 20h16" />
+    </NavSvg>
+  )
+}
+
 export function NavIconAnalyses() {
   return (
     <NavSvg>

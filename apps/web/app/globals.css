@@ -129,9 +129,24 @@ main {
 
 .videon-home-cta-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   width: 100%;
+  border-bottom: 1px solid var(--line);
+}
+
+.videon-home-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.videon-home-activity-list a {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.35rem 0;
   border-bottom: 1px solid var(--line);
 }
 
