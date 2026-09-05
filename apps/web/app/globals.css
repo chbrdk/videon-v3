@@ -859,6 +859,241 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   gap: 0.5rem;
 }
 
+.videon-pipeline {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.videon-pipeline__summary {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.videon-pipeline__summary-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.videon-pipeline__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.videon-pipeline__badge.is-active,
+.videon-pipeline__step-status.is-active {
+  border-color: color-mix(in srgb, var(--accent, #7dd3fc) 55%, var(--line));
+  color: var(--accent, #7dd3fc);
+}
+
+.videon-pipeline__badge.is-done,
+.videon-pipeline__step-status.is-done {
+  border-color: color-mix(in srgb, #86efac 45%, var(--line));
+  color: #86efac;
+}
+
+.videon-pipeline__badge.is-failed,
+.videon-pipeline__step-status.is-failed,
+.videon-pipeline__step-error {
+  border-color: color-mix(in srgb, #f87171 45%, var(--line));
+  color: #fca5a5;
+}
+
+.videon-pipeline__badge.is-waiting,
+.videon-pipeline__step-status.is-waiting {
+  border-color: color-mix(in srgb, #fbbf24 40%, var(--line));
+  color: #fcd34d;
+}
+
+.videon-pipeline__badge.is-pending,
+.videon-pipeline__step-status.is-pending,
+.videon-pipeline__badge.is-muted,
+.videon-pipeline__step-status.is-muted {
+  opacity: 0.72;
+}
+
+.videon-pipeline__headline {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.videon-pipeline__percent {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.videon-pipeline__overall {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  overflow: hidden;
+}
+
+.videon-pipeline__overall-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent, #7dd3fc) 85%, white),
+    color-mix(in srgb, var(--accent, #7dd3fc) 55%, transparent)
+  );
+  transition: width 0.35s ease;
+}
+
+.videon-pipeline__dots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.videon-pipeline__dot {
+  height: 0.42rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
+.videon-pipeline__dot.is-done {
+  background: color-mix(in srgb, #86efac 75%, transparent);
+}
+
+.videon-pipeline__dot.is-active {
+  background: color-mix(in srgb, var(--accent, #7dd3fc) 85%, transparent);
+}
+
+.videon-pipeline__dot.is-failed {
+  background: color-mix(in srgb, #f87171 80%, transparent);
+}
+
+.videon-pipeline__dot.is-waiting {
+  background: color-mix(in srgb, #fbbf24 70%, transparent);
+}
+
+.videon-pipeline__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.videon-pipeline__step {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+}
+
+.videon-pipeline__step-marker {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.68rem;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.videon-pipeline__step.is-done .videon-pipeline__step-marker {
+  border-color: color-mix(in srgb, #86efac 45%, var(--line));
+  color: #86efac;
+}
+
+.videon-pipeline__step.is-active .videon-pipeline__step-marker {
+  border-color: color-mix(in srgb, var(--accent, #7dd3fc) 55%, var(--line));
+  color: var(--accent, #7dd3fc);
+}
+
+.videon-pipeline__step.is-failed .videon-pipeline__step-marker {
+  border-color: color-mix(in srgb, #f87171 45%, var(--line));
+  color: #fca5a5;
+}
+
+.videon-pipeline__step-body {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.videon-pipeline__step-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.videon-pipeline__step-label {
+  font-size: 0.82rem;
+}
+
+.videon-pipeline__step-status {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.videon-pipeline__step-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.videon-pipeline__step-progress {
+  height: 0.22rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  overflow: hidden;
+}
+
+.videon-pipeline__step-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent, #7dd3fc) 80%, transparent);
+  transition: width 0.35s ease;
+}
+
+.videon-pipeline__step-error {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.videon-media-list--analyses .videon-media-list__item--analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.videon-media-list__analysis-main {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.videon-pipeline--compact {
+  padding: 0.35rem 0 0;
+  border: 0;
+}
+
 .videon-editor__scene-button {
   width: 100%;
   text-align: left;

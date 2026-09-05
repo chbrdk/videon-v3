@@ -1,5 +1,5 @@
 import { apiError, apiJson } from '@/lib/api-response'
-import { listAnalysisRunsForWorkspace } from '@/lib/db/analysis'
+import { listAnalysisRunsForWorkspace, listStagesForAnalysisRuns } from '@/lib/db/analysis'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
@@ -29,10 +29,21 @@ export async function GET(request: Request) {
       })
     }
     const items = await listAnalysisRunsForWorkspace(resolved.workspace.id)
+    const stagesByRun = await listStagesForAnalysisRuns(items.map((item) => item.id))
     return apiJson(request, {
       platformProjectId,
       workspaceId: resolved.workspace.id,
-      items,
+      items: items.map((item) => ({
+        ...item,
+        stages: (stagesByRun[item.id] ?? []).map((stage) => ({
+          stageKey: stage.stageKey,
+          status: stage.status,
+          progressCompleted: stage.progressCompleted,
+          progressTotal: stage.progressTotal,
+          errorCode: stage.errorCode,
+          errorMessage: stage.errorMessage,
+        })),
+      })),
     })
   } catch {
     return apiError(request, 503, 'dependency_unavailable', 'Analysis listing failed', { retryable: true })

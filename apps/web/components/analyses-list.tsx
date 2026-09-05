@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button, Text } from '@msqdx/ui'
+import { PipelineStatusTrack } from '@/components/pipeline-status-track'
+import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
 import { paths } from '@/lib/paths'
 
 type AnalysisItem = {
@@ -13,8 +15,10 @@ type AnalysisItem = {
   mediaLifecycleState: string
   createdAt: string
   finishedAt: string | null
+  startedAt?: string | null
   failedStageKey?: string | null
   failedStageMessage?: string | null
+  stages?: PipelineStageSnapshot[]
 }
 
 export function AnalysesList({ platformProjectId }: { platformProjectId: string }) {
@@ -61,20 +65,22 @@ export function AnalysesList({ platformProjectId }: { platformProjectId: string 
   }
 
   return (
-    <ul className="videon-media-list">
+    <ul className="videon-media-list videon-media-list--analyses">
       {items.map((item) => (
-        <li key={item.id} className="videon-media-list__item">
-          <div>
+        <li key={item.id} className="videon-media-list__item videon-media-list__item--analysis">
+          <div className="videon-media-list__analysis-main">
             <Text role="title">{item.mediaFilename}</Text>
-            <Text role="meta">
-              {item.status} · Medienstatus {item.mediaLifecycleState}
-              {item.status === 'failed' && item.failedStageKey
-                ? ` · ${item.failedStageKey}`
-                : ''}
-            </Text>
-            {item.status === 'failed' && item.failedStageMessage ? (
-              <Text role="body">{item.failedStageMessage}</Text>
-            ) : null}
+            <PipelineStatusTrack
+              analysis={{
+                status: item.status,
+                startedAt: item.startedAt ?? null,
+                finishedAt: item.finishedAt,
+              }}
+              stages={item.stages ?? []}
+              mediaLifecycleState={item.mediaLifecycleState}
+              showLifecycle
+              variant="compact"
+            />
           </div>
           <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
             <Button variant="ghost">Im Editor öffnen</Button>

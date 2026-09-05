@@ -220,6 +220,27 @@ export async function listStagesForAnalysis(analysisRunId: string): Promise<Anal
   return result.rows.map(mapStage)
 }
 
+export async function listStagesForAnalysisRuns(
+  analysisRunIds: readonly string[],
+): Promise<Record<string, AnalysisStageRun[]>> {
+  if (!analysisRunIds.length) return {}
+  const result = await databasePool().query<StageRow>(
+    `select id, analysis_run_id, stage_key, input_fingerprint, status, attempt,
+            progress_completed, progress_total, error_code, error_message, created_at, updated_at
+       from analysis_stage_runs
+      where analysis_run_id = any($1::uuid[])
+      order by analysis_run_id asc, created_at asc`,
+    [analysisRunIds],
+  )
+  const grouped: Record<string, AnalysisStageRun[]> = {}
+  for (const row of result.rows) {
+    const stage = mapStage(row)
+    if (!grouped[stage.analysisRunId]) grouped[stage.analysisRunId] = []
+    grouped[stage.analysisRunId].push(stage)
+  }
+  return grouped
+}
+
 export async function createRerunAnalysisForMedia(input: {
   mediaAssetId: string
   requestedByPlexonUserId: string

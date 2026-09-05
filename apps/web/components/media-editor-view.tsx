@@ -13,7 +13,8 @@ import { EditorTransport } from '@/components/editor-transport'
 import { frameDurationMs, formatClock, normalizeInOutRange } from '@/lib/editor-time'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
-import { paths } from '@/lib/paths'
+import { PipelineStatusTrack } from '@/components/pipeline-status-track'
+import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
 
 type SceneItem = {
   sceneKey: string
@@ -42,13 +43,11 @@ type MediaDetail = {
 type AnalysisState = {
   id: string
   status: string
+  startedAt?: string | null
+  finishedAt?: string | null
 } | null
 
-type StageState = {
-  stageKey: string
-  status: string
-  errorMessage?: string | null
-}
+type StageState = PipelineStageSnapshot
 
 type TranscriptState = {
   status: string
@@ -466,28 +465,13 @@ export function MediaEditorView({
         <aside className="videon-nle__inspector">
           <div className="videon-nle__inspector-header">Metadaten</div>
           <div className="videon-nle__inspector-body">
-            <Text role="meta" as="p">
-              Analyse: {analysis?.status ?? 'keine'} · {media.lifecycleState}
-            </Text>
-            {stages.length > 0 ? (
-              <>
-                <Text role="title" as="h3">
-                  Pipeline
-                </Text>
-                <ul className="videon-editor__stage-list">
-                  {stages.map((stage) => (
-                    <li key={stage.stageKey}>
-                      <span className="videon-nle__bin-item-meta">
-                        {stage.stageKey} · {stage.status}
-                      </span>
-                      {stage.status === 'failed' && stage.errorMessage ? (
-                        <span className="videon-nle__bin-item-title">{stage.errorMessage}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
+            <PipelineStatusTrack
+              analysis={analysis}
+              stages={stages}
+              mediaLifecycleState={media.lifecycleState}
+              showLifecycle
+              variant="detailed"
+            />
 
             <Text role="title" as="h3">
               Szenen
