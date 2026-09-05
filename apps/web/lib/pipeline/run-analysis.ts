@@ -14,7 +14,7 @@ import {
 import { findMediaAsset } from '@/lib/db/media'
 import { markMediaFailed, markMediaProcessing, markMediaReady, updateMediaProbe } from '@/lib/db/media-lifecycle'
 import { analyzeSceneWithOpenRouter, OpenRouterGatewayError } from '@/lib/openrouter-client'
-import { defaultVisionLane, schemaFallbackVisionLane } from '@/lib/vision-policy'
+import { defaultVisionLane, schemaFallbackVisionLane, strictSchemaFallbackVisionLane } from '@/lib/vision-policy'
 import { PIPELINE_STAGES, type PipelineStageKey } from '@/lib/pipeline/constants'
 import { detectScenesFromFile } from '@/lib/pipeline/scene-detect'
 import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
@@ -75,10 +75,22 @@ async function analyzeSceneWithFallback(input: Parameters<typeof analyzeSceneWit
   try {
     return await analyzeSceneWithOpenRouter(input, { lane: defaultVisionLane() })
   } catch (error) {
-    if (error instanceof OpenRouterGatewayError && error.code === 'invalid_output') {
-      return analyzeSceneWithOpenRouter(input, { lane: schemaFallbackVisionLane() })
+    if (!(error instanceof OpenRouterGatewayError) || error.code !== 'invalid_output') {
+      throw error
     }
-    throw error
+    try {
+      return await analyzeSceneWithOpenRouter(input, { lane: schemaFallbackVisionLane() })
+    } catch (retryError) {
+      const strictLane = strictSchemaFallbackVisionLane()
+      if (
+        strictLane &&
+        retryError instanceof OpenRouterGatewayError &&
+        retryError.code === 'invalid_output'
+      ) {
+        return analyzeSceneWithOpenRouter(input, { lane: strictLane })
+      }
+      throw retryError
+    }
   }
 }
 

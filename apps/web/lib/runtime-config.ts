@@ -77,8 +77,14 @@ export function visionDefaultModel(): string {
 
 export function visionSchemaFallbackModel(): string {
   const model = env(paths.envVisionSchemaFallbackModel)
-  if (!model) throw new Error(`${paths.envVisionSchemaFallbackModel} is required`)
-  return model
+  if (model) return model
+  return visionDefaultModel()
+}
+
+export function visionUsesIndependentFallbackModel(): boolean {
+  const fallback = env(paths.envVisionSchemaFallbackModel)
+  const defaults = env(paths.envVisionDefaultModel)
+  return Boolean(fallback && defaults && fallback !== defaults)
 }
 
 export function directVideoEnabled(): boolean {

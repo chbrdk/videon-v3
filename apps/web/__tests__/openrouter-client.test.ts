@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { analyzeSceneWithOpenRouter } from '@/lib/openrouter-client'
-import { schemaFallbackVisionLane } from '@/lib/vision-policy'
+import { defaultVisionLane, schemaFallbackVisionLane } from '@/lib/vision-policy'
 
 const savedEnv = { ...process.env }
 
@@ -59,12 +59,13 @@ describe('OpenRouter scene gateway', () => {
     expect(result.provenance.usage.costUsd).toBe('0.000100')
   })
 
-  it('sends strict JSON Schema only on the fallback lane', async () => {
+  it('sends strict JSON Schema on the same-model retry lane', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
     process.env.OPENROUTER_API_BASE_URL = 'https://router.invalid/api/v1'
-    process.env.VIDEON_VISION_SCHEMA_FALLBACK_MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
+    process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
     const fetcher: typeof fetch = async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as { response_format: Record<string, unknown>; provider: Record<string, unknown> }
+      const body = JSON.parse(String(init?.body)) as { response_format: Record<string, unknown>; provider: Record<string, unknown>; model: string }
+      expect(body.model).toBe('qwen/qwen3.7-flash')
       expect(body.response_format).toMatchObject({ type: 'json_schema' })
       expect(body.provider).toMatchObject({ require_parameters: true })
       return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 })

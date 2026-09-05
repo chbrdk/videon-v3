@@ -4,6 +4,7 @@ import {
   requiresZdr,
   visionDefaultModel,
   visionSchemaFallbackModel,
+  visionUsesIndependentFallbackModel,
 } from './runtime-config'
 
 export type VisionLane = {
@@ -25,6 +26,18 @@ export function defaultVisionLane(): VisionLane {
 }
 
 export function schemaFallbackVisionLane(): VisionLane {
+  return {
+    model: visionDefaultModel(),
+    inputMode: 'frames',
+    responseMode: 'json_schema',
+    localSchemaValidation: true,
+    providerRequireParameters: true,
+  }
+}
+
+/** Optional evaluation-only lane when explicitly configured to a different model. */
+export function strictSchemaFallbackVisionLane(): VisionLane | null {
+  if (!visionUsesIndependentFallbackModel()) return null
   return {
     model: visionSchemaFallbackModel(),
     inputMode: 'frames',

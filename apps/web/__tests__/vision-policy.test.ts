@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { defaultVisionLane, directVideoVisionLane, openRouterProviderPolicy, schemaFallbackVisionLane } from '@/lib/vision-policy'
+import { defaultVisionLane, directVideoVisionLane, openRouterProviderPolicy, schemaFallbackVisionLane, strictSchemaFallbackVisionLane } from '@/lib/vision-policy'
+import { visionUsesIndependentFallbackModel } from '@/lib/runtime-config'
 
 const savedEnv = { ...process.env }
 
@@ -18,13 +19,26 @@ describe('vision policy', () => {
     })
   })
 
-  it('keeps strict JSON schema on the independent fallback lane', () => {
-    process.env.VIDEON_VISION_SCHEMA_FALLBACK_MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
+  it('retries the default model with strict JSON Schema before any optional override', () => {
+    process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
+    delete process.env.VIDEON_VISION_SCHEMA_FALLBACK_MODEL
     expect(schemaFallbackVisionLane()).toMatchObject({
+      model: 'qwen/qwen3.7-flash',
+      responseMode: 'json_schema',
+      providerRequireParameters: true,
+    })
+    expect(strictSchemaFallbackVisionLane()).toBeNull()
+  })
+
+  it('allows an optional independent strict-schema evaluation lane', () => {
+    process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
+    process.env.VIDEON_VISION_SCHEMA_FALLBACK_MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
+    expect(strictSchemaFallbackVisionLane()).toMatchObject({
       model: 'qwen/qwen3-vl-30b-a3b-instruct',
       responseMode: 'json_schema',
       providerRequireParameters: true,
     })
+    expect(visionUsesIndependentFallbackModel()).toBe(true)
   })
 
   it('does not enable direct video without an explicit flag', () => {
