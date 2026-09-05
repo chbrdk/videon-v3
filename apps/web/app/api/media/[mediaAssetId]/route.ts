@@ -9,6 +9,7 @@ import {
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { resolveMediaInWorkspace, resolveWorkspaceForMediaRequest } from '@/lib/media-access'
 import { requireSessionUserId } from '@/lib/session-user'
+import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
@@ -51,12 +52,14 @@ export async function GET(request: Request, context: RouteContext) {
   const analysis = await findLatestAnalysisForMedia(resolved.media.id)
   const stages = analysis ? await listStagesForAnalysis(analysis.id) : []
   const scenes = analysis ? await listSceneInsightsForAnalysis(analysis.id) : []
+  const transcript = await findLatestTranscriptForMedia(resolved.media.id)
 
   return apiJson(request, {
     media: resolved.media,
     analysis,
     stages,
     scenes,
+    transcript,
   })
 }
 

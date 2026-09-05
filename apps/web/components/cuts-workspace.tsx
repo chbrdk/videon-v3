@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { Button, EmptyState, Text } from '@msqdx/ui'
+import { Button } from '@msqdx/ui'
+import { CutsList } from '@/components/cuts-list'
 import { WorkspaceRouteGate } from '@/components/workspace-route-gate'
 import { paths } from '@/lib/paths'
 
@@ -9,7 +10,7 @@ export function CutsWorkspace({ platformProjectId }: { platformProjectId?: strin
   return (
     <WorkspaceRouteGate platformProjectId={platformProjectId} buildHref={paths.routes.cutsFor}>
       {(collectionId) => (
-        <article className="videon-hub">
+        <article className="videon-hub videon-hub--wide">
           <header className="videon-hub__header-row">
             <div>
               <p className="videon-spread__eyebrow">Editor</p>
@@ -19,16 +20,7 @@ export function CutsWorkspace({ platformProjectId }: { platformProjectId?: strin
               <Button variant="ghost">Zur Mediathek</Button>
             </Link>
           </header>
-          <EmptyState>
-            <Text role="title">Video-Editor in der Mediathek</Text>
-            <Text role="body">
-              Öffne ein hochgeladenes Video im Editor: Wiedergabe, Szenen-Timeline, Analyse erneut starten und löschen.
-              Dedizierte Cuts (Schnittprojekte) folgen in einer späteren Welle.
-            </Text>
-            <Link href={paths.routes.libraryFor(collectionId)}>
-              <Button variant="primary">Zur Mediathek</Button>
-            </Link>
-          </EmptyState>
+          <CutsList platformProjectId={collectionId} />
         </article>
       )}
     </WorkspaceRouteGate>

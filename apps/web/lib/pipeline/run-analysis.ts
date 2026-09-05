@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import {
   findAnalysisRun,
   insertSceneInsight,
+  listSceneInsightsForAnalysis,
   markAnalysisFinished,
   markAnalysisRunning,
   upsertStageRun,
@@ -15,7 +16,10 @@ import { markMediaFailed, markMediaProcessing, markMediaReady, updateMediaProbe 
 import { analyzeSceneWithOpenRouter, OpenRouterGatewayError } from '@/lib/openrouter-client'
 import { defaultVisionLane, schemaFallbackVisionLane } from '@/lib/vision-policy'
 import { PIPELINE_STAGES, type PipelineStageKey } from '@/lib/pipeline/constants'
-import { detectScenes } from '@/lib/pipeline/scene-detect'
+import { detectScenesFromFile } from '@/lib/pipeline/scene-detect'
+import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
+import { upsertMediaTranscript } from '@/lib/db/transcript'
+import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
 import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
 import { probeMediaFile } from '@/lib/pipeline/ffprobe'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
@@ -88,6 +92,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
   await markAnalysisRunning(analysisRunId)
   const fingerprint = analysis.inputFingerprint
   const tempPath = join(tmpdir(), `videon-source-${randomUUID()}`)
+  const audioPath = join(tmpdir(), `videon-audio-${randomUUID()}.wav`)
   const store = new S3ObjectStore()
 
   try {
@@ -113,7 +118,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
     })
 
     const scenes = await runStage(analysisRunId, 'scene_detect', fingerprint, 1, async () =>
-      detectScenes(probe.durationMs),
+      detectScenesFromFile(tempPath, probe.durationMs),
     )
 
     const sceneFrames = await runStage(analysisRunId, 'frame_sample', fingerprint, scenes.length, async () => {
@@ -133,8 +138,15 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
     })
 
     await runStage(analysisRunId, 'audio', fingerprint, 1, async () => {
-      // Transcription is a later optional branch; keep the stage observable but skipped.
-      return null
+      const extracted = await extractAudioTrack({ sourcePath: tempPath, destinationPath: audioPath })
+      await upsertMediaTranscript({
+        mediaAssetId: media.id,
+        analysisRunId,
+        status: extracted ? 'pending' : 'skipped',
+        transcriptText: null,
+        segments: [],
+      })
+      return extracted ? 'audio_extracted' : 'no_audio_track'
     })
 
     await runStage(analysisRunId, 'vision', fingerprint, sceneFrames.length, async () => {
@@ -178,7 +190,22 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
     })
 
     await runStage(analysisRunId, 'aggregate', fingerprint, 1, async () => true)
-    await runStage(analysisRunId, 'index', fingerprint, 1, async () => true)
+    await runStage(analysisRunId, 'index', fingerprint, 1, async () => {
+      const insights = await listSceneInsightsForAnalysis(analysisRunId)
+      await replaceSearchEntriesForAnalysis({
+        workspaceId: media.workspaceId,
+        mediaAssetId: media.id,
+        analysisRunId,
+        mediaFilename: media.originalFilename,
+        scenes: insights.map((entry) => ({
+          sceneKey: entry.sceneKey,
+          summary: entry.insight.summary,
+          mood: entry.insight.mood,
+          location: entry.insight.setting?.location,
+        })),
+      })
+      return insights.length
+    })
 
     await markMediaReady(media.id, media.workspaceId)
     await markAnalysisFinished(analysisRunId, 'succeeded')
@@ -188,6 +215,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
     throw error
   } finally {
     await unlink(tempPath).catch(() => {})
+    await unlink(audioPath).catch(() => {})
   }
 }
 

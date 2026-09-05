@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Button } from '@msqdx/ui'
 import { MediaLibrary } from '@/components/media-library'
+import { MediaSearch } from '@/components/media-search'
 import { WorkspaceRouteGate } from '@/components/workspace-route-gate'
 import { paths } from '@/lib/paths'
 
@@ -25,6 +26,7 @@ export function LibraryWorkspace({ platformProjectId }: { platformProjectId?: st
               </Link>
             </div>
           </header>
+          <MediaSearch platformProjectId={collectionId} />
           <MediaLibrary platformProjectId={collectionId} />
         </article>
       )}

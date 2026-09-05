@@ -396,6 +396,28 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   justify-items: start;
 }
 
+.videon-search {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.videon-search__form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.videon-search__form input {
+  min-width: min(24rem, 100%);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+}
+
 .videon-collection-card__actions,
 .videon-media-list-wrap__actions {
   display: flex;

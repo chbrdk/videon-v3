@@ -137,6 +137,15 @@ export async function deleteMediaAssetForWorkspace(
       return null
     }
 
+    await client.query(`delete from cut_scenes where media_asset_id = $1`, [mediaAssetId])
+    await client.query(
+      `update cuts
+          set status = 'archived',
+              updated_at = now()
+        where workspace_id = $2
+          and not exists (select 1 from cut_scenes cs where cs.cut_id = cuts.id)`,
+      [workspaceId],
+    )
     await client.query(
       `update analysis_runs
           set status = 'cancelled',

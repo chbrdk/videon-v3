@@ -1,0 +1,186 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Button, Text } from '@msqdx/ui'
+import { paths } from '@/lib/paths'
+
+type Clip = {
+  scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
+  media: { id: string; originalFilename: string; mimeType: string } | null
+}
+
+type CutDetail = {
+  id: string
+  name: string
+  status: string
+}
+
+function formatClock(ms: number): string {
+  const totalSeconds = Math.max(ms, 0) / 1000
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = Math.floor(totalSeconds % 60)
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+export function CutEditorView({
+  platformProjectId,
+  cutId,
+}: {
+  platformProjectId: string
+  cutId: string
+}) {
+  const router = useRouter()
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [cut, setCut] = useState<CutDetail | null>(null)
+  const [clips, setClips] = useState<Clip[]>([])
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), { cache: 'no-store' })
+    const body = (await response.json()) as {
+      cut?: CutDetail
+      clips?: Clip[]
+      error?: { message?: string }
+    }
+    if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
+    setCut(body.cut ?? null)
+    setClips(body.clips ?? [])
+    setActiveIndex(0)
+  }, [cutId, platformProjectId])
+
+  const loadPlayback = useCallback(
+    async (clip: Clip) => {
+      if (!clip.media) {
+        setPlaybackUrl(null)
+        return
+      }
+      const response = await fetch(paths.routes.apiMediaPlayback(clip.media.id, platformProjectId), {
+        cache: 'no-store',
+      })
+      const body = (await response.json()) as { playbackUrl?: string; error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Wiedergabe nicht verfügbar')
+      setPlaybackUrl(body.playbackUrl ?? null)
+    },
+    [platformProjectId],
+  )
+
+  useEffect(() => {
+    void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
+  }, [load])
+
+  useEffect(() => {
+    const clip = clips[activeIndex]
+    if (!clip) return
+    void loadPlayback(clip).catch((err) => setError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
+  }, [clips, activeIndex, loadPlayback])
+
+  useEffect(() => {
+    const video = videoRef.current
+    const clip = clips[activeIndex]
+    if (!video || !clip || !playbackUrl) return
+    const onLoaded = () => {
+      video.currentTime = clip.scene.startMs / 1000
+    }
+    const onTime = () => {
+      const endSec = clip.scene.endMs / 1000
+      if (video.currentTime >= endSec) {
+        if (activeIndex + 1 < clips.length) setActiveIndex(activeIndex + 1)
+        else video.pause()
+      }
+    }
+    video.addEventListener('loadedmetadata', onLoaded)
+    video.addEventListener('timeupdate', onTime)
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoaded)
+      video.removeEventListener('timeupdate', onTime)
+    }
+  }, [clips, activeIndex, playbackUrl])
+
+  const deleteCut = async () => {
+    if (!window.confirm('Cut archivieren?')) return
+    setBusy(true)
+    try {
+      const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), { method: 'DELETE' })
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Löschen fehlgeschlagen')
+      router.push(paths.routes.cutsFor(platformProjectId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (error && !cut) {
+    return (
+      <div className="videon-editor-error">
+        <Text role="title">Cut nicht verfügbar</Text>
+        <Text role="body">{error}</Text>
+      </div>
+    )
+  }
+
+  if (!cut) return <Text role="body">Cut wird geladen …</Text>
+
+  const activeClip = clips[activeIndex]
+
+  return (
+    <div className="videon-editor">
+      <header className="videon-editor__header">
+        <div>
+          <Text role="headline" as="h2">
+            {cut.name}
+          </Text>
+          <Text role="meta" as="p">
+            {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
+          </Text>
+        </div>
+        <div className="videon-editor__actions">
+          <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
+            Archivieren
+          </Button>
+        </div>
+      </header>
+
+      <div className="videon-editor__player-wrap">
+        {playbackUrl ? (
+          <video ref={videoRef} className="videon-editor__video" src={playbackUrl} controls playsInline />
+        ) : (
+          <div className="videon-editor__video-placeholder">
+            <Text role="body">Keine Wiedergabe für diesen Clip</Text>
+          </div>
+        )}
+      </div>
+
+      <ul className="videon-editor__scene-list">
+        {clips.map((clip, index) => (
+          <li key={clip.scene.id}>
+            <button
+              type="button"
+              className={`videon-editor__scene-button${index === activeIndex ? ' is-active' : ''}`}
+              onClick={() => setActiveIndex(index)}
+            >
+              <Text role="headline" as="span">
+                Clip {index + 1}: {clip.media?.originalFilename ?? 'Unbekannt'}
+              </Text>
+              <Text role="meta" as="span">
+                {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)}
+              </Text>
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {activeClip?.media ? (
+        <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
+          <Button variant="ghost">Quellvideo im Editor öffnen</Button>
+        </Link>
+      ) : null}
+    </div>
+  )
+}

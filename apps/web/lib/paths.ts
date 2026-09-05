@@ -75,6 +75,14 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/playback?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaAnalysis: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaSearch: (platformProjectId: string, query: string) =>
+      `/api/media/search?platformProjectId=${encodeURIComponent(platformProjectId)}&q=${encodeURIComponent(query)}`,
+    apiCuts: (platformProjectId: string) =>
+      `/api/cuts?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiCutDetail: (cutId: string, platformProjectId: string) =>
+      `/api/cuts/${encodeURIComponent(cutId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    cutFor: (cutId: string, platformProjectId: string) =>
+      `/cuts/${encodeURIComponent(cutId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     mediaFor: (mediaAssetId: string, platformProjectId: string) =>
       `/media/${encodeURIComponent(mediaAssetId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     libraryFor: (platformProjectId: string) =>

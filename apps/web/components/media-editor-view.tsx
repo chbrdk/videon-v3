@@ -40,6 +40,11 @@ type StageState = {
   status: string
 }
 
+type TranscriptState = {
+  status: string
+  transcriptText: string | null
+} | null
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -66,6 +71,7 @@ export function MediaEditorView({
   const [analysis, setAnalysis] = useState<AnalysisState>(null)
   const [stages, setStages] = useState<StageState[]>([])
   const [scenes, setScenes] = useState<SceneItem[]>([])
+  const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -83,6 +89,7 @@ export function MediaEditorView({
       analysis?: AnalysisState
       stages?: StageState[]
       scenes?: SceneItem[]
+      transcript?: TranscriptState
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Mediendetails konnten nicht geladen werden')
@@ -90,6 +97,7 @@ export function MediaEditorView({
     setAnalysis(body.analysis ?? null)
     setStages(body.stages ?? [])
     setScenes(body.scenes ?? [])
+    setTranscript(body.transcript ?? null)
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -178,6 +186,35 @@ export function MediaEditorView({
     }
   }
 
+  const saveAsCut = async () => {
+    if (!media) return
+    const name = window.prompt('Name für den Cut', media.originalFilename.replace(/\.[^.]+$/, ''))
+    if (!name?.trim()) return
+    const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey)
+    setBusy('cut')
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiCuts(platformProjectId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platformProjectId,
+          name: name.trim(),
+          mediaAssetId: media.id,
+          startMs: activeScene?.startMs ?? 0,
+          endMs: activeScene?.endMs ?? media.durationMs ?? durationMs,
+        }),
+      })
+      const body = (await response.json()) as { cut?: { id: string }; error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht erstellt werden')
+      if (body.cut?.id) router.push(paths.routes.cutFor(body.cut.id, platformProjectId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Cut konnte nicht erstellt werden')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const deleteMedia = async () => {
     if (!window.confirm('Video und alle Analysen endgültig löschen?')) return
     setBusy('delete')
@@ -232,6 +269,9 @@ export function MediaEditorView({
         <div className="videon-editor__actions">
           <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
             Aktualisieren
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => void saveAsCut()} disabled={Boolean(busy)}>
+            {busy === 'cut' ? 'Speichert …' : 'Als Cut speichern'}
           </Button>
           <Button
             type="button"
@@ -351,6 +391,16 @@ export function MediaEditorView({
           ) : (
             <Text role="body">Pipeline-Stages erscheinen nach dem ersten Lauf.</Text>
           )}
+          <Text role="title" as="h3">
+            Transkript
+          </Text>
+          <Text role="body" as="p">
+            {transcript?.transcriptText
+              ? transcript.transcriptText
+              : transcript?.status === 'pending'
+                ? 'Audio wurde extrahiert — Whisper-Transkription folgt in der nächsten Welle.'
+                : 'Noch kein Transkript verfügbar.'}
+          </Text>
         </section>
       </div>
     </div>
