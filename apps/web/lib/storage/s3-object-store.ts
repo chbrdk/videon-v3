@@ -174,4 +174,26 @@ export class S3ObjectStore implements ObjectStore {
     if (!object.Body) throw new Error('Stored object body is missing')
     return sha256HexFromStream(object.Body as AsyncIterable<Uint8Array>)
   }
+
+  async uploadFileFromPath(input: {
+    workspaceId: string
+    storageKey: string
+    filePath: string
+    mimeType: string
+  }): Promise<number> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    const { createReadStream } = await import('node:fs')
+    const { stat } = await import('node:fs/promises')
+    const info = await stat(input.filePath)
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: input.storageKey,
+        Body: createReadStream(input.filePath),
+        ContentType: input.mimeType,
+        ContentLength: info.size,
+      }),
+    )
+    return info.size
+  }
 }

@@ -3,6 +3,7 @@ import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
   cutTotalDurationMs,
+  mapTranscriptToCutTimeline,
   splitSourceMsForCutPlayhead,
   sourceMsForCutPlayhead,
 } from '@/lib/cut-timeline'
@@ -36,5 +37,22 @@ describe('cut timeline mapping', () => {
   it('returns split point in source milliseconds', () => {
     expect(splitSourceMsForCutPlayhead(timeline, 1500)).toEqual({ sceneId: 'a', atMs: 2500 })
     expect(splitSourceMsForCutPlayhead(timeline, 100)).toBeNull()
+  })
+})
+
+describe('mapTranscriptToCutTimeline', () => {
+  it('maps source transcript segments onto cut offsets', () => {
+    const timeline = buildCutTimeline([
+      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 1000, endMs: 4000 },
+      { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 2000 },
+    ])
+    const mapped = mapTranscriptToCutTimeline(timeline, {
+      m1: [{ startMs: 2000, endMs: 3500, text: 'erster clip' }],
+      m2: [{ startMs: 500, endMs: 1500, text: 'zweiter clip' }],
+    })
+    expect(mapped).toEqual([
+      expect.objectContaining({ text: 'erster clip', cutStartMs: 1000, cutEndMs: 2500 }),
+      expect.objectContaining({ text: 'zweiter clip', cutStartMs: 3500, cutEndMs: 4500 }),
+    ])
   })
 })

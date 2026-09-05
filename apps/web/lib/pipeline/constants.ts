@@ -16,6 +16,7 @@ export const PIPELINE_STAGES = [
 export type PipelineStageKey = (typeof PIPELINE_STAGES)[number]
 
 export const ANALYSIS_JOB_NAME = 'videon.media.analysis' as const
+export const EXPORT_JOB_NAME = 'videon.cut.export' as const
 
 export const DEFAULT_REQUESTED_CAPABILITIES = ['probe', 'scene_detect', 'vision', 'aggregate'] as const
 

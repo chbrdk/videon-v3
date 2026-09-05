@@ -94,3 +94,41 @@ export function canTrimScene(
   const endMs = next.endMs ?? scene.endMs
   return endMs - startMs >= MIN_CUT_CLIP_MS && startMs < endMs
 }
+
+export type TranscriptSegment = {
+  startMs: number
+  endMs: number
+  text: string
+}
+
+export type CutTranscriptSegment = TranscriptSegment & {
+  clipIndex: number
+  cutStartMs: number
+  cutEndMs: number
+}
+
+export function mapTranscriptToCutTimeline(
+  timeline: CutTimelineItem[],
+  transcriptsByMediaId: Record<string, TranscriptSegment[]>,
+): CutTranscriptSegment[] {
+  const mapped: CutTranscriptSegment[] = []
+  for (const item of timeline) {
+    const segments = transcriptsByMediaId[item.scene.mediaAssetId] ?? []
+    for (const segment of segments) {
+      if (segment.endMs <= item.scene.startMs || segment.startMs >= item.scene.endMs) continue
+      const clipStart = Math.max(segment.startMs, item.scene.startMs)
+      const clipEnd = Math.min(segment.endMs, item.scene.endMs)
+      const offsetStart = clipStart - item.scene.startMs
+      const offsetEnd = clipEnd - item.scene.startMs
+      mapped.push({
+        startMs: clipStart,
+        endMs: clipEnd,
+        text: segment.text,
+        clipIndex: item.index,
+        cutStartMs: item.cutStartMs + offsetStart,
+        cutEndMs: item.cutStartMs + offsetEnd,
+      })
+    }
+  }
+  return mapped.sort((a, b) => a.cutStartMs - b.cutStartMs)
+}

@@ -12,6 +12,8 @@ import {
   renameCut,
 } from '@/lib/db/cuts'
 import { findMediaAsset } from '@/lib/db/media'
+import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
+import type { TranscriptSegment } from '@/lib/cut-timeline'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
 
@@ -59,7 +61,20 @@ export async function GET(request: Request, context: RouteContext) {
     })),
   )
 
-  return apiJson(request, { cut, clips: media })
+  const mediaIds = [...new Set(scenes.map((scene) => scene.mediaAssetId))]
+  const transcripts: Record<string, TranscriptSegment[]> = {}
+  for (const mediaAssetId of mediaIds) {
+    const transcript = await findLatestTranscriptForMedia(mediaAssetId)
+    if (!transcript || transcript.status !== 'ready') continue
+    transcripts[mediaAssetId] = (transcript.segments as TranscriptSegment[]).filter(
+      (segment) =>
+        typeof segment?.startMs === 'number' &&
+        typeof segment?.endMs === 'number' &&
+        typeof segment?.text === 'string',
+    )
+  }
+
+  return apiJson(request, { cut, clips: media, transcripts })
 }
 
 export async function DELETE(request: Request, context: RouteContext) {

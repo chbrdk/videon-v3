@@ -9,7 +9,9 @@ import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
   cutTotalDurationMs,
+  mapTranscriptToCutTimeline,
   splitSourceMsForCutPlayhead,
+  type TranscriptSegment,
 } from '@/lib/cut-timeline'
 import { paths } from '@/lib/paths'
 
@@ -22,6 +24,14 @@ type CutDetail = {
   id: string
   name: string
   status: string
+}
+
+type CutExport = {
+  id: string
+  status: string
+  bytes: number | null
+  errorMessage: string | null
+  createdAt: string
 }
 
 function formatClock(ms: number): string {
@@ -49,6 +59,9 @@ export function CutEditorView({
   cutPlayheadRef.current = cutPlayheadMs
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
+  const [exports, setExports] = useState<CutExport[]>([])
+  const [activeExportId, setActiveExportId] = useState<string | null>(null)
 
   const timeline = useMemo(
     () =>
@@ -76,19 +89,76 @@ export function CutEditorView({
       ),
     [clips],
   )
+  const transcriptSegments = useMemo(
+    () => mapTranscriptToCutTimeline(timeline, transcriptsByMediaId),
+    [timeline, transcriptsByMediaId],
+  )
 
   const load = useCallback(async () => {
     const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), { cache: 'no-store' })
     const body = (await response.json()) as {
       cut?: CutDetail
       clips?: Clip[]
+      transcripts?: Record<string, TranscriptSegment[]>
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
     setCut(body.cut ?? null)
     setClips(body.clips ?? [])
+    setTranscriptsByMediaId(body.transcripts ?? {})
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
   }, [cutId, platformProjectId])
+
+  const loadExports = useCallback(async () => {
+    const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), { cache: 'no-store' })
+    const body = (await response.json()) as { exports?: CutExport[] }
+    if (response.ok) setExports(body.exports ?? [])
+  }, [cutId, platformProjectId])
+
+  const pollExport = useCallback(
+    async (exportId: string) => {
+      const response = await fetch(paths.routes.apiCutExportDetail(cutId, exportId, platformProjectId), {
+        cache: 'no-store',
+      })
+      const body = (await response.json()) as {
+        export?: CutExport
+        downloadUrl?: string
+        error?: { message?: string }
+      }
+      if (!response.ok) throw new Error(body.error?.message || 'Export-Status nicht verfügbar')
+      await loadExports()
+      if (body.export?.status === 'succeeded' && body.downloadUrl) {
+        window.open(body.downloadUrl, '_blank', 'noopener,noreferrer')
+        setActiveExportId(null)
+        return
+      }
+      if (body.export?.status === 'failed') {
+        setError(body.export.errorMessage || 'Export fehlgeschlagen')
+        setActiveExportId(null)
+      }
+    },
+    [cutId, loadExports, platformProjectId],
+  )
+
+  const startExport = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const body = (await response.json()) as { export?: CutExport; error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Export konnte nicht gestartet werden')
+      if (body.export?.id) setActiveExportId(body.export.id)
+      await loadExports()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export konnte nicht gestartet werden')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const loadPlayback = useCallback(
     async (clip: Clip) => {
@@ -143,7 +213,20 @@ export function CutEditorView({
 
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
-  }, [load])
+    void loadExports().catch(() => {})
+  }, [load, loadExports])
+
+  useEffect(() => {
+    if (!activeExportId) return
+    const timer = window.setInterval(() => {
+      void pollExport(activeExportId).catch((err) => {
+        setError(err instanceof Error ? err.message : 'Export-Status nicht verfügbar')
+        setActiveExportId(null)
+      })
+    }, 2500)
+    void pollExport(activeExportId).catch(() => {})
+    return () => window.clearInterval(timer)
+  }, [activeExportId, pollExport])
 
   useEffect(() => {
     const clip = clips[activeIndex]
@@ -225,6 +308,7 @@ export function CutEditorView({
 
   const activeClip = clips[activeIndex]
   const splitTarget = splitSourceMsForCutPlayhead(timeline, cutPlayheadMs)
+  const latestExport = exports[0]
 
   return (
     <div className="videon-editor">
@@ -271,8 +355,18 @@ export function CutEditorView({
           <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
             Archivieren
           </Button>
+          <Button type="button" variant="ghost" disabled={busy || Boolean(activeExportId)} onClick={() => void startExport()}>
+            {activeExportId ? 'Export läuft …' : 'MP4 exportieren'}
+          </Button>
         </div>
       </header>
+
+      {latestExport ? (
+        <Text role="meta">
+          Letzter Export: {latestExport.status}
+          {latestExport.bytes ? ` · ${Math.round(latestExport.bytes / (1024 * 1024))} MB` : ''}
+        </Text>
+      ) : null}
 
       {error ? <Text role="body">{error}</Text> : null}
 
@@ -311,6 +405,7 @@ export function CutEditorView({
         activeIndex={activeIndex}
         cutPlayheadMs={cutPlayheadMs}
         totalDurationMs={totalDurationMs}
+        transcriptSegments={transcriptSegments}
         disabled={busy}
         onSelectClip={setActiveIndex}
         onSeek={seekToCutMs}

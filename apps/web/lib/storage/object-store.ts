@@ -7,6 +7,15 @@ export function mediaSourceStorageKey(workspaceId: string, mediaAssetId: string)
   return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/source`
 }
 
+export function cutExportStorageKey(workspaceId: string, cutId: string, exportId: string): string {
+  const safe = (value: string, label: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
+    return trimmed
+  }
+  return `${safe(workspaceId, 'workspaceId')}/cuts/${safe(cutId, 'cutId')}/exports/${safe(exportId, 'exportId')}.mp4`
+}
+
 export type CreateUploadTargetInput = {
   workspaceId: string
   mediaAssetId: string
