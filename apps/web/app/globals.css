@@ -390,6 +390,92 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   border-color: color-mix(in srgb, var(--accent, #7dd3fc) 65%, var(--line));
 }
 
+.videon-cut-timeline {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.videon-cut-timeline__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.videon-cut-timeline__track {
+  position: relative;
+  height: 4.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--bg0) 88%, var(--fg));
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.videon-cut-timeline__clip {
+  position: absolute;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--accent, #7dd3fc) 45%, var(--line));
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--accent, #7dd3fc) 22%, transparent);
+  overflow: hidden;
+  cursor: grab;
+  display: grid;
+  align-content: end;
+  padding: 0.2rem 0.35rem;
+}
+
+.videon-cut-timeline__clip.is-active {
+  border-color: color-mix(in srgb, var(--accent, #7dd3fc) 80%, white);
+  background: color-mix(in srgb, var(--accent, #7dd3fc) 38%, transparent);
+  z-index: 2;
+}
+
+.videon-cut-timeline__clip.is-dragging {
+  opacity: 0.55;
+}
+
+.videon-cut-timeline__clip-label {
+  font-size: 0.68rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+.videon-cut-timeline__clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0.45rem;
+  cursor: ew-resize;
+  z-index: 3;
+}
+
+.videon-cut-timeline__clip-handle--start {
+  left: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent, #7dd3fc) 70%, black), transparent);
+}
+
+.videon-cut-timeline__clip-handle--end {
+  right: 0;
+  background: linear-gradient(270deg, color-mix(in srgb, var(--accent, #7dd3fc) 70%, black), transparent);
+}
+
+.videon-cut-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: color-mix(in srgb, #fff 85%, var(--accent, #7dd3fc));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #7dd3fc) 55%, transparent);
+  pointer-events: none;
+  z-index: 4;
+}
+
 .videon-editor-error {
   display: grid;
   gap: 0.75rem;

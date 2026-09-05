@@ -177,6 +177,8 @@ export async function archiveCut(cutId: string, workspaceId: string): Promise<bo
 
 const MIN_CLIP_MS = 500
 
+export { MIN_CLIP_MS as MIN_CUT_CLIP_MS }
+
 async function renumberCutScenes(client: PoolClient, cutId: string): Promise<void> {
   const scenes = await client.query<{ id: string }>(
     `select id from cut_scenes where cut_id = $1 order by position asc`,
@@ -276,4 +278,89 @@ export async function deleteCutScene(input: { cutId: string; sceneId: string }):
   } finally {
     client.release()
   }
+}
+
+export async function trimCutScene(input: {
+  cutId: string
+  sceneId: string
+  startMs?: number
+  endMs?: number
+}): Promise<CutScene[] | null> {
+  const scene = await findCutScene(input.sceneId)
+  if (!scene || scene.cutId !== input.cutId) return null
+
+  const startMs = input.startMs ?? scene.startMs
+  const endMs = input.endMs ?? scene.endMs
+  if (endMs - startMs < MIN_CLIP_MS || startMs >= endMs) return null
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`update cut_scenes set start_ms = $2, end_ms = $3 where id = $1`, [
+      scene.id,
+      Math.floor(startMs),
+      Math.floor(endMs),
+    ])
+    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function reorderCutScenes(input: {
+  cutId: string
+  sceneIds: string[]
+}): Promise<CutScene[] | null> {
+  const scenes = await listScenesForCut(input.cutId)
+  if (scenes.length === 0 || scenes.length !== input.sceneIds.length) return null
+  const existingIds = new Set(scenes.map((scene) => scene.id))
+  if (input.sceneIds.some((sceneId) => !existingIds.has(sceneId))) return null
+  if (new Set(input.sceneIds).size !== input.sceneIds.length) return null
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    for (const [position, sceneId] of input.sceneIds.entries()) {
+      await client.query(`update cut_scenes set position = $2 where id = $1 and cut_id = $3`, [
+        sceneId,
+        position,
+        input.cutId,
+      ])
+    }
+    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function renameCut(input: {
+  cutId: string
+  workspaceId: string
+  name: string
+}): Promise<Cut | null> {
+  const trimmed = input.name.trim()
+  if (!trimmed) return null
+
+  const result = await databasePool().query<CutRow>(
+    `update cuts
+        set name = $3,
+            updated_at = now()
+      where id = $1
+        and workspace_id = $2
+        and status <> 'archived'
+      returning id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status,
+                created_at, updated_at`,
+    [input.cutId, input.workspaceId, trimmed],
+  )
+  return result.rows[0] ? mapCut(result.rows[0]) : null
 }

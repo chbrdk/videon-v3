@@ -1,6 +1,16 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import { archiveCut, findCut, listScenesForCut, splitCutScene, mergeCutSceneWithNext, deleteCutScene } from '@/lib/db/cuts'
+import {
+  archiveCut,
+  findCut,
+  listScenesForCut,
+  splitCutScene,
+  mergeCutSceneWithNext,
+  deleteCutScene,
+  trimCutScene,
+  reorderCutScenes,
+  renameCut,
+} from '@/lib/db/cuts'
 import { findMediaAsset } from '@/lib/db/media'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
@@ -113,6 +123,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   const action = typeof record.action === 'string' ? record.action.trim() : ''
   const sceneId = typeof record.sceneId === 'string' ? record.sceneId.trim() : ''
   const atMs = typeof record.atMs === 'number' ? record.atMs : null
+  const startMs = typeof record.startMs === 'number' ? record.startMs : null
+  const endMs = typeof record.endMs === 'number' ? record.endMs : null
+  const name = typeof record.name === 'string' ? record.name.trim() : ''
+  const sceneIds = Array.isArray(record.sceneIds)
+    ? record.sceneIds.filter((value): value is string => typeof value === 'string').map((value) => value.trim())
+    : []
 
   const workspace = await resolveWorkspaceForMediaRequest({
     plexonUserId: userId,
@@ -132,6 +148,23 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!cut || cut.workspaceId !== workspace.workspace.id) {
     return apiError(request, 404, 'not_found', 'Cut not found')
   }
+
+  if (action === 'rename') {
+    if (!name) return apiError(request, 400, 'invalid_payload', 'name is required for rename')
+    const updated = await renameCut({ cutId: cut.id, workspaceId: workspace.workspace.id, name })
+    if (!updated) return apiError(request, 409, 'invalid_payload', 'Cut could not be renamed')
+    return apiJson(request, { cut: updated })
+  }
+
+  if (action === 'reorder') {
+    if (sceneIds.length === 0) {
+      return apiError(request, 400, 'invalid_payload', 'sceneIds is required for reorder')
+    }
+    const scenes = await reorderCutScenes({ cutId: cut.id, sceneIds })
+    if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
+    return apiJson(request, { scenes })
+  }
+
   if (!sceneId) return apiError(request, 400, 'invalid_payload', 'sceneId is required')
 
   let scenes = null
@@ -142,6 +175,16 @@ export async function PATCH(request: Request, context: RouteContext) {
     scenes = await mergeCutSceneWithNext({ cutId: cut.id, sceneId })
   } else if (action === 'delete') {
     scenes = await deleteCutScene({ cutId: cut.id, sceneId })
+  } else if (action === 'trim') {
+    if (startMs === null && endMs === null) {
+      return apiError(request, 400, 'invalid_payload', 'startMs or endMs is required for trim')
+    }
+    scenes = await trimCutScene({
+      cutId: cut.id,
+      sceneId,
+      ...(startMs !== null ? { startMs } : {}),
+      ...(endMs !== null ? { endMs } : {}),
+    })
   } else {
     return apiError(request, 400, 'invalid_payload', 'Unsupported action')
   }
