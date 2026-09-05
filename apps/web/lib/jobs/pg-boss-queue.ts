@@ -40,7 +40,7 @@ export async function registerMediaAnalysisHandler(
   handler: (payload: MediaAnalysisJobPayload) => Promise<void>,
 ): Promise<void> {
   const queue = await getBoss()
-  await queue.work(ANALYSIS_JOB_NAME, { teamConcurrency: 1 }, async (job) => {
+  await queue.work(ANALYSIS_JOB_NAME, { localConcurrency: 1 }, async (job) => {
     const payload = job.data as MediaAnalysisJobPayload
     if (!payload?.analysisRunId || !payload?.mediaAssetId) {
       throw new Error('Invalid media analysis job payload')
