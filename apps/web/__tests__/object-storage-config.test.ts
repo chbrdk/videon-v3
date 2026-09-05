@@ -36,7 +36,6 @@ describe('private object storage configuration', () => {
       mediaAssetId: 'media-1',
       mimeType: 'video/mp4',
       bytes: 1024,
-      checksumSha256: 'a'.repeat(64),
     })
 
     expect(target.storageKey).toBe('workspace-1/media/media-1/source')

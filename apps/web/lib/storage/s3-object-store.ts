@@ -1,4 +1,11 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
+import { sha256HexFromStream } from './object-checksum'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import type {
@@ -56,7 +63,6 @@ export class S3ObjectStore implements ObjectStore {
     if (!input.mimeType.startsWith('video/') || !Number.isSafeInteger(input.bytes) || input.bytes <= 0) {
       throw new Error('Only a bounded video upload may receive a storage target')
     }
-    if (!/^[a-f0-9]{64}$/i.test(input.checksumSha256)) throw new Error('checksumSha256 must be a SHA-256 digest')
     const key = sourceStorageKey(input)
     // MinIO / browser PUT: keep checksum in VIDEON DB only — provider checksum headers
     // break many S3-compatible signed uploads.
@@ -101,5 +107,26 @@ export class S3ObjectStore implements ObjectStore {
   async removeObject(input: { workspaceId: string; storageKey: string }): Promise<void> {
     assertWorkspaceKey(input.workspaceId, input.storageKey)
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: input.storageKey }))
+  }
+
+  async hashStoredObject(input: {
+    workspaceId: string
+    storageKey: string
+    expectedBytes: number
+  }): Promise<string> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    const head = await this.client.send(
+      new HeadObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
+    )
+    const storedBytes = head.ContentLength
+    if (storedBytes !== input.expectedBytes) {
+      throw new Error(`Stored object size ${storedBytes ?? 'unknown'} does not match declared ${input.expectedBytes}`)
+    }
+
+    const object = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
+    )
+    if (!object.Body) throw new Error('Stored object body is missing')
+    return sha256HexFromStream(object.Body as AsyncIterable<Uint8Array>)
   }
 }

@@ -126,6 +126,44 @@ export async function markMediaUploaded(mediaAssetId: string, workspaceId: strin
   return result.rows[0] ? mapMedia(result.rows[0]) : null
 }
 
+export async function findMediaByChecksumInWorkspace(
+  workspaceId: string,
+  checksumSha256: string,
+  excludeMediaAssetId?: string,
+): Promise<MediaAsset | null> {
+  const result = await databasePool().query<MediaRow>(
+    `select id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
+            bytes, checksum_sha256, lifecycle_state, created_at, updated_at
+       from media_assets
+      where workspace_id = $1
+        and checksum_sha256 = $2
+        and ($3::uuid is null or id <> $3)
+      limit 1`,
+    [workspaceId, checksumSha256.toLowerCase(), excludeMediaAssetId ?? null],
+  )
+  return result.rows[0] ? mapMedia(result.rows[0]) : null
+}
+
+export async function finalizeMediaUploaded(input: {
+  mediaAssetId: string
+  workspaceId: string
+  checksumSha256: string
+}): Promise<MediaAsset | null> {
+  const result = await databasePool().query<MediaRow>(
+    `update media_assets
+        set lifecycle_state = 'uploaded',
+            checksum_sha256 = $3,
+            updated_at = now()
+      where id = $1
+        and workspace_id = $2
+        and lifecycle_state = 'uploading'
+    returning id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
+              bytes, checksum_sha256, lifecycle_state, created_at, updated_at`,
+    [input.mediaAssetId, input.workspaceId, input.checksumSha256.toLowerCase()],
+  )
+  return result.rows[0] ? mapMedia(result.rows[0]) : null
+}
+
 export async function mediaSummaryForWorkspace(workspaceId: string): Promise<{
   mediaCount: number
   readyMediaCount: number

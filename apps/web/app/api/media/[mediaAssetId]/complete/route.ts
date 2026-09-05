@@ -1,7 +1,9 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import { findMediaAsset, markMediaUploaded } from '@/lib/db/media'
+import { finalizeMediaUploaded, findMediaAsset, findMediaByChecksumInWorkspace } from '@/lib/db/media'
+import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
+import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +17,9 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(request, 503, 'dependency_unavailable', 'Workspace persistence is unavailable', {
       retryable: true,
     })
+  }
+  if (!objectStorageConfig()) {
+    return apiError(request, 503, 'dependency_unavailable', 'Object storage is unavailable', { retryable: true })
   }
 
   const { mediaAssetId } = await context.params
@@ -48,9 +53,45 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(request, 403, 'collection_access_denied', 'Archived Collections are read-only')
   }
 
-  const updated = await markMediaUploaded(media.id, resolved.workspace.id)
-  if (!updated) {
-    return apiError(request, 409, 'invalid_payload', 'Media is not in an uploading state')
+  const store = new S3ObjectStore()
+  try {
+    const checksumSha256 = await store.hashStoredObject({
+      workspaceId: resolved.workspace.id,
+      storageKey: media.storageKey,
+      expectedBytes: media.bytes,
+    })
+
+    const duplicate = await findMediaByChecksumInWorkspace(
+      resolved.workspace.id,
+      checksumSha256,
+      media.id,
+    )
+    if (duplicate) {
+      await store.removeObject({ workspaceId: resolved.workspace.id, storageKey: media.storageKey })
+      return apiError(request, 409, 'invalid_payload', 'An asset with this checksum already exists in the Collection')
+    }
+
+    const updated = await finalizeMediaUploaded({
+      mediaAssetId: media.id,
+      workspaceId: resolved.workspace.id,
+      checksumSha256,
+    })
+    if (!updated) {
+      return apiError(request, 409, 'invalid_payload', 'Media is not in an uploading state')
+    }
+    return apiJson(request, { media: updated })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Upload verification failed'
+    if (message.includes('does not match declared')) {
+      return apiError(request, 422, 'invalid_payload', 'Uploaded file size does not match the declared size')
+    }
+    if (message.includes('NotFound') || message.includes('NoSuchKey') || message.includes('missing')) {
+      return apiError(request, 422, 'invalid_payload', 'Uploaded object was not found in storage')
+    }
+    if (message.includes('duplicate') || message.includes('unique')) {
+      await store.removeObject({ workspaceId: resolved.workspace.id, storageKey: media.storageKey }).catch(() => {})
+      return apiError(request, 409, 'invalid_payload', 'An asset with this checksum already exists in the Collection')
+    }
+    return apiError(request, 503, 'dependency_unavailable', message, { retryable: true })
   }
-  return apiJson(request, { media: updated })
 }

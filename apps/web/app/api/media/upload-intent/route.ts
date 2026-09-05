@@ -4,6 +4,7 @@ import { createUploadingMediaAsset } from '@/lib/db/media'
 import { paths } from '@/lib/paths'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
+import { pendingChecksumForMedia } from '@/lib/storage/pending-checksum'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 import { randomUUID } from 'node:crypto'
@@ -39,20 +40,15 @@ export async function POST(request: Request) {
     typeof record.originalFilename === 'string' ? record.originalFilename.trim() : ''
   const mimeType = typeof record.mimeType === 'string' ? record.mimeType.trim() : ''
   const bytes = typeof record.bytes === 'number' ? record.bytes : Number.NaN
-  const checksumSha256 =
-    typeof record.checksumSha256 === 'string' ? record.checksumSha256.trim().toLowerCase() : ''
 
-  if (!platformProjectId || !originalFilename || !mimeType || !checksumSha256) {
-    return apiError(request, 422, 'invalid_payload', 'platformProjectId, filename, mimeType and checksum are required')
+  if (!platformProjectId || !originalFilename || !mimeType) {
+    return apiError(request, 422, 'invalid_payload', 'platformProjectId, filename and mimeType are required')
   }
   if (!mimeType.startsWith('video/')) {
     return apiError(request, 422, 'invalid_payload', 'Only video/* uploads are accepted')
   }
   if (!Number.isSafeInteger(bytes) || bytes <= 0 || bytes > paths.maxUploadBytes) {
     return apiError(request, 413, 'invalid_payload', 'Upload size is outside the allowed range')
-  }
-  if (!/^[a-f0-9]{64}$/.test(checksumSha256)) {
-    return apiError(request, 422, 'invalid_payload', 'checksumSha256 must be a SHA-256 hex digest')
   }
 
   try {
@@ -68,13 +64,13 @@ export async function POST(request: Request) {
     }
 
     const mediaAssetId = randomUUID()
+    const checksumSha256 = pendingChecksumForMedia(mediaAssetId)
     const store = new S3ObjectStore()
     const target = await store.createUploadTarget({
       workspaceId: resolved.workspace.id,
       mediaAssetId,
       mimeType,
       bytes,
-      checksumSha256,
     })
     const media = await createUploadingMediaAsset({
       id: mediaAssetId,

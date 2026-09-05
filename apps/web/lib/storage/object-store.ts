@@ -3,7 +3,6 @@ export type CreateUploadTargetInput = {
   mediaAssetId: string
   mimeType: string
   bytes: number
-  checksumSha256: string
 }
 
 export type UploadTarget = {

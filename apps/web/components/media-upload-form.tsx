@@ -5,10 +5,33 @@ import { useRouter } from 'next/navigation'
 import { Button, Field, Text } from '@msqdx/ui'
 import { paths } from '@/lib/paths'
 
-async function sha256Hex(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer()
-  const digest = await crypto.subtle.digest('SHA-256', buffer)
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+function putFileWithProgress(
+  url: string,
+  file: File,
+  headers: Record<string, string>,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value)
+    }
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      onProgress(Math.round((event.loaded / event.total) * 100))
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve()
+        return
+      }
+      reject(new Error(`Object-Storage-Upload fehlgeschlagen (${xhr.status})`))
+    }
+    xhr.onerror = () => reject(new Error('Object-Storage-Upload fehlgeschlagen (Netzwerkfehler)'))
+    xhr.onabort = () => reject(new Error('Object-Storage-Upload abgebrochen'))
+    xhr.send(file)
+  })
 }
 
 export function MediaUploadForm({ platformProjectId }: { platformProjectId: string }) {
@@ -24,8 +47,6 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
     setBusy(true)
     setError(null)
     try {
-      setProgress('Checksum wird berechnet …')
-      const checksumSha256 = await sha256Hex(file)
       setProgress('Signierte Upload-URL wird angefordert …')
       const intentResponse = await fetch(paths.routes.apiMediaUploadIntent, {
         method: 'POST',
@@ -35,7 +56,6 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
           originalFilename: file.name,
           mimeType: file.type || 'video/mp4',
           bytes: file.size,
-          checksumSha256,
         }),
       })
       const intentBody = (await intentResponse.json()) as {
@@ -47,17 +67,12 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
         throw new Error(intentBody.error?.message || 'Upload-Intent fehlgeschlagen')
       }
 
-      setProgress('Datei wird zu Object Storage übertragen …')
-      const putResponse = await fetch(intentBody.upload.uploadUrl, {
-        method: 'PUT',
-        headers: intentBody.upload.headers,
-        body: file,
+      setProgress('Datei wird zu Object Storage übertragen … 0 %')
+      await putFileWithProgress(intentBody.upload.uploadUrl, file, intentBody.upload.headers, (percent) => {
+        setProgress(`Datei wird zu Object Storage übertragen … ${percent} %`)
       })
-      if (!putResponse.ok) {
-        throw new Error(`Object-Storage-Upload fehlgeschlagen (${putResponse.status})`)
-      }
 
-      setProgress('Upload wird abgeschlossen …')
+      setProgress('Upload wird geprüft und abgeschlossen …')
       const completeResponse = await fetch(paths.routes.apiMediaComplete(intentBody.media.id), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
