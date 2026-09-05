@@ -24,6 +24,10 @@ async function decodeWaveformPeaks(audioUrl: string, buckets = 240): Promise<num
   }
 }
 
+export async function prefetchWaveformPeaks(audioUrl: string, buckets = 240): Promise<number[]> {
+  return decodeWaveformPeaks(audioUrl, buckets)
+}
+
 export function useWaveformPeaks(audioUrl: string | null, buckets = 240): {
   peaks: number[]
   loading: boolean

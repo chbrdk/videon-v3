@@ -312,6 +312,37 @@ export async function trimCutScene(input: {
   }
 }
 
+export async function rollTrimCutBoundary(input: {
+  cutId: string
+  leftSceneId: string
+  boundaryMs: number
+}): Promise<CutScene[] | null> {
+  const scenes = await listScenesForCut(input.cutId)
+  const index = scenes.findIndex((scene) => scene.id === input.leftSceneId)
+  if (index < 0 || index >= scenes.length - 1) return null
+  const left = scenes[index]
+  const right = scenes[index + 1]
+  if (left.mediaAssetId !== right.mediaAssetId) return null
+
+  const boundary = Math.floor(input.boundaryMs)
+  if (boundary <= left.startMs + MIN_CLIP_MS || boundary >= right.endMs - MIN_CLIP_MS) return null
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`update cut_scenes set end_ms = $2 where id = $1`, [left.id, boundary])
+    await client.query(`update cut_scenes set start_ms = $2 where id = $1`, [right.id, boundary])
+    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 export async function reorderCutScenes(input: {
   cutId: string
   sceneIds: string[]

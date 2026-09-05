@@ -11,6 +11,7 @@ import {
   reorderCutScenes,
   renameCut,
   addSceneToCut,
+  rollTrimCutBoundary,
   restoreCutTimeline,
 } from '@/lib/db/cuts'
 import { findMediaAsset } from '@/lib/db/media'
@@ -149,6 +150,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   const rawRestoreScenes = Array.isArray(record.scenes) ? record.scenes : null
   const mediaAssetId = typeof record.mediaAssetId === 'string' ? record.mediaAssetId.trim() : ''
   const afterSceneId = typeof record.afterSceneId === 'string' ? record.afterSceneId.trim() : null
+  const leftSceneId = typeof record.leftSceneId === 'string' ? record.leftSceneId.trim() : ''
+  const boundaryMs = typeof record.boundaryMs === 'number' ? record.boundaryMs : null
 
   const workspace = await resolveWorkspaceForMediaRequest({
     plexonUserId: userId,
@@ -238,6 +241,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       endMs,
       afterSceneId,
     })
+    if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
+    return apiJson(request, { scenes })
+  }
+
+  if (action === 'rollTrim') {
+    if (!leftSceneId) return apiError(request, 400, 'invalid_payload', 'leftSceneId is required for rollTrim')
+    if (boundaryMs === null) return apiError(request, 400, 'invalid_payload', 'boundaryMs is required for rollTrim')
+    const scenes = await rollTrimCutBoundary({ cutId: cut.id, leftSceneId, boundaryMs })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
     return apiJson(request, { scenes })
   }

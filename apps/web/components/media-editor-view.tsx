@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
+import { EditorMonitor } from '@/components/editor-monitor'
 import { MediaSearch } from '@/components/media-search'
 import { TimelineWaveform } from '@/components/timeline-waveform'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
@@ -407,8 +408,14 @@ export function MediaEditorView({
 
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
-          <div className="videon-nle__monitor-label">Quellmonitor</div>
-          <div className="videon-nle__player-wrap">
+          <EditorMonitor
+            label="Quellmonitor"
+            videoRef={videoRef}
+            playbackUrl={playbackUrl}
+            frameMs={frameDurationMs(media.frameRate)}
+            disabled={!playbackUrl || Boolean(busy)}
+            onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
+          >
             {playbackUrl ? (
               <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
             ) : (
@@ -416,7 +423,7 @@ export function MediaEditorView({
                 <Text role="body">Wiedergabe noch nicht verfügbar</Text>
               </div>
             )}
-          </div>
+          </EditorMonitor>
 
           <EditorTransport
             currentMs={currentMs}
@@ -581,7 +588,7 @@ export function MediaEditorView({
       </footer>
 
       <p className="videon-nle__shortcuts">
-        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Szene · I/O In/Out · Shift+←/→ fein
+        Mausrad Jog · Shift+Mausrad ±1s · Vollbild am Monitor · I/O In/Out · Leertaste Play/Pause
       </p>
     </div>
   )

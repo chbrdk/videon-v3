@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
-import { CutTimeline } from '@/components/cut-timeline'
+import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
+import { EditorMonitor } from '@/components/editor-monitor'
 import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
@@ -21,9 +22,10 @@ import { EditorTransport } from '@/components/editor-transport'
 import { IconRedo, IconSplit, IconUndo } from '@/components/editor-icons'
 import { writeStoredActiveCut } from '@/lib/active-cut'
 import { frameDurationMs, formatClock } from '@/lib/editor-time'
+import type { TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
-import { useWaveformPeaks } from '@/lib/use-waveform'
+import { prefetchWaveformPeaks, useWaveformPeaks } from '@/lib/use-waveform'
 import { TimelineWaveform } from '@/components/timeline-waveform'
 
 type Clip = {
@@ -75,6 +77,9 @@ export function CutEditorView({
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
+  const [trimMode, setTrimMode] = useState<TrimMode>('trim')
+  const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
+  const [peaksByUrl, setPeaksByUrl] = useState<Record<string, number[]>>({})
 
   const timeline = useMemo(
     () =>
@@ -239,6 +244,57 @@ export function CutEditorView({
     },
     [timeline, totalDurationMs],
   )
+
+  useEffect(() => {
+    const mediaIds = [...new Set(clips.map((clip) => clip.scene.mediaAssetId))]
+    if (mediaIds.length === 0) {
+      setPlaybackUrlByMediaId({})
+      return
+    }
+    let cancelled = false
+    void Promise.all(
+      mediaIds.map(async (mediaId) => {
+        if (playbackCacheRef.current.has(mediaId)) {
+          return { mediaId, url: playbackCacheRef.current.get(mediaId) ?? '' }
+        }
+        const response = await fetch(paths.routes.apiMediaPlayback(mediaId, platformProjectId), { cache: 'no-store' })
+        const body = (await response.json()) as { playbackUrl?: string }
+        if (body.playbackUrl) playbackCacheRef.current.set(mediaId, body.playbackUrl)
+        return { mediaId, url: body.playbackUrl ?? '' }
+      }),
+    ).then((entries) => {
+      if (cancelled) return
+      const next: Record<string, string> = {}
+      for (const entry of entries) {
+        if (entry.url) next[entry.mediaId] = entry.url
+      }
+      setPlaybackUrlByMediaId(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [clips, platformProjectId])
+
+  useEffect(() => {
+    const urls = [...new Set(Object.values(playbackUrlByMediaId))]
+    if (urls.length === 0) {
+      setPeaksByUrl({})
+      return
+    }
+    let cancelled = false
+    void Promise.all(
+      urls.map(async (url) => {
+        const peaks = await prefetchWaveformPeaks(url)
+        return [url, peaks] as const
+      }),
+    ).then((entries) => {
+      if (cancelled) return
+      setPeaksByUrl(Object.fromEntries(entries))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [playbackUrlByMediaId])
 
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
@@ -434,6 +490,19 @@ export function CutEditorView({
             </button>
           </div>
           <div className="videon-nle__tool-group">
+            {(['trim', 'ripple', 'roll'] as TrimMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={`videon-nle__tool-btn${trimMode === mode ? ' is-active' : ''}`}
+                onClick={() => setTrimMode(mode)}
+                title={`Trim-Modus: ${mode}`}
+              >
+                {mode.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="videon-nle__tool-group">
             <button
               type="button"
               className="videon-nle__tool-btn"
@@ -477,8 +546,14 @@ export function CutEditorView({
 
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
-          <div className="videon-nle__monitor-label">Programm</div>
-          <div className="videon-nle__player-wrap">
+          <EditorMonitor
+            label="Programm"
+            videoRef={videoRef}
+            playbackUrl={playbackUrl}
+            frameMs={frameDurationMs(cut.frameRate)}
+            disabled={!playbackUrl || busy}
+            onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
+          >
             {playbackUrl ? (
               <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
             ) : (
@@ -486,7 +561,7 @@ export function CutEditorView({
                 <Text role="body">Keine Wiedergabe für diesen Clip</Text>
               </div>
             )}
-          </div>
+          </EditorMonitor>
 
           <EditorTransport
             currentMs={cutPlayheadMs}
@@ -540,6 +615,36 @@ export function CutEditorView({
               </Button>
             </div>
 
+            <Text role="meta" as="span">
+              Mediathek · in Timeline ziehen
+            </Text>
+            <ul className="videon-editor__scene-list">
+              {libraryMedia.map((media) => (
+                <li key={media.id}>
+                  <button
+                    type="button"
+                    className="videon-nle__bin-item videon-nle__bin-item--draggable"
+                    draggable={!busy}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(
+                        MEDIA_DRAG_TYPE,
+                        JSON.stringify({
+                          mediaAssetId: media.id,
+                          startMs: 0,
+                          endMs: media.durationMs ?? 60_000,
+                        }),
+                      )
+                      event.dataTransfer.effectAllowed = 'copy'
+                    }}
+                    onClick={() => setSelectedMediaId(media.id)}
+                  >
+                    <span className="videon-nle__bin-item-title">{media.originalFilename}</span>
+                    <span className="videon-nle__bin-item-meta">Ziehen oder klicken zum Auswählen</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
             <ul className="videon-editor__scene-list">
               {clips.map((clip, index) => (
                 <li key={clip.scene.id}>
@@ -580,16 +685,23 @@ export function CutEditorView({
           cutPlayheadMs={cutPlayheadMs}
           totalDurationMs={totalDurationMs}
           transcriptSegments={transcriptSegments}
+          trimMode={trimMode}
           disabled={busy}
+          playbackUrlByMediaId={playbackUrlByMediaId}
+          peaksByUrl={peaksByUrl}
           onSelectClip={setActiveIndex}
           onSeek={seekToCutMs}
           onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
           onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
+          onRollTrim={(leftSceneId, boundaryMs) =>
+            void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
+          }
+          onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
         />
       </footer>
 
       <p className="videon-nle__shortcuts">
-        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Clip · S Teilen · ⌘Z / ⌘⇧Z
+        Mausrad Jog · Shift+Mausrad ±1s · Vollbild am Monitor · Trim/Ripple/Roll · Mediathek in Timeline ziehen · S Teilen · ⌘Z
       </p>
     </div>
   )
