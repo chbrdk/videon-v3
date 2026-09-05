@@ -3,6 +3,25 @@ export function frameDurationMs(frameRate: number | null | undefined): number {
   return Math.round(1000 / fps)
 }
 
+export function formatTimecode(ms: number, frameRate: number | null | undefined = 25): string {
+  const fps = frameRate && frameRate > 0 ? frameRate : 25
+  const safeMs = Math.max(ms, 0)
+  const totalFrames = Math.floor((safeMs / 1000) * fps)
+  const frames = totalFrames % fps
+  const totalSeconds = Math.floor(totalFrames / fps)
+  const seconds = totalSeconds % 60
+  const minutes = Math.floor(totalSeconds / 60) % 60
+  const hours = Math.floor(totalSeconds / 3600)
+  const pad2 = (value: number) => String(value).padStart(2, '0')
+  const padFrames = (value: number) => String(value).padStart(2, '0')
+  if (hours > 0) return `${hours}:${pad2(minutes)}:${pad2(seconds)}:${padFrames(frames)}`
+  return `${pad2(minutes)}:${pad2(seconds)}:${padFrames(frames)}`
+}
+
+export function formatClock(ms: number): string {
+  return formatTimecode(ms).slice(0, 5)
+}
+
 export function normalizeInOutRange(input: {
   inMs: number | null
   outMs: number | null

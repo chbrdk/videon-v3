@@ -17,8 +17,10 @@ import {
   snapshotFromClips,
   type CutEditorSnapshot,
 } from '@/lib/cut-editor-history'
+import { EditorTransport } from '@/components/editor-transport'
+import { IconRedo, IconSplit, IconUndo } from '@/components/editor-icons'
 import { writeStoredActiveCut } from '@/lib/active-cut'
-import { frameDurationMs } from '@/lib/editor-time'
+import { frameDurationMs, formatClock } from '@/lib/editor-time'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
@@ -44,13 +46,6 @@ type LibraryMedia = {
 }
 
 const SEEK_STEP_MS = 1000
-
-function formatClock(ms: number): string {
-  const totalSeconds = Math.max(ms, 0) / 1000
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = Math.floor(totalSeconds % 60)
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-}
 
 export function CutEditorView({
   platformProjectId,
@@ -79,6 +74,7 @@ export function CutEditorView({
   const [selectedMediaId, setSelectedMediaId] = useState('')
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
+  const [isPlaying, setIsPlaying] = useState(false)
 
   const timeline = useMemo(
     () =>
@@ -283,9 +279,11 @@ export function CutEditorView({
     }
     const onPlay = () => {
       playingRef.current = true
+      setIsPlaying(true)
     }
     const onPause = () => {
       playingRef.current = false
+      setIsPlaying(false)
     }
     video.addEventListener('loadedmetadata', onLoaded)
     video.addEventListener('timeupdate', onTime)
@@ -418,171 +416,181 @@ export function CutEditorView({
   if (!cut) return <Text role="body">Cut wird geladen …</Text>
 
   return (
-    <div className="videon-editor">
-      <header className="videon-editor__header">
-        <div>
-          <Text role="headline" as="h2">
-            {cut.name}
-          </Text>
-          <Text role="meta" as="p">
-            {clips.length} Clip{clips.length === 1 ? '' : 's'} · Playhead {formatClock(cutPlayheadMs)}
-          </Text>
+    <div className="videon-nle">
+      <header className="videon-nle__toolbar">
+        <div className="videon-nle__toolbar-title">
+          <h2>{cut.name}</h2>
+          <p className="videon-nle__toolbar-meta">
+            Cut · {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
+          </p>
         </div>
-        <div className="videon-editor__actions">
-          <Button type="button" variant="ghost" disabled={busy || !canUndo} onClick={undo}>
-            Rückgängig
-          </Button>
-          <Button type="button" variant="ghost" disabled={busy || !canRedo} onClick={redo}>
-            Wiederholen
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={busy || !splitTarget}
-            onClick={() =>
-              void patchTimeline({
-                action: 'split',
-                sceneId: splitTarget?.sceneId,
-                atMs: splitTarget?.atMs,
-              })
-            }
-          >
-            An Playhead teilen
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={busy || !activeClip || activeIndex >= clips.length - 1}
-            onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
-          >
-            Mit nächstem verbinden
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={busy || clips.length <= 1 || !activeClip}
-            onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
-          >
-            Clip löschen
-          </Button>
+        <div className="videon-nle__toolbar-groups">
+          <div className="videon-nle__tool-group">
+            <button type="button" className="videon-nle__tool-btn" disabled={busy || !canUndo} onClick={undo} title="Rückgängig (⌘Z)" aria-label="Rückgängig">
+              <IconUndo />
+            </button>
+            <button type="button" className="videon-nle__tool-btn" disabled={busy || !canRedo} onClick={redo} title="Wiederholen (⌘⇧Z)" aria-label="Wiederholen">
+              <IconRedo />
+            </button>
+          </div>
+          <div className="videon-nle__tool-group">
+            <button
+              type="button"
+              className="videon-nle__tool-btn"
+              disabled={busy || !splitTarget}
+              title="An Playhead teilen (S)"
+              aria-label="An Playhead teilen"
+              onClick={() =>
+                void patchTimeline({
+                  action: 'split',
+                  sceneId: splitTarget?.sceneId,
+                  atMs: splitTarget?.atMs,
+                })
+              }
+            >
+              <IconSplit />
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy || !activeClip || activeIndex >= clips.length - 1}
+              onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
+            >
+              Verbinden
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy || clips.length <= 1 || !activeClip}
+              onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
+            >
+              Löschen
+            </Button>
+          </div>
           <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
             Archivieren
           </Button>
         </div>
       </header>
 
-      <p className="videon-editor__shortcuts">
-        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Clip · S Teilen · I/O In/Out · ⌘Z / ⌘⇧Z
-      </p>
+      {error ? <p className="videon-nle__error">{error}</p> : null}
 
-      {error ? <Text role="body">{error}</Text> : null}
-
-      <div className="videon-editor__player-wrap">
-        {playbackUrl ? (
-          <video ref={videoRef} className="videon-editor__video" src={playbackUrl} controls playsInline />
-        ) : (
-          <div className="videon-editor__video-placeholder">
-            <Text role="body">Keine Wiedergabe für diesen Clip</Text>
+      <div className="videon-nle__workspace">
+        <section className="videon-nle__program">
+          <div className="videon-nle__monitor-label">Programm</div>
+          <div className="videon-nle__player-wrap">
+            {playbackUrl ? (
+              <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
+            ) : (
+              <div className="videon-nle__video-placeholder">
+                <Text role="body">Keine Wiedergabe für diesen Clip</Text>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <TimelineWaveform
-        peaks={waveformPeaks}
-        durationMs={sourceDurationMs}
-        playheadMs={sourcePlayheadMs}
-        viewStartMs={activeClip?.scene.startMs ?? 0}
-        viewEndMs={activeClip?.scene.endMs ?? sourceDurationMs}
-        label="Waveform (aktiver Quellclip)"
-        onSeek={(ms) => {
-          if (!activeClip) return
-          const cutMs = (timeline[activeIndex]?.cutStartMs ?? 0) + (ms - activeClip.scene.startMs)
-          seekToCutMs(cutMs)
-        }}
-      />
+          <EditorTransport
+            currentMs={cutPlayheadMs}
+            durationMs={totalDurationMs}
+            frameRate={cut.frameRate}
+            disabled={!playbackUrl || busy}
+            isPlaying={isPlaying}
+            onTogglePlay={() => void togglePlayback()}
+            onStepBack={() => stepClip(-1)}
+            onStepForward={() => stepClip(1)}
+            onSeekBack={() => nudgePlayhead(-SEEK_STEP_MS)}
+            onSeekForward={() => nudgePlayhead(SEEK_STEP_MS)}
+            onFrameBack={() => frameStep(-1)}
+            onFrameForward={() => frameStep(1)}
+          />
 
-      <div className="videon-editor__transport">
-        <Button type="button" variant="ghost" disabled={!playbackUrl || activeIndex <= 0} onClick={() => stepClip(-1)}>
-          Vorheriger Clip
-        </Button>
-        <Button type="button" variant="ghost" disabled={!playbackUrl} onClick={() => void togglePlayback()}>
-          Play/Pause
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={!playbackUrl || activeIndex >= clips.length - 1}
-          onClick={() => stepClip(1)}
-        >
-          Nächster Clip
-        </Button>
-        <Text role="meta">
-          {formatClock(cutPlayheadMs)} / {formatClock(totalDurationMs)}
-        </Text>
-      </div>
-
-      <CutTimeline
-        clips={clips}
-        activeIndex={activeIndex}
-        cutPlayheadMs={cutPlayheadMs}
-        totalDurationMs={totalDurationMs}
-        transcriptSegments={transcriptSegments}
-        disabled={busy}
-        onSelectClip={setActiveIndex}
-        onSeek={seekToCutMs}
-        onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
-        onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
-      />
-
-      <div className="videon-editor__add-clip">
-        <label>
-          <Text role="meta" as="span">
-            Clip aus Mediathek
-          </Text>
-          <select value={selectedMediaId} onChange={(event) => setSelectedMediaId(event.target.value)} disabled={busy}>
-            <option value="">Video wählen …</option>
-            {libraryMedia.map((media) => (
-              <option key={media.id} value={media.id}>
-                {media.originalFilename}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button type="button" variant="ghost" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
-          Nach aktivem Clip einfügen
-        </Button>
-      </div>
-
-      <ul className="videon-editor__scene-list">
-        {clips.map((clip, index) => (
-          <li key={clip.scene.id}>
-            <button
-              type="button"
-              className={`videon-editor__scene-button${index === activeIndex ? ' is-active' : ''}`}
-              onClick={() => {
-                setActiveIndex(index)
-                const item = timeline[index]
-                if (item) seekToCutMs(item.cutStartMs)
+          <div className="videon-nle__waveform-slot">
+            <TimelineWaveform
+              peaks={waveformPeaks}
+              durationMs={sourceDurationMs}
+              playheadMs={sourcePlayheadMs}
+              viewStartMs={activeClip?.scene.startMs ?? 0}
+              viewEndMs={activeClip?.scene.endMs ?? sourceDurationMs}
+              label="Audio"
+              onSeek={(ms) => {
+                if (!activeClip) return
+                const cutMs = (timeline[activeIndex]?.cutStartMs ?? 0) + (ms - activeClip.scene.startMs)
+                seekToCutMs(cutMs)
               }}
-            >
-              <Text role="headline" as="span">
-                Clip {index + 1}: {clip.media?.originalFilename ?? 'Unbekannt'}
-              </Text>
-              <Text role="meta" as="span">
-                {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
-                {formatClock(timeline[index]?.cutStartMs ?? 0)} –{' '}
-                {formatClock(timeline[index]?.cutEndMs ?? 0)}
-              </Text>
-            </button>
-          </li>
-        ))}
-      </ul>
+            />
+          </div>
+        </section>
 
-      {activeClip?.media ? (
-        <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
-          <Button variant="ghost">Quellvideo im Editor öffnen</Button>
-        </Link>
-      ) : null}
+        <aside className="videon-nle__inspector">
+          <div className="videon-nle__inspector-header">Projekt-Bin</div>
+          <div className="videon-nle__inspector-body">
+            <div className="videon-nle__field-row">
+              <Text role="meta" as="span">
+                Clip einfügen
+              </Text>
+              <select value={selectedMediaId} onChange={(event) => setSelectedMediaId(event.target.value)} disabled={busy}>
+                <option value="">Video wählen …</option>
+                {libraryMedia.map((media) => (
+                  <option key={media.id} value={media.id}>
+                    {media.originalFilename}
+                  </option>
+                ))}
+              </select>
+              <Button type="button" variant="ghost" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
+                Nach aktivem Clip einfügen
+              </Button>
+            </div>
+
+            <ul className="videon-editor__scene-list">
+              {clips.map((clip, index) => (
+                <li key={clip.scene.id}>
+                  <button
+                    type="button"
+                    className={`videon-nle__bin-item${index === activeIndex ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setActiveIndex(index)
+                      const item = timeline[index]
+                      if (item) seekToCutMs(item.cutStartMs)
+                    }}
+                  >
+                    <span className="videon-nle__bin-item-title">
+                      V1 · {clip.media?.originalFilename ?? 'Unbekannt'}
+                    </span>
+                    <span className="videon-nle__bin-item-meta">
+                      {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
+                      {formatClock(timeline[index]?.cutStartMs ?? 0)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {activeClip?.media ? (
+              <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
+                <Button variant="ghost">Quellvideo öffnen</Button>
+              </Link>
+            ) : null}
+          </div>
+        </aside>
+      </div>
+
+      <footer className="videon-nle__timeline-dock">
+        <CutTimeline
+          clips={clips}
+          activeIndex={activeIndex}
+          cutPlayheadMs={cutPlayheadMs}
+          totalDurationMs={totalDurationMs}
+          transcriptSegments={transcriptSegments}
+          disabled={busy}
+          onSelectClip={setActiveIndex}
+          onSeek={seekToCutMs}
+          onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
+          onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
+        />
+      </footer>
+
+      <p className="videon-nle__shortcuts">
+        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Clip · S Teilen · ⌘Z / ⌘⇧Z
+      </p>
     </div>
   )
 }

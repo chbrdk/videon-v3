@@ -1,13 +1,14 @@
 'use client'
 
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Button, Text } from '@msqdx/ui'
+import { Text } from '@msqdx/ui'
 import {
   MIN_CUT_CLIP_MS,
   buildCutTimeline,
   type CutTimelineItem,
   type CutTranscriptSegment,
 } from '@/lib/cut-timeline'
+import { formatClock } from '@/lib/editor-time'
 
 export type CutTimelineClip = {
   scene: {
@@ -33,13 +34,12 @@ type CutTimelineProps = {
   onTrim: (sceneId: string, startMs: number, endMs: number) => void
 }
 
-const ZOOM_LEVELS = [1, 2, 4] as const
+const ZOOM_LEVELS = [1, 2, 4, 8] as const
 
-function formatClock(ms: number): string {
-  const totalSeconds = Math.max(ms, 0) / 1000
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = Math.floor(totalSeconds % 60)
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+function rulerStepMs(totalDurationMs: number, zoomLevel: number): number {
+  if (totalDurationMs <= 30_000) return zoomLevel >= 4 ? 1000 : 2000
+  if (totalDurationMs <= 120_000) return zoomLevel >= 4 ? 5000 : 10_000
+  return zoomLevel >= 4 ? 15_000 : 30_000
 }
 
 export function CutTimeline({
@@ -185,46 +185,77 @@ export function CutTimeline({
 
   const playheadLeft = totalDurationMs > 0 ? (cutPlayheadMs / totalDurationMs) * 100 : 0
   const laneStyle = { width: `${zoomLevel * 100}%` }
+  const stepMs = rulerStepMs(totalDurationMs, zoomLevel)
+  const rulerTicks = useMemo(() => {
+    if (totalDurationMs <= 0) return []
+    const ticks: Array<{ ms: number; left: number; major: boolean }> = []
+    for (let ms = 0; ms <= totalDurationMs; ms += stepMs) {
+      ticks.push({ ms, left: (ms / totalDurationMs) * 100, major: ms % (stepMs * 2) === 0 })
+    }
+    return ticks
+  }, [stepMs, totalDurationMs])
 
   return (
     <div className="videon-cut-timeline">
       <div className="videon-cut-timeline__meta">
+        <span className="videon-cut-timeline__title">Sequenz</span>
         <Text role="meta">
-          Timeline · {formatClock(cutPlayheadMs)} / {formatClock(totalDurationMs)}
+          {formatClock(cutPlayheadMs)} / {formatClock(totalDurationMs)}
         </Text>
         <div className="videon-cut-timeline__zoom">
-          <Button
+          <button
             type="button"
-            variant="ghost"
+            className="videon-nle__tool-btn"
             disabled={zoomIndex <= 0}
             onClick={() => setZoomIndex((current) => Math.max(current - 1, 0))}
+            aria-label="Zoom out"
           >
             −
-          </Button>
+          </button>
           <Text role="meta">{zoomLevel}×</Text>
-          <Button
+          <button
             type="button"
-            variant="ghost"
+            className="videon-nle__tool-btn"
             disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
             onClick={() => setZoomIndex((current) => Math.min(current + 1, ZOOM_LEVELS.length - 1))}
+            aria-label="Zoom in"
           >
             +
-          </Button>
+          </button>
         </div>
       </div>
 
       <div className="videon-cut-timeline__viewport">
-        <div className="videon-cut-timeline__lanes" style={laneStyle} ref={lanesRef}>
-          <div
-            ref={videoTrackRef}
-            className="videon-cut-timeline__track videon-cut-timeline__track--video"
-            onPointerDown={onTrackPointerDown}
-            role="slider"
-            aria-label="Cut-Timeline"
-            aria-valuemin={0}
-            aria-valuemax={totalDurationMs}
-            aria-valuenow={cutPlayheadMs}
-          >
+        <div className="videon-cut-timeline__layout">
+          <div className="videon-cut-timeline__headers" aria-hidden="true">
+            <div className="videon-cut-timeline__header-spacer" />
+            <div className="videon-cut-timeline__header-label">V1</div>
+            {transcriptSegments.length > 0 ? <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div> : null}
+          </div>
+          <div className="videon-cut-timeline__lanes-wrap">
+            <div className="videon-cut-timeline__lanes" style={laneStyle} ref={lanesRef}>
+              <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown}>
+                {rulerTicks.map((tick) => (
+                  <div
+                    key={tick.ms}
+                    className={`videon-cut-timeline__ruler-tick${tick.major ? ' is-major' : ''}`}
+                    style={{ left: `${tick.left}%` }}
+                  >
+                    {tick.major ? <span>{formatClock(tick.ms)}</span> : null}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                ref={videoTrackRef}
+                className="videon-cut-timeline__track videon-cut-timeline__track--video"
+                onPointerDown={onTrackPointerDown}
+                role="slider"
+                aria-label="Video-Spur"
+                aria-valuemin={0}
+                aria-valuemax={totalDurationMs}
+                aria-valuenow={cutPlayheadMs}
+              >
             {timeline.map((item) => {
               const left = totalDurationMs > 0 ? (item.cutStartMs / totalDurationMs) * 100 : 0
               const width = totalDurationMs > 0 ? Math.max((item.durationMs / totalDurationMs) * 100, 1.2) : 0
@@ -299,6 +330,8 @@ export function CutTimeline({
             style={{ left: `${playheadLeft}%` }}
             onPointerDown={startPlayheadDrag}
           />
+            </div>
+          </div>
         </div>
       </div>
     </div>

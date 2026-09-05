@@ -42,7 +42,7 @@ export function TimelineWaveform({
     canvas.height = height * window.devicePixelRatio
     context.scale(window.devicePixelRatio, window.devicePixelRatio)
     context.clearRect(0, 0, width, height)
-    context.fillStyle = 'color-mix(in srgb, var(--accent, #7dd3fc) 35%, transparent)'
+    context.fillStyle = '#3d7ab8'
     const mid = height / 2
     const bucketMs = durationMs / peaks.length
     for (const [index, peak] of peaks.entries()) {
@@ -57,12 +57,13 @@ export function TimelineWaveform({
     if (inMs !== null && outMs !== null && outMs > inMs) {
       const rangeLeft = ((Math.max(inMs, viewStartMs) - viewStartMs) / spanMs) * width
       const rangeRight = ((Math.min(outMs, endMs) - viewStartMs) / spanMs) * width
-      context.fillStyle = 'color-mix(in srgb, #fbbf24 18%, transparent)'
+      context.fillStyle = 'rgba(251, 191, 36, 0.22)'
       context.fillRect(rangeLeft, 0, Math.max(rangeRight - rangeLeft, 1), height)
     }
     const playheadLeft = ((playheadMs - viewStartMs) / spanMs) * width
     if (playheadLeft >= 0 && playheadLeft <= width) {
-      context.strokeStyle = 'color-mix(in srgb, #fff 85%, var(--accent, #7dd3fc))'
+      context.strokeStyle = '#ff6b00'
+      context.lineWidth = 2
       context.beginPath()
       context.moveTo(playheadLeft, 0)
       context.lineTo(playheadLeft, height)

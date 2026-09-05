@@ -8,7 +8,8 @@ import { useActiveCollection } from '@/components/collection-context'
 import { MediaSearch } from '@/components/media-search'
 import { TimelineWaveform } from '@/components/timeline-waveform'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
-import { frameDurationMs, normalizeInOutRange } from '@/lib/editor-time'
+import { EditorTransport } from '@/components/editor-transport'
+import { frameDurationMs, formatClock, normalizeInOutRange } from '@/lib/editor-time'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
 import { paths } from '@/lib/paths'
@@ -58,13 +59,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function formatClock(ms: number): string {
-  const totalSeconds = Math.max(ms, 0) / 1000
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = Math.floor(totalSeconds % 60)
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-}
-
 export function MediaEditorView({
   platformProjectId,
   mediaAssetId,
@@ -90,6 +84,7 @@ export function MediaEditorView({
   const [markInMs, setMarkInMs] = useState<number | null>(null)
   const [markOutMs, setMarkOutMs] = useState<number | null>(null)
   const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
   const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
   const markedRange = useMemo(
     () =>
@@ -169,11 +164,17 @@ export function MediaEditorView({
       setActiveSceneKey(scene?.sceneKey ?? null)
     }
     const onMeta = () => setDurationMs(Math.floor(video.duration * 1000))
+    const onPlay = () => setIsPlaying(true)
+    const onPause = () => setIsPlaying(false)
     video.addEventListener('timeupdate', onTime)
     video.addEventListener('loadedmetadata', onMeta)
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
     return () => {
       video.removeEventListener('timeupdate', onTime)
       video.removeEventListener('loadedmetadata', onMeta)
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
     }
   }, [scenes, playbackUrl])
 
@@ -357,18 +358,16 @@ export function MediaEditorView({
   const timelineDuration = media.durationMs ?? durationMs ?? Math.max(...scenes.map((s) => s.endMs), 1)
 
   return (
-    <div className="videon-editor">
-      <header className="videon-editor__header">
-        <div>
-          <Text role="headline" as="h2">
-            {media.originalFilename}
-          </Text>
-          <Text role="meta" as="p">
-            {media.mimeType} · {formatBytes(media.bytes)} · {media.lifecycleState}
+    <div className="videon-nle">
+      <header className="videon-nle__toolbar">
+        <div className="videon-nle__toolbar-title">
+          <h2>{media.originalFilename}</h2>
+          <p className="videon-nle__toolbar-meta">
+            Quelle · {media.mimeType} · {formatBytes(media.bytes)}
             {media.width && media.height ? ` · ${media.width}×${media.height}` : ''}
-          </Text>
+          </p>
         </div>
-        <div className="videon-editor__actions">
+        <div className="videon-nle__toolbar-groups">
           <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
             Aktualisieren
           </Button>
@@ -382,7 +381,7 @@ export function MediaEditorView({
               disabled={Boolean(busy)}
               onClick={() => void addRangeToActiveCut(markedRange.startMs, markedRange.endMs)}
             >
-              In/Out zum aktiven Cut
+              In/Out zum Cut
             </Button>
           ) : null}
           {scenes.length > 1 ? (
@@ -396,7 +395,7 @@ export function MediaEditorView({
             onClick={() => void rerunAnalysis()}
             disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
           >
-            {busy === 'analysis' ? 'Startet …' : 'Analyse erneut starten'}
+            {busy === 'analysis' ? 'Startet …' : 'Analyse'}
           </Button>
           <Button type="button" variant="ghost" onClick={() => void deleteMedia()} disabled={Boolean(busy)}>
             {busy === 'delete' ? 'Löscht …' : 'Löschen'}
@@ -404,220 +403,186 @@ export function MediaEditorView({
         </div>
       </header>
 
-      {error ? <Text role="body">{error}</Text> : null}
+      {error ? <p className="videon-nle__error">{error}</p> : null}
 
-      <div className="videon-editor__player-wrap">
-        {playbackUrl ? (
-          <video
-            ref={videoRef}
-            className="videon-editor__video"
-            src={playbackUrl}
-            controls
-            playsInline
-            preload="metadata"
-          />
-        ) : (
-          <div className="videon-editor__video-placeholder">
-            <Text role="body">Wiedergabe noch nicht verfügbar</Text>
+      <div className="videon-nle__workspace">
+        <section className="videon-nle__program">
+          <div className="videon-nle__monitor-label">Quellmonitor</div>
+          <div className="videon-nle__player-wrap">
+            {playbackUrl ? (
+              <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
+            ) : (
+              <div className="videon-nle__video-placeholder">
+                <Text role="body">Wiedergabe noch nicht verfügbar</Text>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="videon-editor__transport">
-        <Button type="button" variant="ghost" onClick={() => stepScene(-1)} disabled={!playbackUrl || scenes.length === 0}>
-          Vorherige Szene
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => void togglePlayback()} disabled={!playbackUrl}>
-          Play/Pause
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => stepScene(1)} disabled={!playbackUrl || scenes.length === 0}>
-          Nächste Szene
-        </Button>
-        <Text role="meta">
-          {formatClock(currentMs)} / {formatClock(timelineDuration)}
-        </Text>
-      </div>
-
-      <p className="videon-editor__shortcuts">
-        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Szene · I/O In/Out · Shift+←/→ fein
-      </p>
-
-      <div className="videon-editor__transport">
-        <Button type="button" variant="ghost" onClick={() => setMarkInMs(currentMs)} disabled={!playbackUrl}>
-          In setzen
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setMarkOutMs(currentMs)} disabled={!playbackUrl}>
-          Out setzen
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => { setMarkInMs(null); setMarkOutMs(null) }}>
-          Marken löschen
-        </Button>
-        {markedRange ? (
-          <Text role="meta">
-            In/Out: {formatClock(markedRange.startMs)} – {formatClock(markedRange.endMs)}
-          </Text>
-        ) : (
-          <Text role="meta">In: {markInMs === null ? '—' : formatClock(markInMs)} · Out: {markOutMs === null ? '—' : formatClock(markOutMs)}</Text>
-        )}
-      </div>
-
-      <TimelineWaveform
-        peaks={waveformPeaks}
-        durationMs={timelineDuration}
-        playheadMs={currentMs}
-        inMs={markInMs}
-        outMs={markOutMs}
-        label="Waveform"
-        onSeek={seekTo}
-      />
-
-      <div className="videon-editor__timeline" aria-label="Szenen-Timeline">
-        {markedRange ? (
-          <div
-            className="videon-editor__range-marker"
-            style={{
-              left: `${(markedRange.startMs / timelineDuration) * 100}%`,
-              width: `${((markedRange.endMs - markedRange.startMs) / timelineDuration) * 100}%`,
+          <EditorTransport
+            currentMs={currentMs}
+            durationMs={timelineDuration}
+            frameRate={media.frameRate}
+            disabled={!playbackUrl || Boolean(busy)}
+            isPlaying={isPlaying}
+            onTogglePlay={() => void togglePlayback()}
+            onStepBack={() => stepScene(-1)}
+            onStepForward={() => stepScene(1)}
+            onSeekBack={() => nudgePlayhead(-1000)}
+            onSeekForward={() => nudgePlayhead(1000)}
+            onFrameBack={() => frameStep(-1)}
+            onFrameForward={() => frameStep(1)}
+            showMarks
+            markInMs={markInMs}
+            markOutMs={markOutMs}
+            onMarkIn={() => setMarkInMs(currentMs)}
+            onMarkOut={() => setMarkOutMs(currentMs)}
+            onClearMarks={() => {
+              setMarkInMs(null)
+              setMarkOutMs(null)
             }}
           />
-        ) : null}
-        {scenes.map((scene) => {
-          const left = (scene.startMs / timelineDuration) * 100
-          const width = Math.max(((scene.endMs - scene.startMs) / timelineDuration) * 100, 1.5)
-          return (
-            <button
-              key={scene.sceneKey}
-              type="button"
-              className={`videon-editor__scene-marker${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-              style={{ left: `${left}%`, width: `${width}%` }}
-              onClick={() => seekTo(scene.startMs)}
-              title={scene.insight.summary}
+
+          <div className="videon-nle__waveform-slot">
+            <TimelineWaveform
+              peaks={waveformPeaks}
+              durationMs={timelineDuration}
+              playheadMs={currentMs}
+              inMs={markInMs}
+              outMs={markOutMs}
+              label="Audio"
+              onSeek={seekTo}
             />
-          )
-        })}
-      </div>
+          </div>
+        </section>
 
-      <section className="videon-editor__panel">
-        <Text role="title" as="h3">
-          Suche & aktiver Cut
-        </Text>
-        <MediaSearch
-          platformProjectId={platformProjectId}
-          activeCutName={activeCut?.platformProjectId === platformProjectId ? activeCut.name : null}
-          onAddToCut={async (hit) => {
-            let startMs = hit.startMs ?? 0
-            let endMs = hit.endMs ?? media?.durationMs ?? durationMs
-            if ((!hit.startMs || !hit.endMs) && hit.mediaAssetId !== mediaAssetId) {
-              const response = await fetch(paths.routes.apiMediaDetail(hit.mediaAssetId, platformProjectId), {
-                cache: 'no-store',
-              })
-              const body = (await response.json()) as {
-                media?: { durationMs?: number | null }
-                scenes?: SceneItem[]
-              }
-              const scene = body.scenes?.find((entry) => entry.sceneKey === hit.sceneKey)
-              startMs = scene?.startMs ?? 0
-              endMs = scene?.endMs ?? body.media?.durationMs ?? 60_000
-            } else if (hit.sceneKey && (!hit.startMs || !hit.endMs)) {
-              const scene = scenes.find((entry) => entry.sceneKey === hit.sceneKey)
-              startMs = scene?.startMs ?? 0
-              endMs = scene?.endMs ?? media?.durationMs ?? durationMs
-            }
-            await addRangeToActiveCut(startMs, endMs, hit.mediaAssetId)
-          }}
-        />
-      </section>
-
-      <div className="videon-editor__grid">
-        <section className="videon-editor__panel">
-          <Text role="title" as="h3">
-            Szenen
-          </Text>
-          {scenes.length === 0 ? (
-            <Text role="body">
-              {analysis?.status === 'running' || analysis?.status === 'queued'
-                ? 'Analyse läuft — Szenen erscheinen nach Abschluss.'
-                : 'Noch keine Szenen. Starte eine Analyse, um Kapitel zu erhalten.'}
+        <aside className="videon-nle__inspector">
+          <div className="videon-nle__inspector-header">Metadaten</div>
+          <div className="videon-nle__inspector-body">
+            <Text role="meta" as="p">
+              Analyse: {analysis?.status ?? 'keine'} · {media.lifecycleState}
             </Text>
-          ) : (
-            <ul className="videon-editor__scene-list">
-              {scenes.map((scene) => (
-                <li key={scene.sceneKey}>
-                  <button
-                    type="button"
-                    className={`videon-editor__scene-button${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-                    onClick={() => seekTo(scene.startMs)}
-                  >
-                    <Text role="headline" as="span">
-                      {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
-                    </Text>
-                    <Text role="body" as="span">
-                      {scene.insight.summary}
-                    </Text>
-                    {scene.insight.setting ? (
-                      <Text role="meta" as="span">
-                        {scene.insight.setting.location}
-                        {scene.insight.setting.timeOfDay ? ` · ${scene.insight.setting.timeOfDay}` : ''}
-                      </Text>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
 
-        <section className="videon-editor__panel">
-          <Text role="title" as="h3">
-            Analyse
-          </Text>
-          <Text role="meta" as="p">
-            Status: {analysis?.status ?? 'keine'}
-          </Text>
-          {stages.length > 0 ? (
-            <ul className="videon-editor__stage-list">
-              {stages.map((stage) => (
-                <li key={stage.stageKey}>
-                  <Text role="meta">
-                    {stage.stageKey}: {stage.status}
-                  </Text>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Text role="body">Pipeline-Stages erscheinen nach dem ersten Lauf.</Text>
-          )}
-          <Text role="title" as="h3">
-            Transkript
-          </Text>
-          <Text role="body" as="p">
-            {transcript?.transcriptText
-              ? transcript.transcriptText
-              : transcript?.status === 'pending'
-                ? 'Audio wurde extrahiert — Transkription läuft beim nächsten Analyse-Lauf.'
-                : transcript?.status === 'skipped'
-                  ? 'Kein Transkript (Whisper nicht verfügbar oder kein Audiospur).'
-                  : 'Noch kein Transkript verfügbar.'}
-          </Text>
-          {transcript?.segments?.length ? (
-            <ul className="videon-editor__stage-list">
-              {transcript.segments.map((segment) => (
-                <li key={`${segment.startMs}-${segment.endMs}`}>
-                  <button
-                    type="button"
-                    className="videon-editor__scene-button"
-                    onClick={() => seekTo(segment.startMs)}
-                  >
-                    <Text role="meta">
-                      {formatClock(segment.startMs)} – {formatClock(segment.endMs)}: {segment.text}
-                    </Text>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
+            <Text role="title" as="h3">
+              Szenen
+            </Text>
+            {scenes.length === 0 ? (
+              <Text role="body">
+                {analysis?.status === 'running' || analysis?.status === 'queued'
+                  ? 'Analyse läuft — Szenen erscheinen nach Abschluss.'
+                  : 'Noch keine Szenen.'}
+              </Text>
+            ) : (
+              <ul className="videon-editor__scene-list">
+                {scenes.map((scene) => (
+                  <li key={scene.sceneKey}>
+                    <button
+                      type="button"
+                      className={`videon-nle__bin-item${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
+                      onClick={() => seekTo(scene.startMs)}
+                    >
+                      <span className="videon-nle__bin-item-title">{scene.insight.summary}</span>
+                      <span className="videon-nle__bin-item-meta">
+                        {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <Text role="title" as="h3">
+              Suche & Cut
+            </Text>
+            <MediaSearch
+              platformProjectId={platformProjectId}
+              activeCutName={activeCut?.platformProjectId === platformProjectId ? activeCut.name : null}
+              onAddToCut={async (hit) => {
+                let startMs = hit.startMs ?? 0
+                let endMs = hit.endMs ?? media?.durationMs ?? durationMs
+                if ((!hit.startMs || !hit.endMs) && hit.mediaAssetId !== mediaAssetId) {
+                  const response = await fetch(paths.routes.apiMediaDetail(hit.mediaAssetId, platformProjectId), {
+                    cache: 'no-store',
+                  })
+                  const body = (await response.json()) as {
+                    media?: { durationMs?: number | null }
+                    scenes?: SceneItem[]
+                  }
+                  const scene = body.scenes?.find((entry) => entry.sceneKey === hit.sceneKey)
+                  startMs = scene?.startMs ?? 0
+                  endMs = scene?.endMs ?? body.media?.durationMs ?? 60_000
+                } else if (hit.sceneKey && (!hit.startMs || !hit.endMs)) {
+                  const scene = scenes.find((entry) => entry.sceneKey === hit.sceneKey)
+                  startMs = scene?.startMs ?? 0
+                  endMs = scene?.endMs ?? media?.durationMs ?? durationMs
+                }
+                await addRangeToActiveCut(startMs, endMs, hit.mediaAssetId)
+              }}
+            />
+
+            {transcript?.segments?.length ? (
+              <>
+                <Text role="title" as="h3">
+                  Transkript
+                </Text>
+                <ul className="videon-editor__stage-list">
+                  {transcript.segments.map((segment) => (
+                    <li key={`${segment.startMs}-${segment.endMs}`}>
+                      <button type="button" className="videon-nle__bin-item" onClick={() => seekTo(segment.startMs)}>
+                        <span className="videon-nle__bin-item-meta">
+                          {formatClock(segment.startMs)} – {formatClock(segment.endMs)}
+                        </span>
+                        <span className="videon-nle__bin-item-title">{segment.text}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
+        </aside>
       </div>
+
+      <footer className="videon-nle__timeline-dock">
+        <div className="videon-cut-timeline__meta">
+          <span className="videon-cut-timeline__title">Quell-Timeline</span>
+          <Text role="meta">
+            {formatClock(currentMs)} / {formatClock(timelineDuration)}
+          </Text>
+        </div>
+        <div className="videon-editor__timeline videon-editor__timeline--dock" aria-label="Szenen-Timeline">
+          {markedRange ? (
+            <div
+              className="videon-editor__range-marker"
+              style={{
+                left: `${(markedRange.startMs / timelineDuration) * 100}%`,
+                width: `${((markedRange.endMs - markedRange.startMs) / timelineDuration) * 100}%`,
+              }}
+            />
+          ) : null}
+          {scenes.map((scene) => {
+            const left = (scene.startMs / timelineDuration) * 100
+            const width = Math.max(((scene.endMs - scene.startMs) / timelineDuration) * 100, 1.5)
+            return (
+              <button
+                key={scene.sceneKey}
+                type="button"
+                className={`videon-editor__scene-marker${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
+                style={{ left: `${left}%`, width: `${width}%` }}
+                onClick={() => seekTo(scene.startMs)}
+                title={scene.insight.summary}
+              />
+            )
+          })}
+          <div
+            className="videon-cut-timeline__playhead"
+            style={{ left: `${(currentMs / timelineDuration) * 100}%` }}
+          />
+        </div>
+      </footer>
+
+      <p className="videon-nle__shortcuts">
+        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Szene · I/O In/Out · Shift+←/→ fein
+      </p>
     </div>
   )
 }

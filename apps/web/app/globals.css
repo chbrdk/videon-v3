@@ -256,6 +256,15 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   flex-wrap: wrap;
 }
 
+.videon-hub__header-row--editor {
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+.videon-hub--editor {
+  gap: 0.35rem;
+}
+
 .videon-collection-list,
 .videon-media-list {
   list-style: none;
@@ -279,6 +288,336 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   display: grid;
   gap: 0.45rem;
   justify-items: end;
+}
+
+.videon-stage--editor {
+  padding-block-start: 0.75rem;
+  min-height: calc(100vh - 2rem);
+}
+
+.videon-stage--editor .videon-page-lead {
+  display: none;
+}
+
+.videon-nle {
+  --nle-bg: #101114;
+  --nle-panel: #181a1f;
+  --nle-panel-2: #20242b;
+  --nle-border: #2f3540;
+  --nle-border-strong: #434b59;
+  --nle-track: #15181d;
+  --nle-clip: #2f5f8f;
+  --nle-clip-active: #4f8ec8;
+  --nle-transcript: #6b5a2a;
+  --nle-playhead: #ff6b00;
+  --nle-mark: rgba(251, 191, 36, 0.28);
+  --nle-text: #e8eaed;
+  --nle-muted: #9aa3b2;
+  --nle-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  min-height: min(78vh, 56rem);
+  border: 1px solid var(--nle-border);
+  border-radius: 0.35rem;
+  overflow: hidden;
+  background: var(--nle-bg);
+  color: var(--nle-text);
+}
+
+.videon-nle__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.75rem;
+  background: linear-gradient(180deg, var(--nle-panel-2), var(--nle-panel));
+  border-bottom: 1px solid var(--nle-border);
+}
+
+.videon-nle__toolbar-title {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.videon-nle__toolbar-title h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.videon-nle__toolbar-meta {
+  margin: 0;
+  color: var(--nle-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.videon-nle__toolbar-groups {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.videon-nle__tool-group {
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border: 1px solid var(--nle-border);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--nle-panel) 85%, black);
+}
+
+.videon-nle__tool-btn,
+.videon-nle__transport-btn {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--nle-text);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
+.videon-nle__tool-btn:hover:not(:disabled),
+.videon-nle__transport-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--nle-panel-2) 70%, white 8%);
+  border-color: var(--nle-border);
+}
+
+.videon-nle__tool-btn:disabled,
+.videon-nle__transport-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.videon-nle__tool-btn.is-active,
+.videon-nle__transport-btn.is-active {
+  background: color-mix(in srgb, var(--nle-clip-active) 35%, transparent);
+  border-color: color-mix(in srgb, var(--nle-clip-active) 55%, var(--nle-border));
+}
+
+.videon-nle__workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  min-height: 0;
+}
+
+.videon-nle__program {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+  border-right: 1px solid var(--nle-border);
+}
+
+.videon-nle__monitor-label {
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--nle-border);
+  color: var(--nle-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.videon-nle__player-wrap {
+  position: relative;
+  background: #000;
+  min-height: clamp(12rem, 34vh, 24rem);
+  display: grid;
+  place-items: center;
+}
+
+.videon-nle__video {
+  display: block;
+  width: 100%;
+  max-height: clamp(12rem, 34vh, 24rem);
+  background: #000;
+}
+
+.videon-nle__video-placeholder {
+  min-height: clamp(12rem, 34vh, 24rem);
+  display: grid;
+  place-items: center;
+  color: var(--nle-muted);
+  padding: 2rem;
+}
+
+.videon-nle__transport {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid var(--nle-border);
+  border-bottom: 1px solid var(--nle-border);
+  background: var(--nle-panel);
+}
+
+.videon-nle__transport-group {
+  display: flex;
+  gap: 0.2rem;
+  align-items: center;
+}
+
+.videon-nle__transport-group--marks {
+  margin-left: auto;
+}
+
+.videon-nle__transport-key {
+  font-family: var(--nle-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.videon-nle__transport-text {
+  border: 0;
+  background: transparent;
+  color: var(--nle-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0.2rem 0.35rem;
+}
+
+.videon-nle__transport-text:hover:not(:disabled) {
+  color: var(--nle-text);
+}
+
+.videon-nle__timecode {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-family: var(--nle-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--nle-border);
+  border-radius: 0.3rem;
+  background: #0b0c0f;
+}
+
+.videon-nle__timecode-current {
+  color: #fff;
+}
+
+.videon-nle__timecode-sep,
+.videon-nle__timecode-duration {
+  color: var(--nle-muted);
+}
+
+.videon-nle__mark-readout {
+  color: var(--nle-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.videon-nle__waveform-slot {
+  padding: 0.45rem 0.75rem 0.65rem;
+  background: var(--nle-panel);
+}
+
+.videon-nle__inspector {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  background: var(--nle-panel);
+}
+
+.videon-nle__inspector-header {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--nle-border);
+  color: var(--nle-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.videon-nle__inspector-body {
+  overflow: auto;
+  padding: 0.55rem 0.75rem 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.videon-nle__timeline-dock {
+  border-top: 1px solid var(--nle-border-strong);
+  background: var(--nle-panel);
+  min-height: 12rem;
+}
+
+.videon-nle__shortcuts {
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  color: var(--nle-muted);
+  font-size: 0.66rem;
+  border-top: 1px solid var(--nle-border);
+  background: var(--nle-bg);
+}
+
+.videon-nle__error {
+  margin: 0.5rem 0.75rem;
+  color: #f87171;
+  font-size: 0.82rem;
+}
+
+.videon-nle__bin-item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--nle-border);
+  border-radius: 0.3rem;
+  background: var(--nle-panel-2);
+  color: inherit;
+  cursor: pointer;
+}
+
+.videon-nle__bin-item.is-active {
+  border-color: color-mix(in srgb, var(--nle-clip-active) 70%, var(--nle-border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nle-clip-active) 35%, transparent);
+}
+
+.videon-nle__bin-item-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.videon-nle__bin-item-meta {
+  font-size: 0.66rem;
+  color: var(--nle-muted);
+  font-family: var(--nle-mono);
+}
+
+.videon-nle__field-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.videon-nle__field-row select {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--nle-border);
+  border-radius: 0.3rem;
+  background: var(--nle-panel-2);
+  color: var(--nle-text);
 }
 
 .videon-editor {
@@ -347,15 +686,15 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 
 .videon-waveform {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .videon-waveform__canvas {
   width: 100%;
-  height: 4.5rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--bg0) 88%, var(--fg));
+  height: 3.25rem;
+  border: 1px solid var(--nle-border, var(--line));
+  border-radius: 0.25rem;
+  background: #0b0c0f;
   cursor: pointer;
   touch-action: none;
 }
@@ -395,6 +734,14 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--bg0) 88%, var(--fg));
+}
+
+.videon-editor__timeline--dock {
+  height: 4.25rem;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--nle-track, color-mix(in srgb, var(--bg0) 88%, var(--fg)));
 }
 
 .videon-editor__scene-marker {
@@ -453,7 +800,8 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 
 .videon-cut-timeline {
   display: grid;
-  gap: 0.45rem;
+  gap: 0;
+  height: 100%;
 }
 
 .videon-cut-timeline__meta {
@@ -461,6 +809,16 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--nle-border, var(--line));
+}
+
+.videon-cut-timeline__title {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nle-muted, var(--muted));
 }
 
 .videon-cut-timeline__zoom {
@@ -470,10 +828,46 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 }
 
 .videon-cut-timeline__viewport {
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 0.6rem;
-  background: color-mix(in srgb, var(--bg0) 88%, var(--fg));
+  overflow: auto;
+  background: var(--nle-track, color-mix(in srgb, var(--bg0) 88%, var(--fg)));
+  min-height: 10rem;
+}
+
+.videon-cut-timeline__layout {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  min-width: 100%;
+}
+
+.videon-cut-timeline__headers {
+  display: grid;
+  grid-auto-rows: min-content;
+  border-right: 1px solid var(--nle-border, var(--line));
+  background: var(--nle-panel, transparent);
+}
+
+.videon-cut-timeline__header-spacer {
+  height: 1.6rem;
+  border-bottom: 1px solid var(--nle-border, var(--line));
+}
+
+.videon-cut-timeline__header-label {
+  display: grid;
+  place-items: center;
+  min-height: 3.6rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--nle-muted, var(--muted));
+  border-bottom: 1px solid var(--nle-border, var(--line));
+  background: var(--nle-panel-2, transparent);
+}
+
+.videon-cut-timeline__header-label--transcript {
+  min-height: 2.4rem;
+}
+
+.videon-cut-timeline__lanes-wrap {
+  overflow: visible;
 }
 
 .videon-cut-timeline__lanes {
@@ -481,35 +875,77 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   min-width: 100%;
 }
 
+.videon-cut-timeline__ruler {
+  position: relative;
+  height: 1.6rem;
+  border-bottom: 1px solid var(--nle-border, var(--line));
+  cursor: crosshair;
+  background: var(--nle-panel, transparent);
+}
+
+.videon-cut-timeline__ruler-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--nle-border-strong, var(--line)) 70%, transparent);
+}
+
+.videon-cut-timeline__ruler-tick.is-major {
+  background: var(--nle-border-strong, var(--line));
+}
+
+.videon-cut-timeline__ruler-tick span {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.2rem;
+  font-size: 0.6rem;
+  font-family: var(--nle-mono, monospace);
+  color: var(--nle-muted, var(--muted));
+  white-space: nowrap;
+}
+
 .videon-cut-timeline__track {
   position: relative;
-  min-height: 4.5rem;
+  min-height: 3.6rem;
   cursor: crosshair;
+  border-bottom: 1px solid var(--nle-border, var(--line));
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--nle-border, var(--line)) 35%, transparent) 0,
+      color-mix(in srgb, var(--nle-border, var(--line)) 35%, transparent) 1px,
+      transparent 1px,
+      transparent 48px
+    ),
+    var(--nle-track, transparent);
 }
 
 .videon-cut-timeline__track--transcript {
-  min-height: 2.75rem;
-  border-top: 1px solid var(--line);
+  min-height: 2.4rem;
   cursor: default;
 }
 
 .videon-cut-timeline__clip {
   position: absolute;
-  top: 0.55rem;
-  bottom: 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--accent, #7dd3fc) 45%, var(--line));
-  border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--accent, #7dd3fc) 22%, transparent);
+  top: 0.35rem;
+  bottom: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--nle-clip-active, var(--accent, #7dd3fc)) 55%, var(--nle-border, var(--line)));
+  border-radius: 0.25rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--nle-clip, #2f5f8f) 88%, white 8%), var(--nle-clip, #2f5f8f));
   overflow: hidden;
   cursor: grab;
   display: grid;
   align-content: end;
   padding: 0.2rem 0.35rem;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
 }
 
 .videon-cut-timeline__clip.is-active {
-  border-color: color-mix(in srgb, var(--accent, #7dd3fc) 80%, white);
-  background: color-mix(in srgb, var(--accent, #7dd3fc) 38%, transparent);
+  border-color: var(--nle-playhead, #ff6b00);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--nle-playhead, #ff6b00) 45%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 22%, transparent);
   z-index: 2;
 }
 
@@ -518,31 +954,32 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 }
 
 .videon-cut-timeline__clip-label {
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--fg);
+  color: #f8fafc;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
 }
 
 .videon-cut-timeline__clip-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 0.45rem;
+  width: 0.5rem;
   cursor: ew-resize;
   z-index: 3;
 }
 
 .videon-cut-timeline__clip-handle--start {
   left: 0;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent, #7dd3fc) 70%, black), transparent);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent);
 }
 
 .videon-cut-timeline__clip-handle--end {
   right: 0;
-  background: linear-gradient(270deg, color-mix(in srgb, var(--accent, #7dd3fc) 70%, black), transparent);
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.35), transparent);
 }
 
 .videon-cut-timeline__playhead {
@@ -551,22 +988,35 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   bottom: 0;
   width: 2px;
   margin-left: -1px;
-  background: color-mix(in srgb, #fff 85%, var(--accent, #7dd3fc));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #7dd3fc) 55%, transparent);
+  background: var(--nle-playhead, #ff6b00);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nle-playhead, #ff6b00) 35%, transparent);
   pointer-events: auto;
   cursor: ew-resize;
-  z-index: 4;
+  z-index: 5;
+}
+
+.videon-cut-timeline__playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid var(--nle-playhead, #ff6b00);
 }
 
 .videon-cut-timeline__transcript-segment {
   position: absolute;
-  top: 0.35rem;
-  bottom: 0.35rem;
+  top: 0.25rem;
+  bottom: 0.25rem;
   border: 0;
-  border-radius: 0.35rem;
-  background: color-mix(in srgb, #fbbf24 24%, transparent);
-  color: var(--fg);
-  font-size: 0.66rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--nle-transcript, #6b5a2a) 55%, transparent);
+  color: #f8fafc;
+  font-size: 0.62rem;
   line-height: 1.15;
   padding: 0.15rem 0.3rem;
   overflow: hidden;
@@ -576,7 +1026,7 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 }
 
 .videon-cut-timeline__transcript-segment:hover {
-  background: color-mix(in srgb, #fbbf24 42%, transparent);
+  background: color-mix(in srgb, var(--nle-transcript, #6b5a2a) 75%, transparent);
 }
 
 .videon-editor-error {
@@ -639,8 +1089,14 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 @media (max-width: 1100px) {
   .videon-home-run-columns,
   .videon-home-cta-row,
-  .videon-editor__grid {
+  .videon-editor__grid,
+  .videon-nle__workspace {
     grid-template-columns: 1fr;
+  }
+
+  .videon-nle__program {
+    border-right: 0;
+    border-bottom: 1px solid var(--nle-border, var(--line));
   }
 
   a.videon-home-cta.videon-capability-tile {

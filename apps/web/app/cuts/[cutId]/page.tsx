@@ -29,17 +29,13 @@ export default async function CutDetailPage({ params, searchParams }: CutPagePro
   }
 
   return (
-    <AppShell description={`Cut ${cutId}`}>
-      <article className="videon-hub videon-hub--wide">
-        <header className="videon-hub__header-row">
-          <div>
-            <p className="videon-spread__eyebrow">Editor</p>
-            <h1 className="videon-spread__headline">Cut</h1>
-          </div>
+    <AppShell editor>
+      <article className="videon-hub videon-hub--wide videon-hub--editor">
+        <div className="videon-hub__header-row videon-hub__header-row--editor">
           <Link href={paths.routes.cutsFor(platformProjectId)}>
-            <Button variant="ghost">Alle Cuts</Button>
+            <Button variant="ghost">← Alle Cuts</Button>
           </Link>
-        </header>
+        </div>
         <CutEditorView platformProjectId={platformProjectId} cutId={cutId} />
       </article>
     </AppShell>

@@ -31,11 +31,13 @@ const PRIMARY_NAV = [
 export function AppShell({
   children,
   description,
+  editor = false,
 }: {
   children: ReactNode
   description?: string
   /** @deprecated Global page title removed — magazine heroes own identity. */
   title?: string | null
+  editor?: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -104,8 +106,8 @@ export function AppShell({
         />
       }
     >
-      <div className="videon-stage videon-stage--flush-top">
-        {description ? <p className="videon-page-lead">{description}</p> : null}
+      <div className={`videon-stage${editor ? ' videon-stage--editor' : ' videon-stage--flush-top'}`}>
+        {description && !editor ? <p className="videon-page-lead">{description}</p> : null}
         {children}
       </div>
     </AppFrame>
