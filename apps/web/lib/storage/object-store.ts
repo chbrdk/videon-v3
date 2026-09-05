@@ -1,3 +1,12 @@
+export function mediaSourceStorageKey(workspaceId: string, mediaAssetId: string): string {
+  const safe = (value: string, label: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
+    return trimmed
+  }
+  return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/source`
+}
+
 export type CreateUploadTargetInput = {
   workspaceId: string
   mediaAssetId: string
@@ -26,5 +35,12 @@ export type CreateDownloadTargetInput = {
 export interface ObjectStore {
   createUploadTarget(input: CreateUploadTargetInput): Promise<UploadTarget>
   createDownloadTarget(input: CreateDownloadTargetInput): Promise<UploadTarget>
+  putObjectFromBody(input: {
+    workspaceId: string
+    storageKey: string
+    mimeType: string
+    bytes: number
+    body: ReadableStream<Uint8Array> | null
+  }): Promise<void>
   removeObject(input: { workspaceId: string; storageKey: string }): Promise<void>
 }

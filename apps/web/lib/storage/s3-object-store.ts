@@ -14,6 +14,7 @@ import type {
   ObjectStore,
   UploadTarget,
 } from './object-store'
+import { mediaSourceStorageKey } from './object-store'
 
 const SIGNED_URL_TTL_SECONDS = 15 * 60
 
@@ -24,7 +25,7 @@ function safeSegment(value: string, label: string): string {
 }
 
 function sourceStorageKey(input: CreateUploadTargetInput): string {
-  return `${safeSegment(input.workspaceId, 'workspaceId')}/media/${safeSegment(input.mediaAssetId, 'mediaAssetId')}/source`
+  return mediaSourceStorageKey(input.workspaceId, input.mediaAssetId)
 }
 
 function assertWorkspaceKey(workspaceId: string, key: string): void {
@@ -102,6 +103,28 @@ export class S3ObjectStore implements ObjectStore {
       headers: {},
       expiresAt: new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000).toISOString(),
     }
+  }
+
+  async putObjectFromBody(input: {
+    workspaceId: string
+    storageKey: string
+    mimeType: string
+    bytes: number
+    body: ReadableStream<Uint8Array> | null
+  }): Promise<void> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    if (!input.mimeType.startsWith('video/')) throw new Error('Only video uploads may be stored')
+    if (!Number.isSafeInteger(input.bytes) || input.bytes <= 0) throw new Error('Upload size is invalid')
+    if (!input.body) throw new Error('Upload body is missing')
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: input.storageKey,
+        Body: input.body,
+        ContentType: input.mimeType,
+        ContentLength: input.bytes,
+      }),
+    )
   }
 
   async removeObject(input: { workspaceId: string; storageKey: string }): Promise<void> {

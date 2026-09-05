@@ -14,6 +14,7 @@ function putFileWithProgress(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
+    xhr.withCredentials = true
     for (const [key, value] of Object.entries(headers)) {
       xhr.setRequestHeader(key, value)
     }
@@ -26,10 +27,17 @@ function putFileWithProgress(
         resolve()
         return
       }
-      reject(new Error(`Object-Storage-Upload fehlgeschlagen (${xhr.status})`))
+      let message = `Upload fehlgeschlagen (${xhr.status})`
+      try {
+        const body = JSON.parse(xhr.responseText) as { error?: { message?: string } }
+        if (body.error?.message) message = body.error.message
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      reject(new Error(message))
     }
-    xhr.onerror = () => reject(new Error('Object-Storage-Upload fehlgeschlagen (Netzwerkfehler)'))
-    xhr.onabort = () => reject(new Error('Object-Storage-Upload abgebrochen'))
+    xhr.onerror = () => reject(new Error('Upload fehlgeschlagen (Netzwerkfehler)'))
+    xhr.onabort = () => reject(new Error('Upload abgebrochen'))
     xhr.send(file)
   })
 }
@@ -67,9 +75,9 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
         throw new Error(intentBody.error?.message || 'Upload-Intent fehlgeschlagen')
       }
 
-      setProgress('Datei wird zu Object Storage übertragen … 0 %')
+      setProgress('Datei wird übertragen … 0 %')
       await putFileWithProgress(intentBody.upload.uploadUrl, file, intentBody.upload.headers, (percent) => {
-        setProgress(`Datei wird zu Object Storage übertragen … ${percent} %`)
+        setProgress(`Datei wird übertragen … ${percent} %`)
       })
 
       setProgress('Upload wird geprüft und abgeschlossen …')

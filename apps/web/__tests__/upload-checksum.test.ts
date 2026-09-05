@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { pendingChecksumForMedia, isPendingChecksum } from '@/lib/storage/pending-checksum'
 import { sha256HexFromStream } from '@/lib/storage/object-checksum'
+import { mediaSourceStorageKey } from '@/lib/storage/object-store'
+
+describe('mediaSourceStorageKey', () => {
+  it('scopes uploads under workspace/media/id/source', () => {
+    expect(mediaSourceStorageKey('workspace-1', 'media-1')).toBe('workspace-1/media/media-1/source')
+  })
+})
 
 describe('pending checksum placeholders', () => {
   it('creates a unique pending token per media asset', () => {
