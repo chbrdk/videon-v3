@@ -32,7 +32,7 @@ export async function enqueueMediaAnalysisJob(payload: MediaAnalysisJobPayload):
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,
-    expireInMinutes: 120,
+    expireInSeconds: 120 * 60,
   })
 }
 
