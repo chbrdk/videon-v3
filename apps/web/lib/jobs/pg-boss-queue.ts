@@ -10,6 +10,17 @@ export type MediaAnalysisJobPayload = {
 let boss: PgBoss | null = null
 let bossStart: Promise<PgBoss> | null = null
 
+async function ensureAnalysisQueue(queue: PgBoss): Promise<void> {
+  try {
+    await queue.createQueue(ANALYSIS_JOB_NAME)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('already exists')) {
+      throw error
+    }
+  }
+}
+
 export function pipelineQueueConfigured(): boolean {
   return Boolean(databaseUrl())
 }
@@ -20,7 +31,10 @@ async function getBoss(): Promise<PgBoss> {
   if (boss) return boss
   if (!bossStart) {
     boss = new PgBoss({ connectionString })
-    bossStart = boss.start().then(() => boss as PgBoss)
+    bossStart = boss.start().then(async () => {
+      await ensureAnalysisQueue(boss as PgBoss)
+      return boss as PgBoss
+    })
   }
   return bossStart
 }
