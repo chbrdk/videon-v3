@@ -80,8 +80,9 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-function isEvidenceIds(value: unknown, validFrameIds: Set<string>): value is string[] {
-  return isStringArray(value) && value.every((id) => validFrameIds.has(id))
+function sanitizeEvidenceIds(value: unknown, validFrameIds: Set<string>): string[] {
+  if (!isStringArray(value)) return []
+  return value.filter((id) => validFrameIds.has(id))
 }
 
 /**
@@ -110,8 +111,12 @@ export function parseSceneInsight(value: unknown, frameIds: readonly string[]): 
   for (const raw of record.subjects) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
     const item = raw as Record<string, unknown>
-    if (typeof item.label !== 'string' || !isStringArray(item.attributes) || !isEvidenceIds(item.evidenceFrameIds, validFrameIds)) return null
-    subjects.push({ label: item.label, attributes: item.attributes, evidenceFrameIds: item.evidenceFrameIds })
+    if (typeof item.label !== 'string' || !isStringArray(item.attributes)) return null
+    subjects.push({
+      label: item.label,
+      attributes: item.attributes,
+      evidenceFrameIds: sanitizeEvidenceIds(item.evidenceFrameIds, validFrameIds),
+    })
   }
 
   const actions = [] as SceneInsight['actions']
@@ -123,20 +128,27 @@ export function parseSceneInsight(value: unknown, frameIds: readonly string[]): 
       typeof item.startMs !== 'number' ||
       typeof item.endMs !== 'number' ||
       item.startMs < 0 ||
-      item.endMs < item.startMs ||
-      !isEvidenceIds(item.evidenceFrameIds, validFrameIds)
+      item.endMs < item.startMs
     ) {
       return null
     }
-    actions.push({ label: item.label, startMs: item.startMs, endMs: item.endMs, evidenceFrameIds: item.evidenceFrameIds })
+    actions.push({
+      label: item.label,
+      startMs: item.startMs,
+      endMs: item.endMs,
+      evidenceFrameIds: sanitizeEvidenceIds(item.evidenceFrameIds, validFrameIds),
+    })
   }
 
   const notableDetails = [] as SceneInsight['notableDetails']
   for (const raw of record.notableDetails) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
     const item = raw as Record<string, unknown>
-    if (typeof item.text !== 'string' || !isEvidenceIds(item.evidenceFrameIds, validFrameIds)) return null
-    notableDetails.push({ text: item.text, evidenceFrameIds: item.evidenceFrameIds })
+    if (typeof item.text !== 'string') return null
+    notableDetails.push({
+      text: item.text,
+      evidenceFrameIds: sanitizeEvidenceIds(item.evidenceFrameIds, validFrameIds),
+    })
   }
 
   return {

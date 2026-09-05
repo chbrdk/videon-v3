@@ -47,10 +47,12 @@ export class OpenRouterGatewayError extends Error {
 }
 
 function scenePrompt(input: AnalyzeSceneInput): string {
+  const frameIds = input.frames.map((frame) => frame.id).join(', ')
   return [
     `Return one JSON object matching ${SCENE_INSIGHT_SCHEMA_VERSION}.`,
     `Locale: ${input.locale}. Scene range: ${input.startMs}ms–${input.endMs}ms.`,
-    'Use only the supplied frame ids for evidenceFrameIds. Do not invent ids.',
+    `Allowed evidenceFrameIds: ${frameIds}.`,
+    'Use only those frame ids for evidenceFrameIds. Do not invent ids.',
     'Use empty arrays when evidence is absent. Keep all text concise and factual.',
     input.transcriptExcerpt ? `Transcript excerpt: ${input.transcriptExcerpt.slice(0, 4_000)}` : '',
   ]
