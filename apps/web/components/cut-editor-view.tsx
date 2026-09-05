@@ -30,7 +30,7 @@ import { TimelineWaveform } from '@/components/timeline-waveform'
 
 type Clip = {
   scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
-  media: { id: string; originalFilename: string; mimeType: string } | null
+  media: { id: string; originalFilename: string; mimeType: string; durationMs?: number | null } | null
 }
 
 type CutDetail = {
@@ -111,6 +111,15 @@ export function CutEditorView({
     () => mapTranscriptToCutTimeline(timeline, transcriptsByMediaId),
     [timeline, transcriptsByMediaId],
   )
+  const sourceDurationMsByMediaId = useMemo(() => {
+    const next: Record<string, number> = {}
+    for (const clip of clips) {
+      if (!clip.media) continue
+      const duration = clip.media.durationMs ?? clip.scene.endMs
+      next[clip.media.id] = Math.max(next[clip.media.id] ?? 0, duration)
+    }
+    return next
+  }, [clips])
   const activeClip = clips[activeIndex]
   const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
   const sourcePlayheadMs = activeClip
@@ -689,6 +698,7 @@ export function CutEditorView({
           disabled={busy}
           playbackUrlByMediaId={playbackUrlByMediaId}
           peaksByUrl={peaksByUrl}
+          sourceDurationMsByMediaId={sourceDurationMsByMediaId}
           onSelectClip={setActiveIndex}
           onSeek={seekToCutMs}
           onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}

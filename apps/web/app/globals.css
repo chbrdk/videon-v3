@@ -1188,6 +1188,25 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   min-width: 100%;
 }
 
+.videon-cut-timeline__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.videon-cut-timeline__grid-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--nle-border, var(--line)) 35%, transparent);
+}
+
+.videon-cut-timeline__grid-line.is-major {
+  background: color-mix(in srgb, var(--nle-border-strong, var(--line)) 55%, transparent);
+}
+
 .videon-cut-timeline__ruler {
   position: relative;
   height: 1.6rem;
@@ -1223,15 +1242,8 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   min-height: 3.6rem;
   cursor: crosshair;
   border-bottom: 1px solid var(--nle-border, var(--line));
-  background:
-    repeating-linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--nle-border, var(--line)) 35%, transparent) 0,
-      color-mix(in srgb, var(--nle-border, var(--line)) 35%, transparent) 1px,
-      transparent 1px,
-      transparent 48px
-    ),
-    var(--nle-track, transparent);
+  background: var(--nle-track, transparent);
+  z-index: 1;
 }
 
 .videon-cut-timeline__track--transcript {
@@ -1264,6 +1276,23 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 
 .videon-cut-timeline__clip.is-dragging {
   opacity: 0.55;
+}
+
+.videon-cut-timeline__clip--scene {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--accent, #7dd3fc) 55%, var(--nle-border, var(--line)));
+  background: color-mix(in srgb, var(--accent, #7dd3fc) 35%, var(--nle-clip, #2f5f8f));
+}
+
+.videon-editor__range-marker {
+  position: absolute;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, #fbbf24 28%, transparent);
+  border: 1px solid color-mix(in srgb, #fbbf24 45%, transparent);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .videon-cut-timeline__clip-label {

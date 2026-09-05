@@ -7,7 +7,7 @@ import { Button, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { MediaSearch } from '@/components/media-search'
-import { TimelineWaveform } from '@/components/timeline-waveform'
+import { SourceMediaTimeline } from '@/components/source-media-timeline'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
 import { EditorTransport } from '@/components/editor-transport'
 import { frameDurationMs, formatClock, normalizeInOutRange } from '@/lib/editor-time'
@@ -449,17 +449,6 @@ export function MediaEditorView({
             }}
           />
 
-          <div className="videon-nle__waveform-slot">
-            <TimelineWaveform
-              peaks={waveformPeaks}
-              durationMs={timelineDuration}
-              playheadMs={currentMs}
-              inMs={markInMs}
-              outMs={markOutMs}
-              label="Audio"
-              onSeek={seekTo}
-            />
-          </div>
         </section>
 
         <aside className="videon-nle__inspector">
@@ -568,41 +557,23 @@ export function MediaEditorView({
       </div>
 
       <footer className="videon-nle__timeline-dock">
-        <div className="videon-cut-timeline__meta">
-          <span className="videon-cut-timeline__title">Quell-Timeline</span>
-          <Text role="meta">
-            {formatClock(currentMs)} / {formatClock(timelineDuration)}
-          </Text>
-        </div>
-        <div className="videon-editor__timeline videon-editor__timeline--dock" aria-label="Szenen-Timeline">
-          {markedRange ? (
-            <div
-              className="videon-editor__range-marker"
-              style={{
-                left: `${(markedRange.startMs / timelineDuration) * 100}%`,
-                width: `${((markedRange.endMs - markedRange.startMs) / timelineDuration) * 100}%`,
-              }}
-            />
-          ) : null}
-          {scenes.map((scene) => {
-            const left = (scene.startMs / timelineDuration) * 100
-            const width = Math.max(((scene.endMs - scene.startMs) / timelineDuration) * 100, 1.5)
-            return (
-              <button
-                key={scene.sceneKey}
-                type="button"
-                className={`videon-editor__scene-marker${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-                style={{ left: `${left}%`, width: `${width}%` }}
-                onClick={() => seekTo(scene.startMs)}
-                title={scene.insight.summary}
-              />
-            )
-          })}
-          <div
-            className="videon-cut-timeline__playhead"
-            style={{ left: `${(currentMs / timelineDuration) * 100}%` }}
-          />
-        </div>
+        <SourceMediaTimeline
+          durationMs={timelineDuration}
+          playheadMs={currentMs}
+          scenes={scenes.map((scene) => ({
+            sceneKey: scene.sceneKey,
+            startMs: scene.startMs,
+            endMs: scene.endMs,
+            summary: scene.insight.summary,
+          }))}
+          transcriptSegments={transcript?.segments ?? []}
+          peaks={waveformPeaks}
+          activeSceneKey={activeSceneKey}
+          markInMs={markInMs}
+          markOutMs={markOutMs}
+          disabled={!playbackUrl || Boolean(busy)}
+          onSeek={seekTo}
+        />
       </footer>
 
       <p className="videon-nle__shortcuts">

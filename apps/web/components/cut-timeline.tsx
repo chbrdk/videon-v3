@@ -11,6 +11,13 @@ import {
   type CutTranscriptSegment,
 } from '@/lib/cut-timeline'
 import { formatClock } from '@/lib/editor-time'
+import {
+  buildTimelineTicks,
+  timelineContentWidthPx,
+  timelineLeftPx,
+  timelineMsPerPixel,
+  timelineWidthPx,
+} from '@/lib/timeline-layout'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 import { computeTrimPreview, type TrimMode } from '@/lib/trim-modes'
 
@@ -43,6 +50,7 @@ type CutTimelineProps = {
   disabled?: boolean
   playbackUrlByMediaId?: Record<string, string>
   peaksByUrl?: Record<string, number[]>
+  sourceDurationMsByMediaId?: Record<string, number>
   onSelectClip: (index: number) => void
   onSeek: (cutMs: number) => void
   onReorder: (sceneIds: string[]) => void
@@ -52,12 +60,6 @@ type CutTimelineProps = {
 }
 
 const ZOOM_LEVELS = [1, 2, 4, 8] as const
-
-function rulerStepMs(totalDurationMs: number, zoomLevel: number): number {
-  if (totalDurationMs <= 30_000) return zoomLevel >= 4 ? 1000 : 2000
-  if (totalDurationMs <= 120_000) return zoomLevel >= 4 ? 5000 : 10_000
-  return zoomLevel >= 4 ? 15_000 : 30_000
-}
 
 export function CutTimeline({
   clips,
@@ -69,6 +71,7 @@ export function CutTimeline({
   disabled = false,
   playbackUrlByMediaId = {},
   peaksByUrl = {},
+  sourceDurationMsByMediaId = {},
   onSelectClip,
   onSeek,
   onReorder,
@@ -99,6 +102,9 @@ export function CutTimeline({
   } | null>(null)
 
   const zoomLevel = ZOOM_LEVELS[zoomIndex] ?? 1
+  const msPerPixel = timelineMsPerPixel(zoomLevel)
+  const contentWidthPx = timelineContentWidthPx(totalDurationMs, zoomLevel)
+  const ticks = useMemo(() => buildTimelineTicks(totalDurationMs, zoomLevel), [totalDurationMs, zoomLevel])
 
   const timeline = useMemo(() => {
     const scenes = clips.map((clip) => ({
@@ -115,10 +121,10 @@ export function CutTimeline({
     (clientX: number, track: HTMLDivElement | null = lanesRef.current) => {
       if (!track || totalDurationMs <= 0) return
       const rect = track.getBoundingClientRect()
-      const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1)
-      onSeek(Math.floor(ratio * totalDurationMs))
+      const x = Math.min(Math.max(clientX - rect.left, 0), contentWidthPx)
+      onSeek(Math.floor(x * msPerPixel))
     },
-    [onSeek, totalDurationMs],
+    [contentWidthPx, msPerPixel, onSeek, totalDurationMs],
   )
 
   useJogShuttle(viewportRef, (deltaMs) => onSeek(cutPlayheadMs + deltaMs), { enabled: !disabled })
@@ -174,8 +180,8 @@ export function CutTimeline({
     event.dataTransfer.dropEffect = 'copy'
     if (lanesRef.current && totalDurationMs > 0) {
       const rect = lanesRef.current.getBoundingClientRect()
-      const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
-      setDropHintMs(Math.floor(ratio * totalDurationMs))
+      const x = Math.min(Math.max(event.clientX - rect.left, 0), contentWidthPx)
+      setDropHintMs(Math.floor(x * msPerPixel))
     }
   }
 
@@ -191,10 +197,8 @@ export function CutTimeline({
       const cutMs =
         lanesRef.current && totalDurationMs > 0
           ? Math.floor(
-              Math.min(
-                Math.max((event.clientX - lanesRef.current.getBoundingClientRect().left) / lanesRef.current.getBoundingClientRect().width, 0),
-                1,
-              ) * totalDurationMs,
+              Math.min(Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0), contentWidthPx) *
+                msPerPixel,
             )
           : totalDurationMs
       const afterIndex = timeline.findIndex((item) => cutMs >= item.cutStartMs && cutMs < item.cutEndMs)
@@ -261,18 +265,8 @@ export function CutTimeline({
     onTrim(preview.sceneId, preview.startMs, preview.endMs)
   }
 
-  const playheadLeft = totalDurationMs > 0 ? (cutPlayheadMs / totalDurationMs) * 100 : 0
-  const dropHintLeft = dropHintMs !== null && totalDurationMs > 0 ? (dropHintMs / totalDurationMs) * 100 : null
-  const laneStyle = { width: `${zoomLevel * 100}%` }
-  const stepMs = rulerStepMs(totalDurationMs, zoomLevel)
-  const rulerTicks = useMemo(() => {
-    if (totalDurationMs <= 0) return []
-    const ticks: Array<{ ms: number; left: number; major: boolean }> = []
-    for (let ms = 0; ms <= totalDurationMs; ms += stepMs) {
-      ticks.push({ ms, left: (ms / totalDurationMs) * 100, major: ms % (stepMs * 2) === 0 })
-    }
-    return ticks
-  }, [stepMs, totalDurationMs])
+  const playheadLeftPx = timelineLeftPx(cutPlayheadMs, msPerPixel)
+  const dropHintLeftPx = dropHintMs !== null ? timelineLeftPx(dropHintMs, msPerPixel) : null
 
   return (
     <div className="videon-cut-timeline">
@@ -310,20 +304,27 @@ export function CutTimeline({
             <div className="videon-cut-timeline__header-spacer" />
             <div className="videon-cut-timeline__header-label">V1</div>
             <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1</div>
-            {transcriptSegments.length > 0 ? (
-              <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div>
-            ) : null}
+            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div>
           </div>
           <div className="videon-cut-timeline__lanes-wrap">
-            <div className="videon-cut-timeline__lanes" style={laneStyle} ref={lanesRef}>
-              <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown}>
-                {rulerTicks.map((tick) => (
+            <div className="videon-cut-timeline__lanes" style={{ width: `${contentWidthPx}px` }} ref={lanesRef}>
+              <div className="videon-cut-timeline__grid" aria-hidden="true">
+                {ticks.map((tick) => (
                   <div
                     key={tick.ms}
+                    className={`videon-cut-timeline__grid-line${tick.major ? ' is-major' : ''}`}
+                    style={{ left: `${tick.leftPx}px` }}
+                  />
+                ))}
+              </div>
+              <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown}>
+                {ticks.map((tick) => (
+                  <div
+                    key={`label-${tick.ms}`}
                     className={`videon-cut-timeline__ruler-tick${tick.major ? ' is-major' : ''}`}
-                    style={{ left: `${tick.left}%` }}
+                    style={{ left: `${tick.leftPx}px` }}
                   >
-                    {tick.major ? <span>{formatClock(tick.ms)}</span> : null}
+                    {tick.label ? <span>{tick.label}</span> : null}
                   </div>
                 ))}
               </div>
@@ -342,8 +343,8 @@ export function CutTimeline({
                 aria-valuenow={cutPlayheadMs}
               >
                 {timeline.map((item) => {
-                  const left = totalDurationMs > 0 ? (item.cutStartMs / totalDurationMs) * 100 : 0
-                  const width = totalDurationMs > 0 ? Math.max((item.durationMs / totalDurationMs) * 100, 1.2) : 0
+                  const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
+                  const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
                   const isActive = item.index === activeIndex
                   const clip = clips[item.index]
                   const label = clip?.media?.originalFilename ?? `Clip ${item.index + 1}`
@@ -353,7 +354,7 @@ export function CutTimeline({
                     <div
                       key={item.scene.id}
                       className={`videon-cut-timeline__clip${isActive ? ' is-active' : ''}${dragSceneId === item.scene.id ? ' is-dragging' : ''}`}
-                      style={{ left: `${left}%`, width: `${width}%` }}
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                       draggable={!disabled}
                       onDragStart={(event) => onClipDragStart(event, item.scene.id)}
                       onDragOver={(event) => event.preventDefault()}
@@ -388,8 +389,8 @@ export function CutTimeline({
                     </div>
                   )
                 })}
-                {dropHintLeft !== null ? (
-                  <div className="videon-cut-timeline__drop-hint" style={{ left: `${dropHintLeft}%` }} />
+                {dropHintLeftPx !== null ? (
+                  <div className="videon-cut-timeline__drop-hint" style={{ left: `${dropHintLeftPx}px` }} />
                 ) : null}
               </div>
 
@@ -397,39 +398,36 @@ export function CutTimeline({
                 <TimelineAudioTrack
                   timeline={timeline}
                   totalDurationMs={totalDurationMs}
+                  msPerPixel={msPerPixel}
                   peaksByUrl={peaksByUrl}
                   playbackUrlByMediaId={playbackUrlByMediaId}
+                  sourceDurationMsByMediaId={sourceDurationMsByMediaId}
                   clips={clips}
                 />
               </div>
 
-              {transcriptSegments.length > 0 ? (
-                <div className="videon-cut-timeline__track videon-cut-timeline__track--transcript">
-                  {transcriptSegments.map((segment, index) => {
-                    const left = totalDurationMs > 0 ? (segment.cutStartMs / totalDurationMs) * 100 : 0
-                    const width =
-                      totalDurationMs > 0
-                        ? Math.max(((segment.cutEndMs - segment.cutStartMs) / totalDurationMs) * 100, 0.8)
-                        : 0
-                    return (
-                      <button
-                        key={`${segment.cutStartMs}-${index}`}
-                        type="button"
-                        className="videon-cut-timeline__transcript-segment"
-                        style={{ left: `${left}%`, width: `${width}%` }}
-                        title={segment.text}
-                        onClick={() => onSeek(segment.cutStartMs)}
-                      >
-                        {segment.text}
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : null}
+              <div className="videon-cut-timeline__track videon-cut-timeline__track--transcript">
+                {transcriptSegments.map((segment, index) => {
+                  const leftPx = timelineLeftPx(segment.cutStartMs, msPerPixel)
+                  const widthPx = timelineWidthPx(segment.cutEndMs - segment.cutStartMs, msPerPixel, 4)
+                  return (
+                    <button
+                      key={`${segment.cutStartMs}-${index}`}
+                      type="button"
+                      className="videon-cut-timeline__transcript-segment"
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
+                      title={segment.text}
+                      onClick={() => onSeek(segment.cutStartMs)}
+                    >
+                      {segment.text}
+                    </button>
+                  )
+                })}
+              </div>
 
               <div
                 className="videon-cut-timeline__playhead"
-                style={{ left: `${playheadLeft}%` }}
+                style={{ left: `${playheadLeftPx}px` }}
                 onPointerDown={startPlayheadDrag}
               />
             </div>

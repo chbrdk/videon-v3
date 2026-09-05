@@ -2,20 +2,25 @@
 
 import { useEffect, useRef } from 'react'
 import type { CutTimelineItem } from '@/lib/cut-timeline'
+import { timelineLeftPx, timelineWidthPx } from '@/lib/timeline-layout'
 
 type TimelineAudioTrackProps = {
   timeline: CutTimelineItem[]
   totalDurationMs: number
+  msPerPixel: number
   peaksByUrl: Record<string, number[]>
   playbackUrlByMediaId: Record<string, string>
+  sourceDurationMsByMediaId: Record<string, number>
   clips: Array<{ scene: { mediaAssetId: string; startMs: number; endMs: number } }>
 }
 
 export function TimelineAudioTrack({
   timeline,
   totalDurationMs,
+  msPerPixel,
   peaksByUrl,
   playbackUrlByMediaId,
+  sourceDurationMsByMediaId,
   clips,
 }: TimelineAudioTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -41,11 +46,14 @@ export function TimelineAudioTrack({
       const peaks = url ? peaksByUrl[url] : null
       if (!peaks?.length) continue
 
-      const left = (item.cutStartMs / totalDurationMs) * width
-      const clipWidth = (item.durationMs / totalDurationMs) * width
-      const mediaDuration = Math.max(clip.scene.endMs, 1)
-      const startIndex = Math.floor((clip.scene.startMs / mediaDuration) * peaks.length)
-      const endIndex = Math.max(startIndex + 1, Math.floor((clip.scene.endMs / mediaDuration) * peaks.length))
+      const left = timelineLeftPx(item.cutStartMs, msPerPixel)
+      const clipWidth = timelineWidthPx(item.durationMs, msPerPixel)
+      const sourceDuration = Math.max(
+        sourceDurationMsByMediaId[clip.scene.mediaAssetId] ?? clip.scene.endMs,
+        1,
+      )
+      const startIndex = Math.floor((clip.scene.startMs / sourceDuration) * peaks.length)
+      const endIndex = Math.max(startIndex + 1, Math.floor((clip.scene.endMs / sourceDuration) * peaks.length))
       const slice = peaks.slice(startIndex, endIndex)
       const peakCount = Math.max(slice.length, 4)
 
@@ -58,7 +66,7 @@ export function TimelineAudioTrack({
         context.fillRect(x, mid - barHeight / 2, barWidth, barHeight)
       }
     }
-  }, [clips, peaksByUrl, playbackUrlByMediaId, timeline, totalDurationMs])
+  }, [clips, msPerPixel, peaksByUrl, playbackUrlByMediaId, sourceDurationMsByMediaId, timeline, totalDurationMs])
 
   return <canvas ref={canvasRef} className="videon-cut-timeline__audio-canvas" aria-label="Audio-Spur A1" />
 }
