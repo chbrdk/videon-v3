@@ -5,6 +5,9 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { createWriteStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
+import type { Readable } from 'node:stream'
 import { sha256HexFromStream } from './object-checksum'
 import { ensureBrowserUploadCors } from './bucket-cors'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
@@ -131,6 +134,19 @@ export class S3ObjectStore implements ObjectStore {
         ContentLength: input.bytes,
       }),
     )
+  }
+
+  async downloadObjectToFile(input: {
+    workspaceId: string
+    storageKey: string
+    destinationPath: string
+  }): Promise<void> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    const object = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
+    )
+    if (!object.Body) throw new Error('Stored object body is missing')
+    await pipeline(object.Body as Readable, createWriteStream(input.destinationPath))
   }
 
   async removeObject(input: { workspaceId: string; storageKey: string }): Promise<void> {

@@ -61,7 +61,7 @@ export function HomeMagazine() {
             <span className="videon-capability-tile__kicker">Vision</span>
             <span className="videon-capability-tile__label">Analysen</span>
             <span className="videon-capability-tile__deck">
-              OpenRouter / Qwen — folgt nach der Media-Pipeline (V3/V4).
+              Startet automatisch nach Upload — OpenRouter / Qwen mit Schema-Fallback.
             </span>
           </Link>
         </div>

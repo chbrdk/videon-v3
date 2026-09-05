@@ -6,7 +6,7 @@ const workspaceNodeModules = path.resolve(workspaceRoot, 'node_modules')
 const webNodeModules = path.resolve(__dirname, 'node_modules')
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['pg'],
+  serverExternalPackages: ['pg', 'pg-boss'],
   webpack: (config) => {
     config.resolve = config.resolve || {}
     config.resolve.alias = {

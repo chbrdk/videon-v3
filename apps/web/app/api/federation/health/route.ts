@@ -2,10 +2,12 @@ import { PLEXON_FEDERATION_CONTRACT_VERSION } from '@videon-v3/contracts'
 import { apiError, apiJson } from '@/lib/api-response'
 import { authorizeFederationRequest } from '@/lib/federation'
 import { probeDatabase } from '@/lib/db/client'
+import { pipelineQueueConfigured } from '@/lib/jobs/pg-boss-queue'
 import {
   directVideoEnabled,
   federationMode,
   isLiveFederationConfigured,
+  objectStorageConfig,
   openRouterApiKey,
   requiresZdr,
 } from '@/lib/runtime-config'
@@ -21,6 +23,8 @@ export async function GET(request: Request) {
 
   const database = await probeDatabase()
   const visionConfigured = Boolean(openRouterApiKey())
+  const queueConfigured = pipelineQueueConfigured()
+  const storageConfigured = Boolean(objectStorageConfig())
   const ready = database === 'ready' && (federationMode() === 'dummy' || isLiveFederationConfigured())
 
   return apiJson(request, {
@@ -34,9 +38,9 @@ export async function GET(request: Request) {
     },
     dependencies: {
       database,
-      queue: 'unconfigured',
-      objectStorage: 'unconfigured',
-      openrouterPreflight: visionConfigured ? 'pending' : 'unconfigured',
+      queue: queueConfigured ? 'ready' : 'unconfigured',
+      objectStorage: storageConfigured ? 'ready' : 'unconfigured',
+      openrouterPreflight: visionConfigured ? 'ready' : 'unconfigured',
     },
     policy: {
       directVideoEnabled: directVideoEnabled(),

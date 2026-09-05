@@ -4,16 +4,18 @@ Collection-bound video intelligence and editing capability for PLEXON.
 
 ## Current delivery slice
 
-V0–V2 foundation is live on staging:
+V0–V4 foundation is live on staging:
 
 - federation contracts and secure provisioning routes;
 - Collection picker (PLEXON accessible-collections, Access Model B);
-- Collection-bound workspace persistence + signed object-store upload;
+- Collection-bound workspace persistence + direct object-store upload;
+- durable media analysis pipeline (`pg-boss`) with FFprobe/frame sampling;
+- OpenRouter/Qwen vision stages with schema validation + fallback lane;
+- analyses UI with auto-start after upload complete;
 - public and federation health;
-- OpenRouter/Qwen policy boundary;
 - v3 AppShell using `@msqdx/ui`.
 
-Vision pipeline (V3/V4) and Cuts editor are not enabled yet.
+Cuts editor and advanced audio/transcript branches are still future work.
 
 The normative specifications are maintained in PLEXON:
 

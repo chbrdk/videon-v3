@@ -79,7 +79,16 @@ export async function POST(request: Request, context: RouteContext) {
     if (!updated) {
       return apiError(request, 409, 'invalid_payload', 'Media is not in an uploading state')
     }
-    return apiJson(request, { media: updated })
+
+    const { scheduleMediaAnalysis } = await import('@/lib/pipeline/enqueue')
+    const scheduled = await scheduleMediaAnalysis({
+      mediaAssetId: updated.id,
+      workspaceId: resolved.workspace.id,
+      requestedByPlexonUserId: userId,
+      checksumSha256: updated.checksumSha256,
+    })
+
+    return apiJson(request, { media: updated, analysis: scheduled })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Upload verification failed'
     if (message.includes('does not match declared')) {
