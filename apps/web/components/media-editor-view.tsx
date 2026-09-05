@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
+import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { paths } from '@/lib/paths'
 
 type SceneItem = {
@@ -162,6 +163,29 @@ export function MediaEditorView({
     video.currentTime = ms / 1000
     setCurrentMs(ms)
   }
+
+  const stepScene = (delta: number) => {
+    if (scenes.length === 0) return
+    const currentIndex = scenes.findIndex((scene) => scene.sceneKey === activeSceneKey)
+    const baseIndex = currentIndex >= 0 ? currentIndex : 0
+    const next = scenes[Math.min(Math.max(baseIndex + delta, 0), scenes.length - 1)]
+    if (!next) return
+    seekTo(next.startMs)
+    setActiveSceneKey(next.sceneKey)
+  }
+
+  const nudgePlayhead = (deltaMs: number) => {
+    seekTo(currentMs + deltaMs)
+  }
+
+  useEditorKeyboard({
+    enabled: Boolean(media) && !busy,
+    onTogglePlay: () => void togglePlayback(),
+    onSeekBack: () => nudgePlayhead(-1000),
+    onSeekForward: () => nudgePlayhead(1000),
+    onStepBack: () => stepScene(-1),
+    onStepForward: () => stepScene(1),
+  })
 
   const togglePlayback = async () => {
     const video = videoRef.current
@@ -326,13 +350,23 @@ export function MediaEditorView({
       </div>
 
       <div className="videon-editor__transport">
+        <Button type="button" variant="ghost" onClick={() => stepScene(-1)} disabled={!playbackUrl || scenes.length === 0}>
+          Vorherige Szene
+        </Button>
         <Button type="button" variant="ghost" onClick={() => void togglePlayback()} disabled={!playbackUrl}>
           Play/Pause
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => stepScene(1)} disabled={!playbackUrl || scenes.length === 0}>
+          Nächste Szene
         </Button>
         <Text role="meta">
           {formatClock(currentMs)} / {formatClock(timelineDuration)}
         </Text>
       </div>
+
+      <p className="videon-editor__shortcuts">
+        Leertaste Play/Pause · J/L ±1s · ←/→ Szene · Shift+←/→ fein seeken
+      </p>
 
       <div className="videon-editor__timeline" aria-label="Szenen-Timeline">
         {scenes.map((scene) => {

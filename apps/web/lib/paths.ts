@@ -67,6 +67,8 @@ export const paths = {
     collections: '/collections',
     apiCollections: '/api/collections',
     apiMedia: '/api/media',
+    apiMediaList: (platformProjectId: string) =>
+      `/api/media?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiAnalyses: '/api/analyses',
     apiMediaUploadIntent: '/api/media/upload-intent',
     apiMediaUpload: (mediaAssetId: string, platformProjectId: string) =>

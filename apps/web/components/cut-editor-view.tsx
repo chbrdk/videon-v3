@@ -13,6 +13,11 @@ import {
   splitSourceMsForCutPlayhead,
   type TranscriptSegment,
 } from '@/lib/cut-timeline'
+import {
+  snapshotFromClips,
+  type CutEditorSnapshot,
+} from '@/lib/cut-editor-history'
+import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { paths } from '@/lib/paths'
 
 type Clip = {
@@ -26,13 +31,14 @@ type CutDetail = {
   status: string
 }
 
-type CutExport = {
+type LibraryMedia = {
   id: string
-  status: string
-  bytes: number | null
-  errorMessage: string | null
-  createdAt: string
+  originalFilename: string
+  lifecycleState: string
+  durationMs?: number | null
 }
+
+const SEEK_STEP_MS = 1000
 
 function formatClock(ms: number): string {
   const totalSeconds = Math.max(ms, 0) / 1000
@@ -51,6 +57,8 @@ export function CutEditorView({
   const router = useRouter()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const cutPlayheadRef = useRef(0)
+  const playingRef = useRef(false)
+  const restoringRef = useRef(false)
   const [cut, setCut] = useState<CutDetail | null>(null)
   const [clips, setClips] = useState<Clip[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -60,8 +68,10 @@ export function CutEditorView({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
-  const [exports, setExports] = useState<CutExport[]>([])
-  const [activeExportId, setActiveExportId] = useState<string | null>(null)
+  const [libraryMedia, setLibraryMedia] = useState<LibraryMedia[]>([])
+  const [selectedMediaId, setSelectedMediaId] = useState('')
+  const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
+  const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
 
   const timeline = useMemo(
     () =>
@@ -94,6 +104,13 @@ export function CutEditorView({
     [timeline, transcriptsByMediaId],
   )
 
+  const rememberSnapshot = useCallback(() => {
+    if (restoringRef.current || clips.length === 0) return
+    const snapshot = snapshotFromClips(clips, cutPlayheadRef.current, activeIndex)
+    setUndoStack((stack) => [...stack, snapshot].slice(-40))
+    setRedoStack([])
+  }, [activeIndex, clips])
+
   const load = useCallback(async () => {
     const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), { cache: 'no-store' })
     const body = (await response.json()) as {
@@ -109,56 +126,13 @@ export function CutEditorView({
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
   }, [cutId, platformProjectId])
 
-  const loadExports = useCallback(async () => {
-    const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), { cache: 'no-store' })
-    const body = (await response.json()) as { exports?: CutExport[] }
-    if (response.ok) setExports(body.exports ?? [])
-  }, [cutId, platformProjectId])
-
-  const pollExport = useCallback(
-    async (exportId: string) => {
-      const response = await fetch(paths.routes.apiCutExportDetail(cutId, exportId, platformProjectId), {
-        cache: 'no-store',
-      })
-      const body = (await response.json()) as {
-        export?: CutExport
-        downloadUrl?: string
-        error?: { message?: string }
-      }
-      if (!response.ok) throw new Error(body.error?.message || 'Export-Status nicht verfügbar')
-      await loadExports()
-      if (body.export?.status === 'succeeded' && body.downloadUrl) {
-        window.open(body.downloadUrl, '_blank', 'noopener,noreferrer')
-        setActiveExportId(null)
-        return
-      }
-      if (body.export?.status === 'failed') {
-        setError(body.export.errorMessage || 'Export fehlgeschlagen')
-        setActiveExportId(null)
-      }
-    },
-    [cutId, loadExports, platformProjectId],
-  )
-
-  const startExport = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const body = (await response.json()) as { export?: CutExport; error?: { message?: string } }
-      if (!response.ok) throw new Error(body.error?.message || 'Export konnte nicht gestartet werden')
-      if (body.export?.id) setActiveExportId(body.export.id)
-      await loadExports()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export konnte nicht gestartet werden')
-    } finally {
-      setBusy(false)
+  const loadLibrary = useCallback(async () => {
+    const response = await fetch(paths.routes.apiMediaList(platformProjectId), { cache: 'no-store' })
+    const body = (await response.json()) as { items?: LibraryMedia[] }
+    if (response.ok) {
+      setLibraryMedia((body.items ?? []).filter((item) => item.lifecycleState === 'ready'))
     }
-  }
+  }, [platformProjectId])
 
   const loadPlayback = useCallback(
     async (clip: Clip) => {
@@ -177,6 +151,7 @@ export function CutEditorView({
   )
 
   const patchTimeline = async (payload: Record<string, unknown>) => {
+    rememberSnapshot()
     setBusy(true)
     setError(null)
     try {
@@ -191,6 +166,29 @@ export function CutEditorView({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Timeline-Änderung fehlgeschlagen')
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const restoreSnapshot = async (snapshot: CutEditorSnapshot) => {
+    restoringRef.current = true
+    setBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore', scenes: snapshot.scenes }),
+      })
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Rückgängig fehlgeschlagen')
+      await load()
+      setCutPlayheadMs(snapshot.cutPlayheadMs)
+      setActiveIndex(snapshot.activeIndex)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rückgängig fehlgeschlagen')
+    } finally {
+      restoringRef.current = false
       setBusy(false)
     }
   }
@@ -213,20 +211,8 @@ export function CutEditorView({
 
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
-    void loadExports().catch(() => {})
-  }, [load, loadExports])
-
-  useEffect(() => {
-    if (!activeExportId) return
-    const timer = window.setInterval(() => {
-      void pollExport(activeExportId).catch((err) => {
-        setError(err instanceof Error ? err.message : 'Export-Status nicht verfügbar')
-        setActiveExportId(null)
-      })
-    }, 2500)
-    void pollExport(activeExportId).catch(() => {})
-    return () => window.clearInterval(timer)
-  }, [activeExportId, pollExport])
+    void loadLibrary().catch(() => {})
+  }, [load, loadLibrary])
 
   useEffect(() => {
     const clip = clips[activeIndex]
@@ -243,33 +229,50 @@ export function CutEditorView({
     const onLoaded = () => {
       const playhead = cutPlayheadRef.current
       video.currentTime = (clip.scene.startMs + Math.max(playhead - item.cutStartMs, 0)) / 1000
+      if (playingRef.current) void video.play().catch(() => {})
     }
     const onTime = () => {
       const sourceMs = Math.floor(video.currentTime * 1000)
       const nextCutMs = cutPlayheadForSourceMs(timeline, clip.scene.id, sourceMs)
       setCutPlayheadMs(nextCutMs)
-      if (sourceMs >= clip.scene.endMs) {
+      if (sourceMs >= clip.scene.endMs - 50) {
         if (activeIndex + 1 < clips.length) {
           setActiveIndex(activeIndex + 1)
         } else {
+          playingRef.current = false
           video.pause()
         }
       }
     }
+    const onPlay = () => {
+      playingRef.current = true
+    }
+    const onPause = () => {
+      playingRef.current = false
+    }
     video.addEventListener('loadedmetadata', onLoaded)
     video.addEventListener('timeupdate', onTime)
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
     onLoaded()
     return () => {
       video.removeEventListener('loadedmetadata', onLoaded)
       video.removeEventListener('timeupdate', onTime)
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
     }
   }, [clips, activeIndex, playbackUrl, timeline])
 
   const togglePlayback = async () => {
     const video = videoRef.current
     if (!video) return
-    if (video.paused) await video.play()
-    else video.pause()
+    if (video.paused) {
+      playingRef.current = true
+      await video.play()
+    } else {
+      playingRef.current = false
+      video.pause()
+    }
   }
 
   const stepClip = (delta: number) => {
@@ -278,6 +281,10 @@ export function CutEditorView({
     if (!item) return
     setActiveIndex(next)
     seekToCutMs(item.cutStartMs)
+  }
+
+  const nudgePlayhead = (deltaMs: number) => {
+    seekToCutMs(cutPlayheadRef.current + deltaMs)
   }
 
   const deleteCut = async () => {
@@ -295,6 +302,68 @@ export function CutEditorView({
     }
   }
 
+  const activeClip = clips[activeIndex]
+  const splitTarget = splitSourceMsForCutPlayhead(timeline, cutPlayheadMs)
+  const canUndo = undoStack.length > 0
+  const canRedo = redoStack.length > 0
+
+  const undo = () => {
+    if (!canUndo) return
+    const snapshot = undoStack[undoStack.length - 1]
+    const current = snapshotFromClips(clips, cutPlayheadMs, activeIndex)
+    setUndoStack((stack) => stack.slice(0, -1))
+    setRedoStack((stack) => [...stack, current])
+    void restoreSnapshot(snapshot)
+  }
+
+  const redo = () => {
+    if (!canRedo) return
+    const snapshot = redoStack[redoStack.length - 1]
+    const current = snapshotFromClips(clips, cutPlayheadMs, activeIndex)
+    setRedoStack((stack) => stack.slice(0, -1))
+    setUndoStack((stack) => [...stack, current])
+    void restoreSnapshot(snapshot)
+  }
+
+  const addSelectedMedia = async () => {
+    if (!selectedMediaId) return
+    const media = libraryMedia.find((item) => item.id === selectedMediaId)
+    if (!media) return
+    let endMs = media.durationMs ?? 0
+    if (!endMs) {
+      const response = await fetch(paths.routes.apiMediaDetail(media.id, platformProjectId), { cache: 'no-store' })
+      const body = (await response.json()) as { media?: { durationMs?: number | null } }
+      endMs = body.media?.durationMs ?? 60_000
+    }
+    await patchTimeline({
+      action: 'addScene',
+      mediaAssetId: media.id,
+      startMs: 0,
+      endMs: Math.max(endMs, 1000),
+      afterSceneId: activeClip?.scene.id ?? null,
+    })
+    setSelectedMediaId('')
+  }
+
+  useEditorKeyboard({
+    enabled: Boolean(cut) && !busy,
+    onTogglePlay: () => void togglePlayback(),
+    onSeekBack: () => nudgePlayhead(-SEEK_STEP_MS),
+    onSeekForward: () => nudgePlayhead(SEEK_STEP_MS),
+    onStepBack: () => stepClip(-1),
+    onStepForward: () => stepClip(1),
+    onSplit: () => {
+      if (!splitTarget) return
+      void patchTimeline({ action: 'split', sceneId: splitTarget.sceneId, atMs: splitTarget.atMs })
+    },
+    onDelete: () => {
+      if (!activeClip || clips.length <= 1) return
+      void patchTimeline({ action: 'delete', sceneId: activeClip.scene.id })
+    },
+    onUndo: undo,
+    onRedo: redo,
+  })
+
   if (error && !cut) {
     return (
       <div className="videon-editor-error">
@@ -305,10 +374,6 @@ export function CutEditorView({
   }
 
   if (!cut) return <Text role="body">Cut wird geladen …</Text>
-
-  const activeClip = clips[activeIndex]
-  const splitTarget = splitSourceMsForCutPlayhead(timeline, cutPlayheadMs)
-  const latestExport = exports[0]
 
   return (
     <div className="videon-editor">
@@ -322,6 +387,12 @@ export function CutEditorView({
           </Text>
         </div>
         <div className="videon-editor__actions">
+          <Button type="button" variant="ghost" disabled={busy || !canUndo} onClick={undo}>
+            Rückgängig
+          </Button>
+          <Button type="button" variant="ghost" disabled={busy || !canRedo} onClick={redo}>
+            Wiederholen
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -355,18 +426,12 @@ export function CutEditorView({
           <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
             Archivieren
           </Button>
-          <Button type="button" variant="ghost" disabled={busy || Boolean(activeExportId)} onClick={() => void startExport()}>
-            {activeExportId ? 'Export läuft …' : 'MP4 exportieren'}
-          </Button>
         </div>
       </header>
 
-      {latestExport ? (
-        <Text role="meta">
-          Letzter Export: {latestExport.status}
-          {latestExport.bytes ? ` · ${Math.round(latestExport.bytes / (1024 * 1024))} MB` : ''}
-        </Text>
-      ) : null}
+      <p className="videon-editor__shortcuts">
+        Leertaste Play/Pause · J/L ±1s · ←/→ Clip · Shift+←/→ fein · S Teilen · Entf Löschen · ⌘Z / ⌘⇧Z
+      </p>
 
       {error ? <Text role="body">{error}</Text> : null}
 
@@ -412,6 +477,25 @@ export function CutEditorView({
         onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
         onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
       />
+
+      <div className="videon-editor__add-clip">
+        <label>
+          <Text role="meta" as="span">
+            Clip aus Mediathek
+          </Text>
+          <select value={selectedMediaId} onChange={(event) => setSelectedMediaId(event.target.value)} disabled={busy}>
+            <option value="">Video wählen …</option>
+            {libraryMedia.map((media) => (
+              <option key={media.id} value={media.id}>
+                {media.originalFilename}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button type="button" variant="ghost" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
+          Nach aktivem Clip einfügen
+        </Button>
+      </div>
 
       <ul className="videon-editor__scene-list">
         {clips.map((clip, index) => (

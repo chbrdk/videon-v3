@@ -326,6 +326,29 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.videon-editor__shortcuts {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.videon-editor__add-clip {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.videon-editor__add-clip select {
+  min-width: min(24rem, 100%);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
 }
 
 .videon-editor__timeline {
@@ -492,7 +515,8 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   margin-left: -1px;
   background: color-mix(in srgb, #fff 85%, var(--accent, #7dd3fc));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #7dd3fc) 55%, transparent);
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: ew-resize;
   z-index: 4;
 }
 

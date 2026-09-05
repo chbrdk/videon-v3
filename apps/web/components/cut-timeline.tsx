@@ -55,6 +55,7 @@ export function CutTimeline({
   onTrim,
 }: CutTimelineProps) {
   const videoTrackRef = useRef<HTMLDivElement | null>(null)
+  const lanesRef = useRef<HTMLDivElement | null>(null)
   const [dragSceneId, setDragSceneId] = useState<string | null>(null)
   const [zoomIndex, setZoomIndex] = useState(0)
   const [trimPreview, setTrimPreview] = useState<{ sceneId: string; startMs: number; endMs: number } | null>(
@@ -83,7 +84,7 @@ export function CutTimeline({
   }, [clips, trimPreview])
 
   const seekFromPointer = useCallback(
-    (clientX: number, track: HTMLDivElement | null) => {
+    (clientX: number, track: HTMLDivElement | null = lanesRef.current) => {
       if (!track || totalDurationMs <= 0) return
       const rect = track.getBoundingClientRect()
       const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1)
@@ -94,7 +95,20 @@ export function CutTimeline({
 
   const onTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (disabled || (event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
-    seekFromPointer(event.clientX, videoTrackRef.current)
+    seekFromPointer(event.clientX)
+  }
+
+  const startPlayheadDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.stopPropagation()
+    if (disabled) return
+    const onMove = (moveEvent: PointerEvent) => seekFromPointer(moveEvent.clientX)
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    seekFromPointer(event.clientX)
   }
 
   const onClipDragStart = (sceneId: string) => {
@@ -200,7 +214,7 @@ export function CutTimeline({
       </div>
 
       <div className="videon-cut-timeline__viewport">
-        <div className="videon-cut-timeline__lanes" style={laneStyle}>
+        <div className="videon-cut-timeline__lanes" style={laneStyle} ref={lanesRef}>
           <div
             ref={videoTrackRef}
             className="videon-cut-timeline__track videon-cut-timeline__track--video"
@@ -228,7 +242,7 @@ export function CutTimeline({
                   onClick={(event) => {
                     event.stopPropagation()
                     onSelectClip(item.index)
-                    seekFromPointer(event.clientX, videoTrackRef.current)
+                    seekFromPointer(event.clientX)
                   }}
                   title={label}
                 >
@@ -280,7 +294,11 @@ export function CutTimeline({
             </div>
           ) : null}
 
-          <div className="videon-cut-timeline__playhead" style={{ left: `${playheadLeft}%` }} />
+          <div
+            className="videon-cut-timeline__playhead"
+            style={{ left: `${playheadLeft}%` }}
+            onPointerDown={startPlayheadDrag}
+          />
         </div>
       </div>
     </div>

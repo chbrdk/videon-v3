@@ -364,3 +364,85 @@ export async function renameCut(input: {
   )
   return result.rows[0] ? mapCut(result.rows[0]) : null
 }
+
+export async function addSceneToCut(input: {
+  cutId: string
+  mediaAssetId: string
+  startMs: number
+  endMs: number
+  afterSceneId?: string | null
+}): Promise<CutScene[] | null> {
+  const startMs = Math.floor(input.startMs)
+  const endMs = Math.floor(input.endMs)
+  if (endMs - startMs < MIN_CLIP_MS) return null
+
+  const scenes = await listScenesForCut(input.cutId)
+  let position = scenes.length
+  if (input.afterSceneId) {
+    const index = scenes.findIndex((scene) => scene.id === input.afterSceneId)
+    if (index >= 0) position = index + 1
+  }
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(
+      `update cut_scenes
+          set position = position + 1
+        where cut_id = $1
+          and position >= $2`,
+      [input.cutId, position],
+    )
+    await client.query(
+      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [randomUUID(), input.cutId, position, input.mediaAssetId, startMs, endMs],
+    )
+    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function restoreCutTimeline(input: {
+  cutId: string
+  scenes: Array<{
+    id: string
+    position: number
+    mediaAssetId: string
+    startMs: number
+    endMs: number
+  }>
+}): Promise<CutScene[] | null> {
+  if (input.scenes.length === 0) return null
+  for (const scene of input.scenes) {
+    if (scene.endMs - scene.startMs < MIN_CLIP_MS) return null
+  }
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`delete from cut_scenes where cut_id = $1`, [input.cutId])
+    const ordered = [...input.scenes].sort((a, b) => a.position - b.position)
+    for (const [position, scene] of ordered.entries()) {
+      await client.query(
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
+         values ($1, $2, $3, $4, $5, $6)`,
+        [scene.id, input.cutId, position, scene.mediaAssetId, scene.startMs, scene.endMs],
+      )
+    }
+    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
