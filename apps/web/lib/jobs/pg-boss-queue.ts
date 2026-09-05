@@ -1,4 +1,4 @@
-import PgBoss from 'pg-boss'
+import { PgBoss } from 'pg-boss'
 import { databaseUrl } from '@/lib/runtime-config'
 import { ANALYSIS_JOB_NAME } from '@/lib/pipeline/constants'
 
