@@ -162,6 +162,89 @@ export async function listStagesForAnalysis(analysisRunId: string): Promise<Anal
   return result.rows.map(mapStage)
 }
 
+export async function createRerunAnalysisForMedia(input: {
+  mediaAssetId: string
+  requestedByPlexonUserId: string
+  checksumSha256: string
+}): Promise<AnalysisRun> {
+  const fingerprint = analysisInputFingerprint(input.checksumSha256)
+  const idempotencyKey = `rerun:${input.mediaAssetId}:${randomUUID()}`
+
+  await databasePool().query(
+    `update analysis_runs
+        set status = 'cancelled',
+            finished_at = coalesce(finished_at, now()),
+            updated_at = now()
+      where media_asset_id = $1
+        and status in ('queued', 'running')`,
+    [input.mediaAssetId],
+  )
+
+  const id = randomUUID()
+  const result = await databasePool().query<AnalysisRow>(
+    `insert into analysis_runs (
+       id, media_asset_id, requested_by_plexon_user_id, pipeline_version, scene_schema_version,
+       requested_capabilities, input_fingerprint, idempotency_key, status
+     ) values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, 'queued')
+     returning id, media_asset_id, requested_by_plexon_user_id, pipeline_version, scene_schema_version,
+               requested_capabilities, input_fingerprint, idempotency_key, status,
+               created_at, updated_at, started_at, finished_at`,
+    [
+      id,
+      input.mediaAssetId,
+      input.requestedByPlexonUserId,
+      PIPELINE_VERSION,
+      SCENE_INSIGHT_SCHEMA_VERSION,
+      JSON.stringify([...DEFAULT_REQUESTED_CAPABILITIES]),
+      fingerprint,
+      idempotencyKey,
+    ],
+  )
+  return mapAnalysis(result.rows[0])
+}
+
+export async function findLatestAnalysisForMedia(mediaAssetId: string): Promise<AnalysisRun | null> {
+  const result = await databasePool().query<AnalysisRow>(
+    `select id, media_asset_id, requested_by_plexon_user_id, pipeline_version, scene_schema_version,
+            requested_capabilities, input_fingerprint, idempotency_key, status,
+            created_at, updated_at, started_at, finished_at
+       from analysis_runs
+      where media_asset_id = $1
+      order by created_at desc
+      limit 1`,
+    [mediaAssetId],
+  )
+  return result.rows[0] ? mapAnalysis(result.rows[0]) : null
+}
+
+export type SceneInsightRecord = {
+  sceneKey: string
+  startMs: number
+  endMs: number
+  insight: SceneInsight
+}
+
+export async function listSceneInsightsForAnalysis(analysisRunId: string): Promise<SceneInsightRecord[]> {
+  const result = await databasePool().query<{
+    scene_key: string
+    start_ms: number
+    end_ms: number
+    insight: SceneInsight
+  }>(
+    `select scene_key, start_ms, end_ms, insight
+       from scene_insights
+      where analysis_run_id = $1
+      order by start_ms asc`,
+    [analysisRunId],
+  )
+  return result.rows.map((row) => ({
+    sceneKey: row.scene_key,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
+    insight: row.insight,
+  }))
+}
+
 export async function createAnalysisRunForMedia(input: {
   mediaAssetId: string
   requestedByPlexonUserId: string

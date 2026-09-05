@@ -97,16 +97,23 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
         {items.map((item) => (
           <li key={item.id} className="videon-media-row">
             <div>
-              <Text role="headline" as="h3">
-                {item.originalFilename}
-              </Text>
+              <Link href={paths.routes.mediaFor(item.id, platformProjectId)}>
+                <Text role="headline" as="h3">
+                  {item.originalFilename}
+                </Text>
+              </Link>
               <Text role="meta" as="p">
                 {item.mimeType} · {formatBytes(item.bytes)} · {item.lifecycleState}
               </Text>
             </div>
-            <Text role="meta" as="p">
-              {new Date(item.createdAt).toLocaleString('de-DE')}
-            </Text>
+            <div className="videon-media-row__aside">
+              <Text role="meta" as="p">
+                {new Date(item.createdAt).toLocaleString('de-DE')}
+              </Text>
+              <Link href={paths.routes.mediaFor(item.id, platformProjectId)}>
+                <Button variant="ghost">Öffnen</Button>
+              </Link>
+            </div>
           </li>
         ))}
       </ul>

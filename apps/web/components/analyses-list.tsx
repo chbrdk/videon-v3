@@ -68,8 +68,8 @@ export function AnalysesList({ platformProjectId }: { platformProjectId: string 
               {item.status} · Medienstatus {item.mediaLifecycleState}
             </Text>
           </div>
-          <Link href={paths.routes.libraryFor(platformProjectId)}>
-            <Button variant="ghost">Zur Mediathek</Button>
+          <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
+            <Button variant="ghost">Im Editor öffnen</Button>
           </Link>
         </li>
       ))}

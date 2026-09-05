@@ -25,6 +25,7 @@ export type CreateDownloadTargetInput = {
   workspaceId: string
   mediaAssetId: string
   storageKey: string
+  filename?: string
   disposition?: 'inline' | 'attachment'
 }
 

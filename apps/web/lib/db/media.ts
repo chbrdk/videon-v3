@@ -26,6 +26,13 @@ export type MediaAsset = {
   updatedAt: string
 }
 
+export type MediaAssetDetail = MediaAsset & {
+  durationMs: number | null
+  width: number | null
+  height: number | null
+  frameRate: number | null
+}
+
 type MediaRow = {
   id: string
   workspace_id: string
@@ -36,6 +43,10 @@ type MediaRow = {
   bytes: string | number
   checksum_sha256: string
   lifecycle_state: MediaLifecycleState
+  duration_ms: number | null
+  width: number | null
+  height: number | null
+  frame_rate: string | number | null
   created_at: Date | string
   updated_at: Date | string
 }
@@ -56,12 +67,26 @@ function mapMedia(row: MediaRow): MediaAsset {
   }
 }
 
+function mapMediaDetail(row: MediaRow): MediaAssetDetail {
+  return {
+    ...mapMedia(row),
+    durationMs: row.duration_ms,
+    width: row.width,
+    height: row.height,
+    frameRate: row.frame_rate === null ? null : Number(row.frame_rate),
+  }
+}
+
+const MEDIA_SELECT_COLUMNS = `id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
+            bytes, checksum_sha256, lifecycle_state, duration_ms, width, height, frame_rate,
+            created_at, updated_at`
+
 export async function listMediaForWorkspace(workspaceId: string): Promise<MediaAsset[]> {
   const result = await databasePool().query<MediaRow>(
-    `select id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
-            bytes, checksum_sha256, lifecycle_state, created_at, updated_at
+    `select ${MEDIA_SELECT_COLUMNS}
        from media_assets
       where workspace_id = $1
+        and lifecycle_state <> 'archived'
       order by created_at desc
       limit 200`,
     [workspaceId],
@@ -71,13 +96,69 @@ export async function listMediaForWorkspace(workspaceId: string): Promise<MediaA
 
 export async function findMediaAsset(mediaAssetId: string): Promise<MediaAsset | null> {
   const result = await databasePool().query<MediaRow>(
-    `select id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
-            bytes, checksum_sha256, lifecycle_state, created_at, updated_at
+    `select ${MEDIA_SELECT_COLUMNS}
        from media_assets
-      where id = $1`,
+      where id = $1
+        and lifecycle_state <> 'archived'`,
     [mediaAssetId],
   )
   return result.rows[0] ? mapMedia(result.rows[0]) : null
+}
+
+export async function findMediaAssetDetail(mediaAssetId: string): Promise<MediaAssetDetail | null> {
+  const result = await databasePool().query<MediaRow>(
+    `select ${MEDIA_SELECT_COLUMNS}
+       from media_assets
+      where id = $1
+        and lifecycle_state <> 'archived'`,
+    [mediaAssetId],
+  )
+  return result.rows[0] ? mapMediaDetail(result.rows[0]) : null
+}
+
+export async function deleteMediaAssetForWorkspace(
+  mediaAssetId: string,
+  workspaceId: string,
+): Promise<{ storageKey: string } | null> {
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    const media = await client.query<Pick<MediaRow, 'storage_key' | 'lifecycle_state'>>(
+      `select storage_key, lifecycle_state
+         from media_assets
+        where id = $1
+          and workspace_id = $2
+          and lifecycle_state <> 'archived'
+        for update`,
+      [mediaAssetId, workspaceId],
+    )
+    if (!media.rows[0]) {
+      await client.query('rollback')
+      return null
+    }
+
+    await client.query(
+      `update analysis_runs
+          set status = 'cancelled',
+              finished_at = coalesce(finished_at, now()),
+              updated_at = now()
+        where media_asset_id = $1
+          and status in ('queued', 'running')`,
+      [mediaAssetId],
+    )
+    await client.query(`delete from analysis_runs where media_asset_id = $1`, [mediaAssetId])
+    await client.query(`delete from media_assets where id = $1 and workspace_id = $2`, [
+      mediaAssetId,
+      workspaceId,
+    ])
+    await client.query('commit')
+    return { storageKey: media.rows[0].storage_key }
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 export async function createUploadingMediaAsset(input: {
@@ -95,8 +176,7 @@ export async function createUploadingMediaAsset(input: {
        id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
        bytes, checksum_sha256, lifecycle_state
      ) values ($1, $2, $3, $4, $5, $6, $7, $8, 'uploading')
-     returning id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
-               bytes, checksum_sha256, lifecycle_state, created_at, updated_at`,
+     returning ${MEDIA_SELECT_COLUMNS}`,
     [
       input.id,
       input.workspace.id,
@@ -119,8 +199,7 @@ export async function markMediaUploaded(mediaAssetId: string, workspaceId: strin
       where id = $1
         and workspace_id = $2
         and lifecycle_state = 'uploading'
-    returning id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
-              bytes, checksum_sha256, lifecycle_state, created_at, updated_at`,
+    returning ${MEDIA_SELECT_COLUMNS}`,
     [mediaAssetId, workspaceId],
   )
   return result.rows[0] ? mapMedia(result.rows[0]) : null
@@ -132,11 +211,11 @@ export async function findMediaByChecksumInWorkspace(
   excludeMediaAssetId?: string,
 ): Promise<MediaAsset | null> {
   const result = await databasePool().query<MediaRow>(
-    `select id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
-            bytes, checksum_sha256, lifecycle_state, created_at, updated_at
+    `select ${MEDIA_SELECT_COLUMNS}
        from media_assets
       where workspace_id = $1
         and checksum_sha256 = $2
+        and lifecycle_state <> 'archived'
         and ($3::uuid is null or id <> $3)
       limit 1`,
     [workspaceId, checksumSha256.toLowerCase(), excludeMediaAssetId ?? null],
@@ -157,8 +236,7 @@ export async function finalizeMediaUploaded(input: {
       where id = $1
         and workspace_id = $2
         and lifecycle_state = 'uploading'
-    returning id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
-              bytes, checksum_sha256, lifecycle_state, created_at, updated_at`,
+    returning ${MEDIA_SELECT_COLUMNS}`,
     [input.mediaAssetId, input.workspaceId, input.checksumSha256.toLowerCase()],
   )
   return result.rows[0] ? mapMedia(result.rows[0]) : null

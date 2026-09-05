@@ -38,7 +38,7 @@ export async function markMediaProcessing(mediaAssetId: string, workspaceId: str
             updated_at = now()
       where id = $1
         and workspace_id = $2
-        and lifecycle_state in ('uploaded', 'processing')
+        and lifecycle_state in ('uploaded', 'processing', 'ready', 'failed')
     returning id, workspace_id, created_by_plexon_user_id, storage_key, original_filename, mime_type,
               bytes, checksum_sha256, lifecycle_state, created_at, updated_at`,
     [mediaAssetId, workspaceId],

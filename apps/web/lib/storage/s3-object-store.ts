@@ -102,7 +102,7 @@ export class S3ObjectStore implements ObjectStore {
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: input.storageKey,
-        ResponseContentDisposition: contentDisposition(input.mediaAssetId, input.disposition ?? 'inline'),
+        ResponseContentDisposition: contentDisposition(input.filename ?? input.mediaAssetId, input.disposition ?? 'inline'),
       }),
       { expiresIn: SIGNED_URL_TTL_SECONDS },
     )
