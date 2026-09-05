@@ -15,6 +15,7 @@ import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
 import { PipelineStatusTrack } from '@/components/pipeline-status-track'
 import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
+import { paths } from '@/lib/paths'
 
 type SceneItem = {
   sceneKey: string
