@@ -10,13 +10,24 @@ type SearchHit = {
   sceneKey: string | null
   searchText: string
   mediaFilename: string
+  startMs: number | null
+  endMs: number | null
 }
 
-export function MediaSearch({ platformProjectId }: { platformProjectId: string }) {
+export function MediaSearch({
+  platformProjectId,
+  onAddToCut,
+  activeCutName,
+}: {
+  platformProjectId: string
+  onAddToCut?: (hit: SearchHit) => void | Promise<void>
+  activeCutName?: string | null
+}) {
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<SearchHit[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [addingId, setAddingId] = useState<string | null>(null)
 
   async function onSearch(event: React.FormEvent) {
     event.preventDefault()
@@ -53,20 +64,40 @@ export function MediaSearch({ platformProjectId }: { platformProjectId: string }
           {loading ? 'Sucht …' : 'Suchen'}
         </Button>
       </form>
+      {activeCutName ? (
+        <Text role="meta">Aktiver Cut: {activeCutName}</Text>
+      ) : onAddToCut ? (
+        <Text role="meta">Öffne einen Cut-Editor, um Treffer direkt einzufügen.</Text>
+      ) : null}
       {error ? <Text role="body">{error}</Text> : null}
       {items.length > 0 ? (
         <ul className="videon-home-activity-list">
           {items.map((item) => (
             <li key={`${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`}>
-              <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
-                <Text role="headline" as="span">
-                  {item.mediaFilename}
-                  {item.sceneKey ? ` · ${item.sceneKey}` : ''}
-                </Text>
-                <Text role="meta" as="span">
-                  {item.searchText}
-                </Text>
-              </Link>
+              <div className="videon-search-hit">
+                <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
+                  <Text role="headline" as="span">
+                    {item.mediaFilename}
+                    {item.sceneKey ? ` · ${item.sceneKey}` : ''}
+                  </Text>
+                  <Text role="meta" as="span">
+                    {item.searchText}
+                  </Text>
+                </Link>
+                {onAddToCut && activeCutName ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={addingId === `${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`}
+                    onClick={() => {
+                      setAddingId(`${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`)
+                      void Promise.resolve(onAddToCut(item)).finally(() => setAddingId(null))
+                    }}
+                  >
+                    Zum Cut
+                  </Button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>

@@ -17,8 +17,12 @@ import {
   snapshotFromClips,
   type CutEditorSnapshot,
 } from '@/lib/cut-editor-history'
-import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
+import { writeStoredActiveCut } from '@/lib/active-cut'
+import { frameDurationMs } from '@/lib/editor-time'
 import { paths } from '@/lib/paths'
+import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
+import { useWaveformPeaks } from '@/lib/use-waveform'
+import { TimelineWaveform } from '@/components/timeline-waveform'
 
 type Clip = {
   scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
@@ -29,6 +33,7 @@ type CutDetail = {
   id: string
   name: string
   status: string
+  frameRate?: number | null
 }
 
 type LibraryMedia = {
@@ -59,6 +64,8 @@ export function CutEditorView({
   const cutPlayheadRef = useRef(0)
   const playingRef = useRef(false)
   const restoringRef = useRef(false)
+  const playbackCacheRef = useRef<Map<string, string>>(new Map())
+  const currentMediaIdRef = useRef<string | null>(null)
   const [cut, setCut] = useState<CutDetail | null>(null)
   const [clips, setClips] = useState<Clip[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -103,6 +110,18 @@ export function CutEditorView({
     () => mapTranscriptToCutTimeline(timeline, transcriptsByMediaId),
     [timeline, transcriptsByMediaId],
   )
+  const activeClip = clips[activeIndex]
+  const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
+  const sourcePlayheadMs = activeClip
+    ? activeClip.scene.startMs + Math.max(cutPlayheadMs - (timeline[activeIndex]?.cutStartMs ?? 0), 0)
+    : 0
+  const sourceDurationMs = activeClip?.media
+    ? Math.max(
+        ...clips.filter((clip) => clip.media?.id === activeClip.media?.id).map((clip) => clip.scene.endMs),
+        activeClip.scene.endMs,
+        1,
+      )
+    : totalDurationMs
 
   const rememberSnapshot = useCallback(() => {
     if (restoringRef.current || clips.length === 0) return
@@ -121,6 +140,13 @@ export function CutEditorView({
     }
     if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
     setCut(body.cut ?? null)
+    if (body.cut) {
+      writeStoredActiveCut({
+        cutId: body.cut.id,
+        platformProjectId,
+        name: body.cut.name,
+      })
+    }
     setClips(body.clips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
@@ -135,9 +161,16 @@ export function CutEditorView({
   }, [platformProjectId])
 
   const loadPlayback = useCallback(
-    async (clip: Clip) => {
+    async (clip: Clip, options?: { force?: boolean }) => {
       if (!clip.media) {
         setPlaybackUrl(null)
+        currentMediaIdRef.current = null
+        return
+      }
+      const mediaId = clip.media.id
+      if (!options?.force && playbackCacheRef.current.has(mediaId)) {
+        currentMediaIdRef.current = mediaId
+        setPlaybackUrl(playbackCacheRef.current.get(mediaId) ?? null)
         return
       }
       const response = await fetch(paths.routes.apiMediaPlayback(clip.media.id, platformProjectId), {
@@ -145,6 +178,8 @@ export function CutEditorView({
       })
       const body = (await response.json()) as { playbackUrl?: string; error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Wiedergabe nicht verfügbar')
+      playbackCacheRef.current.set(mediaId, body.playbackUrl ?? '')
+      currentMediaIdRef.current = mediaId
       setPlaybackUrl(body.playbackUrl ?? null)
     },
     [platformProjectId],
@@ -217,8 +252,10 @@ export function CutEditorView({
   useEffect(() => {
     const clip = clips[activeIndex]
     if (!clip) return
+    const mediaId = clip.media?.id ?? null
+    if (mediaId && currentMediaIdRef.current === mediaId && playbackUrl) return
     void loadPlayback(clip).catch((err) => setError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
-  }, [clips, activeIndex, loadPlayback])
+  }, [clips, activeIndex, loadPlayback, playbackUrl])
 
   useEffect(() => {
     const video = videoRef.current
@@ -287,6 +324,10 @@ export function CutEditorView({
     seekToCutMs(cutPlayheadRef.current + deltaMs)
   }
 
+  const frameStep = (direction: -1 | 1) => {
+    nudgePlayhead(direction * frameDurationMs(cut?.frameRate))
+  }
+
   const deleteCut = async () => {
     if (!window.confirm('Cut archivieren?')) return
     setBusy(true)
@@ -302,7 +343,6 @@ export function CutEditorView({
     }
   }
 
-  const activeClip = clips[activeIndex]
   const splitTarget = splitSourceMsForCutPlayhead(timeline, cutPlayheadMs)
   const canUndo = undoStack.length > 0
   const canRedo = redoStack.length > 0
@@ -352,6 +392,8 @@ export function CutEditorView({
     onSeekForward: () => nudgePlayhead(SEEK_STEP_MS),
     onStepBack: () => stepClip(-1),
     onStepForward: () => stepClip(1),
+    onFrameBack: () => frameStep(-1),
+    onFrameForward: () => frameStep(1),
     onSplit: () => {
       if (!splitTarget) return
       void patchTimeline({ action: 'split', sceneId: splitTarget.sceneId, atMs: splitTarget.atMs })
@@ -430,7 +472,7 @@ export function CutEditorView({
       </header>
 
       <p className="videon-editor__shortcuts">
-        Leertaste Play/Pause · J/L ±1s · ←/→ Clip · Shift+←/→ fein · S Teilen · Entf Löschen · ⌘Z / ⌘⇧Z
+        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Clip · S Teilen · I/O In/Out · ⌘Z / ⌘⇧Z
       </p>
 
       {error ? <Text role="body">{error}</Text> : null}
@@ -444,6 +486,20 @@ export function CutEditorView({
           </div>
         )}
       </div>
+
+      <TimelineWaveform
+        peaks={waveformPeaks}
+        durationMs={sourceDurationMs}
+        playheadMs={sourcePlayheadMs}
+        viewStartMs={activeClip?.scene.startMs ?? 0}
+        viewEndMs={activeClip?.scene.endMs ?? sourceDurationMs}
+        label="Waveform (aktiver Quellclip)"
+        onSeek={(ms) => {
+          if (!activeClip) return
+          const cutMs = (timeline[activeIndex]?.cutStartMs ?? 0) + (ms - activeClip.scene.startMs)
+          seekToCutMs(cutMs)
+        }}
+      />
 
       <div className="videon-editor__transport">
         <Button type="button" variant="ghost" disabled={!playbackUrl || activeIndex <= 0} onClick={() => stepClip(-1)}>

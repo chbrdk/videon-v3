@@ -9,6 +9,8 @@ export type SearchHit = {
   searchText: string
   mediaFilename: string
   rank: number
+  startMs: number | null
+  endMs: number | null
 }
 
 export async function replaceSearchEntriesForAnalysis(input: {
@@ -69,13 +71,19 @@ export async function searchMediaInWorkspace(input: {
       search_text: string
       original_filename: string
       rank: number
+      start_ms: number | null
+      end_ms: number | null
     }
   >(
     `select mse.id, mse.media_asset_id, mse.analysis_run_id, mse.scene_key, mse.search_text,
             ma.original_filename,
+            si.start_ms, si.end_ms,
             ts_rank(to_tsvector('simple', mse.search_text), plainto_tsquery('simple', $2)) as rank
        from media_search_entries mse
        join media_assets ma on ma.id = mse.media_asset_id
+       left join scene_insights si
+         on si.analysis_run_id = mse.analysis_run_id
+        and si.scene_key = mse.scene_key
       where mse.workspace_id = $1
         and ma.lifecycle_state <> 'archived'
         and to_tsvector('simple', mse.search_text) @@ plainto_tsquery('simple', $2)
@@ -92,5 +100,7 @@ export async function searchMediaInWorkspace(input: {
     searchText: row.search_text,
     mediaFilename: row.original_filename,
     rank: row.rank,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
   }))
 }

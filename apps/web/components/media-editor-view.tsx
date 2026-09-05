@@ -1,11 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
+import { MediaSearch } from '@/components/media-search'
+import { TimelineWaveform } from '@/components/timeline-waveform'
+import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
+import { frameDurationMs, normalizeInOutRange } from '@/lib/editor-time'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
+import { useWaveformPeaks } from '@/lib/use-waveform'
 import { paths } from '@/lib/paths'
 
 type SceneItem = {
@@ -29,6 +34,7 @@ type MediaDetail = {
   durationMs: number | null
   width: number | null
   height: number | null
+  frameRate?: number | null
 }
 
 type AnalysisState = {
@@ -81,6 +87,19 @@ export function MediaEditorView({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [markInMs, setMarkInMs] = useState<number | null>(null)
+  const [markOutMs, setMarkOutMs] = useState<number | null>(null)
+  const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
+  const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
+  const markedRange = useMemo(
+    () =>
+      normalizeInOutRange({
+        inMs: markInMs,
+        outMs: markOutMs,
+        durationMs: media?.durationMs ?? durationMs,
+      }),
+    [durationMs, markInMs, markOutMs, media?.durationMs],
+  )
 
   const loadDetail = useCallback(async () => {
     const response = await fetch(paths.routes.apiMediaDetail(mediaAssetId, platformProjectId), {
@@ -125,6 +144,7 @@ export function MediaEditorView({
 
   useEffect(() => {
     setPlatformProjectId(platformProjectId)
+    setActiveCut(readStoredActiveCut())
   }, [platformProjectId, setPlatformProjectId])
 
   useEffect(() => {
@@ -178,14 +198,9 @@ export function MediaEditorView({
     seekTo(currentMs + deltaMs)
   }
 
-  useEditorKeyboard({
-    enabled: Boolean(media) && !busy,
-    onTogglePlay: () => void togglePlayback(),
-    onSeekBack: () => nudgePlayhead(-1000),
-    onSeekForward: () => nudgePlayhead(1000),
-    onStepBack: () => stepScene(-1),
-    onStepForward: () => stepScene(1),
-  })
+  const frameStep = (direction: -1 | 1) => {
+    nudgePlayhead(direction * frameDurationMs(media?.frameRate))
+  }
 
   const togglePlayback = async () => {
     const video = videoRef.current
@@ -193,6 +208,46 @@ export function MediaEditorView({
     if (video.paused) await video.play()
     else video.pause()
   }
+
+  const addRangeToActiveCut = async (startMs: number, endMs: number, targetMediaId = mediaAssetId) => {
+    if (!activeCut || activeCut.platformProjectId !== platformProjectId) {
+      setError('Öffne zuerst einen Cut im Cut-Editor, um Clips einzufügen.')
+      return
+    }
+    setBusy('cut')
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiCutDetail(activeCut.cutId, platformProjectId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'addScene',
+          mediaAssetId: targetMediaId,
+          startMs,
+          endMs,
+        }),
+      })
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Clip konnte nicht eingefügt werden')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Clip konnte nicht eingefügt werden')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  useEditorKeyboard({
+    enabled: Boolean(media) && !busy,
+    onTogglePlay: () => void togglePlayback(),
+    onSeekBack: () => nudgePlayhead(-1000),
+    onSeekForward: () => nudgePlayhead(1000),
+    onStepBack: () => stepScene(-1),
+    onStepForward: () => stepScene(1),
+    onFrameBack: () => frameStep(-1),
+    onFrameForward: () => frameStep(1),
+    onMarkIn: () => setMarkInMs(currentMs),
+    onMarkOut: () => setMarkOutMs(currentMs),
+  })
 
   const rerunAnalysis = async () => {
     setBusy('analysis')
@@ -217,6 +272,7 @@ export function MediaEditorView({
     const name = window.prompt('Name für den Cut', defaultName)
     if (!name?.trim()) return
     const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey)
+    const inOutRange = markedRange
     setBusy('cut')
     setError(null)
     try {
@@ -231,13 +287,21 @@ export function MediaEditorView({
                 endMs: scene.endMs,
               })),
             }
-          : {
-              platformProjectId,
-              name: name.trim(),
-              mediaAssetId: media.id,
-              startMs: activeScene?.startMs ?? 0,
-              endMs: activeScene?.endMs ?? media.durationMs ?? durationMs,
-            }
+          : inOutRange
+            ? {
+                platformProjectId,
+                name: name.trim(),
+                mediaAssetId: media.id,
+                startMs: inOutRange.startMs,
+                endMs: inOutRange.endMs,
+              }
+            : {
+                platformProjectId,
+                name: name.trim(),
+                mediaAssetId: media.id,
+                startMs: activeScene?.startMs ?? 0,
+                endMs: activeScene?.endMs ?? media.durationMs ?? durationMs,
+              }
       const response = await fetch(paths.routes.apiCuts(platformProjectId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -309,8 +373,18 @@ export function MediaEditorView({
             Aktualisieren
           </Button>
           <Button type="button" variant="ghost" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
-            {busy === 'cut' ? 'Speichert …' : 'Szene als Cut'}
+            {busy === 'cut' ? 'Speichert …' : markedRange ? 'In/Out als Cut' : 'Szene als Cut'}
           </Button>
+          {markedRange && activeCut ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={Boolean(busy)}
+              onClick={() => void addRangeToActiveCut(markedRange.startMs, markedRange.endMs)}
+            >
+              In/Out zum aktiven Cut
+            </Button>
+          ) : null}
           {scenes.length > 1 ? (
             <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
               Alle Szenen als Cut
@@ -365,10 +439,48 @@ export function MediaEditorView({
       </div>
 
       <p className="videon-editor__shortcuts">
-        Leertaste Play/Pause · J/L ±1s · ←/→ Szene · Shift+←/→ fein seeken
+        Leertaste Play/Pause · J/L ±1s · ,/. Frame · ←/→ Szene · I/O In/Out · Shift+←/→ fein
       </p>
 
+      <div className="videon-editor__transport">
+        <Button type="button" variant="ghost" onClick={() => setMarkInMs(currentMs)} disabled={!playbackUrl}>
+          In setzen
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setMarkOutMs(currentMs)} disabled={!playbackUrl}>
+          Out setzen
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => { setMarkInMs(null); setMarkOutMs(null) }}>
+          Marken löschen
+        </Button>
+        {markedRange ? (
+          <Text role="meta">
+            In/Out: {formatClock(markedRange.startMs)} – {formatClock(markedRange.endMs)}
+          </Text>
+        ) : (
+          <Text role="meta">In: {markInMs === null ? '—' : formatClock(markInMs)} · Out: {markOutMs === null ? '—' : formatClock(markOutMs)}</Text>
+        )}
+      </div>
+
+      <TimelineWaveform
+        peaks={waveformPeaks}
+        durationMs={timelineDuration}
+        playheadMs={currentMs}
+        inMs={markInMs}
+        outMs={markOutMs}
+        label="Waveform"
+        onSeek={seekTo}
+      />
+
       <div className="videon-editor__timeline" aria-label="Szenen-Timeline">
+        {markedRange ? (
+          <div
+            className="videon-editor__range-marker"
+            style={{
+              left: `${(markedRange.startMs / timelineDuration) * 100}%`,
+              width: `${((markedRange.endMs - markedRange.startMs) / timelineDuration) * 100}%`,
+            }}
+          />
+        ) : null}
         {scenes.map((scene) => {
           const left = (scene.startMs / timelineDuration) * 100
           const width = Math.max(((scene.endMs - scene.startMs) / timelineDuration) * 100, 1.5)
@@ -384,6 +496,37 @@ export function MediaEditorView({
           )
         })}
       </div>
+
+      <section className="videon-editor__panel">
+        <Text role="title" as="h3">
+          Suche & aktiver Cut
+        </Text>
+        <MediaSearch
+          platformProjectId={platformProjectId}
+          activeCutName={activeCut?.platformProjectId === platformProjectId ? activeCut.name : null}
+          onAddToCut={async (hit) => {
+            let startMs = hit.startMs ?? 0
+            let endMs = hit.endMs ?? media?.durationMs ?? durationMs
+            if ((!hit.startMs || !hit.endMs) && hit.mediaAssetId !== mediaAssetId) {
+              const response = await fetch(paths.routes.apiMediaDetail(hit.mediaAssetId, platformProjectId), {
+                cache: 'no-store',
+              })
+              const body = (await response.json()) as {
+                media?: { durationMs?: number | null }
+                scenes?: SceneItem[]
+              }
+              const scene = body.scenes?.find((entry) => entry.sceneKey === hit.sceneKey)
+              startMs = scene?.startMs ?? 0
+              endMs = scene?.endMs ?? body.media?.durationMs ?? 60_000
+            } else if (hit.sceneKey && (!hit.startMs || !hit.endMs)) {
+              const scene = scenes.find((entry) => entry.sceneKey === hit.sceneKey)
+              startMs = scene?.startMs ?? 0
+              endMs = scene?.endMs ?? media?.durationMs ?? durationMs
+            }
+            await addRangeToActiveCut(startMs, endMs, hit.mediaAssetId)
+          }}
+        />
+      </section>
 
       <div className="videon-editor__grid">
         <section className="videon-editor__panel">

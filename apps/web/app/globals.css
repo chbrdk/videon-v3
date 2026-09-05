@@ -335,6 +335,44 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   font-size: 0.72rem;
 }
 
+.videon-editor__range-marker {
+  position: absolute;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, #fbbf24 28%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.videon-waveform {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.videon-waveform__canvas {
+  width: 100%;
+  height: 4.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--bg0) 88%, var(--fg));
+  cursor: pointer;
+  touch-action: none;
+}
+
+.videon-search-hit {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.videon-search-hit a {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .videon-editor__add-clip {
   display: flex;
   gap: 0.75rem;

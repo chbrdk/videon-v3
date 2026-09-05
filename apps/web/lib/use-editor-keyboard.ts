@@ -9,6 +9,10 @@ export type EditorKeyboardHandlers = {
   onSeekForward?: () => void
   onStepBack?: () => void
   onStepForward?: () => void
+  onFrameBack?: () => void
+  onFrameForward?: () => void
+  onMarkIn?: () => void
+  onMarkOut?: () => void
   onSplit?: () => void
   onDelete?: () => void
   onUndo?: () => void
@@ -62,6 +66,26 @@ export function useEditorKeyboard(handlers: EditorKeyboardHandlers): void {
       if (key === 'l') {
         event.preventDefault()
         handlersRef.current.onSeekForward?.()
+        return
+      }
+      if (key === 'i') {
+        event.preventDefault()
+        handlersRef.current.onMarkIn?.()
+        return
+      }
+      if (key === 'o') {
+        event.preventDefault()
+        handlersRef.current.onMarkOut?.()
+        return
+      }
+      if (event.key === ',' || event.key === '<') {
+        event.preventDefault()
+        handlersRef.current.onFrameBack?.()
+        return
+      }
+      if (event.key === '.' || event.key === '>') {
+        event.preventDefault()
+        handlersRef.current.onFrameForward?.()
         return
       }
       if (key === 'arrowleft' && event.shiftKey) {
