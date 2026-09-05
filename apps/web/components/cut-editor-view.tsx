@@ -37,6 +37,7 @@ export function CutEditorView({
   const [clips, setClips] = useState<Clip[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
+  const [playheadMs, setPlayheadMs] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -50,7 +51,7 @@ export function CutEditorView({
     if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
     setCut(body.cut ?? null)
     setClips(body.clips ?? [])
-    setActiveIndex(0)
+    setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
   }, [cutId, platformProjectId])
 
   const loadPlayback = useCallback(
@@ -69,6 +70,25 @@ export function CutEditorView({
     [platformProjectId],
   )
 
+  const patchTimeline = async (payload: Record<string, unknown>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || 'Timeline-Änderung fehlgeschlagen')
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Timeline-Änderung fehlgeschlagen')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
   }, [load])
@@ -85,10 +105,12 @@ export function CutEditorView({
     if (!video || !clip || !playbackUrl) return
     const onLoaded = () => {
       video.currentTime = clip.scene.startMs / 1000
+      setPlayheadMs(clip.scene.startMs)
     }
     const onTime = () => {
-      const endSec = clip.scene.endMs / 1000
-      if (video.currentTime >= endSec) {
+      const absoluteMs = Math.floor(video.currentTime * 1000)
+      setPlayheadMs(absoluteMs)
+      if (absoluteMs >= clip.scene.endMs) {
         if (activeIndex + 1 < clips.length) setActiveIndex(activeIndex + 1)
         else video.pause()
       }
@@ -137,15 +159,43 @@ export function CutEditorView({
             {cut.name}
           </Text>
           <Text role="meta" as="p">
-            {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
+            {clips.length} Clip{clips.length === 1 ? '' : 's'} · Playhead {formatClock(playheadMs)}
           </Text>
         </div>
         <div className="videon-editor__actions">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy || !activeClip}
+            onClick={() =>
+              void patchTimeline({ action: 'split', sceneId: activeClip?.scene.id, atMs: playheadMs })
+            }
+          >
+            An Playhead teilen
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy || !activeClip || activeIndex >= clips.length - 1}
+            onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
+          >
+            Mit nächstem verbinden
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy || clips.length <= 1 || !activeClip}
+            onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
+          >
+            Clip löschen
+          </Button>
           <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
             Archivieren
           </Button>
         </div>
       </header>
+
+      {error ? <Text role="body">{error}</Text> : null}
 
       <div className="videon-editor__player-wrap">
         {playbackUrl ? (

@@ -22,6 +22,7 @@ import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
 import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
 import { probeMediaFile } from '@/lib/pipeline/ffprobe'
+import { transcriptExcerptForScene, transcribeAudioFile, type TranscriptSegment } from '@/lib/pipeline/transcribe'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 function userPseudonym(workspaceId: string, plexonUserId: string): string {
@@ -137,16 +138,19 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
       return framesByScene
     })
 
+    let transcriptSegments: TranscriptSegment[] = []
     await runStage(analysisRunId, 'audio', fingerprint, 1, async () => {
       const extracted = await extractAudioTrack({ sourcePath: tempPath, destinationPath: audioPath })
+      const transcript = extracted ? await transcribeAudioFile(audioPath) : null
+      if (transcript) transcriptSegments = transcript.segments
       await upsertMediaTranscript({
         mediaAssetId: media.id,
         analysisRunId,
-        status: extracted ? 'pending' : 'skipped',
-        transcriptText: null,
-        segments: [],
+        status: transcript ? 'ready' : extracted ? 'skipped' : 'skipped',
+        transcriptText: transcript?.text ?? null,
+        segments: transcript?.segments ?? [],
       })
-      return extracted ? 'audio_extracted' : 'no_audio_track'
+      return transcript ? 'transcribed' : extracted ? 'audio_extracted' : 'no_audio_track'
     })
 
     await runStage(analysisRunId, 'vision', fingerprint, sceneFrames.length, async () => {
@@ -157,6 +161,11 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
           startMs: entry.scene.startMs,
           endMs: entry.scene.endMs,
           frames: entry.frames,
+          transcriptExcerpt: transcriptExcerptForScene(
+            transcriptSegments,
+            entry.scene.startMs,
+            entry.scene.endMs,
+          ),
           userPseudonym: userPseudonym(media.workspaceId, analysis.requestedByPlexonUserId),
         })
         await insertSceneInsight({

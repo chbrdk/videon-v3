@@ -43,6 +43,7 @@ type StageState = {
 type TranscriptState = {
   status: string
   transcriptText: string | null
+  segments?: Array<{ startMs: number; endMs: number; text: string }>
 } | null
 
 function formatBytes(bytes: number): string {
@@ -186,24 +187,37 @@ export function MediaEditorView({
     }
   }
 
-  const saveAsCut = async () => {
+  const saveAsCut = async (allScenes = false) => {
     if (!media) return
-    const name = window.prompt('Name für den Cut', media.originalFilename.replace(/\.[^.]+$/, ''))
+    const defaultName = media.originalFilename.replace(/\.[^.]+$/, '')
+    const name = window.prompt('Name für den Cut', defaultName)
     if (!name?.trim()) return
     const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey)
     setBusy('cut')
     setError(null)
     try {
+      const payload =
+        allScenes && scenes.length > 0
+          ? {
+              platformProjectId,
+              name: name.trim(),
+              scenes: scenes.map((scene) => ({
+                mediaAssetId: media.id,
+                startMs: scene.startMs,
+                endMs: scene.endMs,
+              })),
+            }
+          : {
+              platformProjectId,
+              name: name.trim(),
+              mediaAssetId: media.id,
+              startMs: activeScene?.startMs ?? 0,
+              endMs: activeScene?.endMs ?? media.durationMs ?? durationMs,
+            }
       const response = await fetch(paths.routes.apiCuts(platformProjectId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          platformProjectId,
-          name: name.trim(),
-          mediaAssetId: media.id,
-          startMs: activeScene?.startMs ?? 0,
-          endMs: activeScene?.endMs ?? media.durationMs ?? durationMs,
-        }),
+        body: JSON.stringify(payload),
       })
       const body = (await response.json()) as { cut?: { id: string }; error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht erstellt werden')
@@ -270,9 +284,14 @@ export function MediaEditorView({
           <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
             Aktualisieren
           </Button>
-          <Button type="button" variant="ghost" onClick={() => void saveAsCut()} disabled={Boolean(busy)}>
-            {busy === 'cut' ? 'Speichert …' : 'Als Cut speichern'}
+          <Button type="button" variant="ghost" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
+            {busy === 'cut' ? 'Speichert …' : 'Szene als Cut'}
           </Button>
+          {scenes.length > 1 ? (
+            <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
+              Alle Szenen als Cut
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -398,9 +417,28 @@ export function MediaEditorView({
             {transcript?.transcriptText
               ? transcript.transcriptText
               : transcript?.status === 'pending'
-                ? 'Audio wurde extrahiert — Whisper-Transkription folgt in der nächsten Welle.'
-                : 'Noch kein Transkript verfügbar.'}
+                ? 'Audio wurde extrahiert — Transkription läuft beim nächsten Analyse-Lauf.'
+                : transcript?.status === 'skipped'
+                  ? 'Kein Transkript (Whisper nicht verfügbar oder kein Audiospur).'
+                  : 'Noch kein Transkript verfügbar.'}
           </Text>
+          {transcript?.segments?.length ? (
+            <ul className="videon-editor__stage-list">
+              {transcript.segments.map((segment) => (
+                <li key={`${segment.startMs}-${segment.endMs}`}>
+                  <button
+                    type="button"
+                    className="videon-editor__scene-button"
+                    onClick={() => seekTo(segment.startMs)}
+                  >
+                    <Text role="meta">
+                      {formatClock(segment.startMs)} – {formatClock(segment.endMs)}: {segment.text}
+                    </Text>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
       </div>
     </div>

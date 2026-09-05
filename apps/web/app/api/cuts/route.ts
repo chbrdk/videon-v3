@@ -62,9 +62,10 @@ export async function POST(request: Request) {
   const mediaAssetId = typeof record.mediaAssetId === 'string' ? record.mediaAssetId.trim() : ''
   const startMs = typeof record.startMs === 'number' ? Math.max(0, Math.floor(record.startMs)) : 0
   const endMs = typeof record.endMs === 'number' ? Math.max(startMs + 1, Math.floor(record.endMs)) : null
+  const rawScenes = Array.isArray(record.scenes) ? record.scenes : null
 
-  if (!platformProjectId || !name || !mediaAssetId) {
-    return apiError(request, 400, 'invalid_payload', 'platformProjectId, name and mediaAssetId are required')
+  if (!platformProjectId || !name) {
+    return apiError(request, 400, 'invalid_payload', 'platformProjectId and name are required')
   }
 
   const workspace = await resolveWorkspaceForMediaRequest({
@@ -80,22 +81,52 @@ export async function POST(request: Request) {
     })
   }
 
-  const media = await findMediaAssetDetail(mediaAssetId)
-  if (!media || media.workspaceId !== workspace.workspace.id) {
-    return apiError(request, 404, 'not_found', 'Media asset not found')
+  const media = await findMediaAssetDetail(mediaAssetId || '')
+  const sceneInputs: Array<{ mediaAssetId: string; startMs: number; endMs: number }> = []
+
+  if (rawScenes?.length) {
+    for (const entry of rawScenes) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const scene = entry as Record<string, unknown>
+      const sceneMediaId = typeof scene.mediaAssetId === 'string' ? scene.mediaAssetId.trim() : ''
+      const sceneStart = typeof scene.startMs === 'number' ? Math.max(0, Math.floor(scene.startMs)) : 0
+      const sceneEnd = typeof scene.endMs === 'number' ? Math.max(sceneStart + 1, Math.floor(scene.endMs)) : 0
+      if (!sceneMediaId || sceneEnd <= sceneStart) continue
+      sceneInputs.push({ mediaAssetId: sceneMediaId, startMs: sceneStart, endMs: sceneEnd })
+    }
   }
 
-  const durationMs = media.durationMs ?? endMs ?? 60_000
-  const clipEndMs = endMs ?? durationMs
+  if (!sceneInputs.length) {
+    if (!mediaAssetId) {
+      return apiError(request, 400, 'invalid_payload', 'mediaAssetId or scenes are required')
+    }
+    if (!media || media.workspaceId !== workspace.workspace.id) {
+      return apiError(request, 404, 'not_found', 'Media asset not found')
+    }
+    const durationMs = media.durationMs ?? endMs ?? 60_000
+    sceneInputs.push({ mediaAssetId: media.id, startMs, endMs: endMs ?? durationMs })
+  } else {
+    for (const scene of sceneInputs) {
+      const sceneMedia = await findMediaAssetDetail(scene.mediaAssetId)
+      if (!sceneMedia || sceneMedia.workspaceId !== workspace.workspace.id) {
+        return apiError(request, 404, 'not_found', 'Media asset not found')
+      }
+    }
+  }
+
+  const primaryMedia = media ?? (await findMediaAssetDetail(sceneInputs[0].mediaAssetId))
+  if (!primaryMedia) {
+    return apiError(request, 404, 'not_found', 'Media asset not found')
+  }
 
   const created = await createCutWithScenes({
     workspaceId: workspace.workspace.id,
     createdByPlexonUserId: userId,
     name,
-    width: media.width,
-    height: media.height,
-    frameRate: media.frameRate,
-    scenes: [{ mediaAssetId: media.id, startMs, endMs: clipEndMs }],
+    width: primaryMedia.width,
+    height: primaryMedia.height,
+    frameRate: primaryMedia.frameRate,
+    scenes: sceneInputs,
   })
 
   return apiJson(request, created, 201)

@@ -104,3 +104,18 @@ export function isLiveFederationConfigured(): boolean {
 export function isPlexonAuthConfigured(): boolean {
   return Boolean(plexonAuthUrl() && plexonServiceSecret())
 }
+
+export function transcriptionConfig(): {
+  enabled: boolean
+  whisperModel: string
+  language: string
+} {
+  const enabled = env(paths.envTranscriptionEnabled)
+    ? asBoolean(env(paths.envTranscriptionEnabled))
+    : true
+  return {
+    enabled,
+    whisperModel: env(paths.envWhisperModel) || 'tiny',
+    language: env(paths.envWhisperLanguage) || 'de',
+  }
+}

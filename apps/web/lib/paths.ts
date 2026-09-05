@@ -53,6 +53,9 @@ export const paths = {
   envVisionDirectVideoEnabled: 'VIDEON_VISION_DIRECT_VIDEO_ENABLED',
   envOpenRouterDataCollection: 'VIDEON_OPENROUTER_DATA_COLLECTION',
   envOpenRouterRequireZdr: 'VIDEON_OPENROUTER_REQUIRE_ZDR',
+  envTranscriptionEnabled: 'VIDEON_TRANSCRIPTION_ENABLED',
+  envWhisperModel: 'VIDEON_WHISPER_MODEL',
+  envWhisperLanguage: 'VIDEON_WHISPER_LANGUAGE',
   routes: {
     home: '/',
     library: '/library',

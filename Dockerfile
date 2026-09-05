@@ -86,6 +86,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     ffmpeg \
+    python3 \
+    python3-pip \
+    && pip3 install --break-system-packages faster-whisper \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/videon-v3/package.json ./package.json

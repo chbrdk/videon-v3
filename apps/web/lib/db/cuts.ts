@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { PoolClient } from 'pg'
 import { databasePool } from './client'
 
 export type CutStatus = 'draft' | 'ready' | 'archived'
@@ -172,4 +173,107 @@ export async function archiveCut(cutId: string, workspaceId: string): Promise<bo
     [cutId, workspaceId],
   )
   return (result.rowCount ?? 0) > 0
+}
+
+const MIN_CLIP_MS = 500
+
+async function renumberCutScenes(client: PoolClient, cutId: string): Promise<void> {
+  const scenes = await client.query<{ id: string }>(
+    `select id from cut_scenes where cut_id = $1 order by position asc`,
+    [cutId],
+  )
+  for (const [position, row] of scenes.rows.entries()) {
+    await client.query(`update cut_scenes set position = $2 where id = $1`, [row.id, position])
+  }
+  await client.query(`update cuts set updated_at = now() where id = $1`, [cutId])
+}
+
+export async function findCutScene(sceneId: string): Promise<CutScene | null> {
+  const result = await databasePool().query<CutSceneRow>(
+    `select id, cut_id, position, media_asset_id, start_ms, end_ms, created_at
+       from cut_scenes where id = $1`,
+    [sceneId],
+  )
+  return result.rows[0] ? mapCutScene(result.rows[0]) : null
+}
+
+export async function splitCutScene(input: {
+  cutId: string
+  sceneId: string
+  atMs: number
+}): Promise<CutScene[] | null> {
+  const scene = await findCutScene(input.sceneId)
+  if (!scene || scene.cutId !== input.cutId) return null
+  const splitAt = Math.floor(input.atMs)
+  if (splitAt <= scene.startMs + MIN_CLIP_MS || splitAt >= scene.endMs - MIN_CLIP_MS) return null
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(
+      `update cut_scenes
+          set end_ms = $2
+        where id = $1`,
+      [scene.id, splitAt],
+    )
+    await client.query(
+      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [randomUUID(), scene.cutId, scene.position + 1, scene.mediaAssetId, splitAt, scene.endMs],
+    )
+    await renumberCutScenes(client, scene.cutId)
+    await client.query('commit')
+    return listScenesForCut(scene.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function mergeCutSceneWithNext(input: {
+  cutId: string
+  sceneId: string
+}): Promise<CutScene[] | null> {
+  const scenes = await listScenesForCut(input.cutId)
+  const index = scenes.findIndex((scene) => scene.id === input.sceneId)
+  if (index < 0 || index >= scenes.length - 1) return null
+  const current = scenes[index]
+  const next = scenes[index + 1]
+  if (current.mediaAssetId !== next.mediaAssetId) return null
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`update cut_scenes set end_ms = $2 where id = $1`, [current.id, next.endMs])
+    await client.query(`delete from cut_scenes where id = $1`, [next.id])
+    await renumberCutScenes(client, input.cutId)
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function deleteCutScene(input: { cutId: string; sceneId: string }): Promise<CutScene[] | null> {
+  const scene = await findCutScene(input.sceneId)
+  if (!scene || scene.cutId !== input.cutId) return null
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`delete from cut_scenes where id = $1`, [scene.id])
+    await renumberCutScenes(client, input.cutId)
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
 }
