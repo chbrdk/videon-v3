@@ -124,8 +124,12 @@ export async function analyzeSceneWithOpenRouter(
   })
 
   if (!response.ok) {
+    const errorBody = await response.text().catch(() => '')
+    const detail = errorBody.trim().slice(0, 400)
     throw new OpenRouterGatewayError(
-      `OpenRouter request failed (${response.status})`,
+      detail
+        ? `OpenRouter request failed (${response.status}): ${detail}`
+        : `OpenRouter request failed (${response.status})`,
       'upstream',
       response.status >= 500 || response.status === 429,
     )

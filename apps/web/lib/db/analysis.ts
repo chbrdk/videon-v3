@@ -127,17 +127,39 @@ export async function findAnalysisRun(analysisRunId: string): Promise<AnalysisRu
 }
 
 export async function listAnalysisRunsForWorkspace(workspaceId: string): Promise<
-  Array<AnalysisRun & { mediaFilename: string; mediaLifecycleState: string }>
+  Array<
+    AnalysisRun & {
+      mediaFilename: string
+      mediaLifecycleState: string
+      failedStageKey: string | null
+      failedStageMessage: string | null
+    }
+  >
 > {
   const result = await databasePool().query<
-    AnalysisRow & { original_filename: string; lifecycle_state: string }
+    AnalysisRow & {
+      original_filename: string
+      lifecycle_state: string
+      failed_stage_key: string | null
+      failed_stage_message: string | null
+    }
   >(
     `select ar.id, ar.media_asset_id, ar.requested_by_plexon_user_id, ar.pipeline_version,
             ar.scene_schema_version, ar.requested_capabilities, ar.input_fingerprint,
             ar.idempotency_key, ar.status, ar.created_at, ar.updated_at, ar.started_at, ar.finished_at,
-            ma.original_filename, ma.lifecycle_state
+            ma.original_filename, ma.lifecycle_state,
+            failed_stage.stage_key as failed_stage_key,
+            failed_stage.error_message as failed_stage_message
        from analysis_runs ar
        join media_assets ma on ma.id = ar.media_asset_id
+       left join lateral (
+         select stage_key, error_message
+           from analysis_stage_runs
+          where analysis_run_id = ar.id
+            and status = 'failed'
+          order by updated_at desc
+          limit 1
+       ) failed_stage on true
       where ma.workspace_id = $1
       order by ar.created_at desc
       limit 100`,
@@ -147,6 +169,42 @@ export async function listAnalysisRunsForWorkspace(workspaceId: string): Promise
     ...mapAnalysis(row),
     mediaFilename: row.original_filename,
     mediaLifecycleState: row.lifecycle_state,
+    failedStageKey: row.failed_stage_key,
+    failedStageMessage: row.failed_stage_message,
+  }))
+}
+
+export async function listRecentFailedPipelineStages(limit = 5): Promise<
+  Array<{
+    analysisRunId: string
+    mediaFilename: string
+    stageKey: string
+    errorMessage: string | null
+    updatedAt: string
+  }>
+> {
+  const result = await databasePool().query<{
+    analysis_run_id: string
+    original_filename: string
+    stage_key: string
+    error_message: string | null
+    updated_at: Date
+  }>(
+    `select s.analysis_run_id, ma.original_filename, s.stage_key, s.error_message, s.updated_at
+       from analysis_stage_runs s
+       join analysis_runs ar on ar.id = s.analysis_run_id
+       join media_assets ma on ma.id = ar.media_asset_id
+      where s.status = 'failed'
+      order by s.updated_at desc
+      limit $1`,
+    [limit],
+  )
+  return result.rows.map((row) => ({
+    analysisRunId: row.analysis_run_id,
+    mediaFilename: row.original_filename,
+    stageKey: row.stage_key,
+    errorMessage: row.error_message,
+    updatedAt: new Date(row.updated_at).toISOString(),
   }))
 }
 
@@ -266,6 +324,24 @@ export async function createAnalysisRunForMedia(input: {
     [input.mediaAssetId, PIPELINE_VERSION, fingerprint, idempotencyKey],
   )
   if (existing.rows[0]) return mapAnalysis(existing.rows[0])
+
+  const failed = await databasePool().query<AnalysisRow>(
+    `update analysis_runs
+        set status = 'queued',
+            started_at = null,
+            finished_at = null,
+            updated_at = now()
+      where media_asset_id = $1
+        and pipeline_version = $2
+        and input_fingerprint = $3
+        and idempotency_key = $4
+        and status = 'failed'
+      returning id, media_asset_id, requested_by_plexon_user_id, pipeline_version, scene_schema_version,
+                requested_capabilities, input_fingerprint, idempotency_key, status,
+                created_at, updated_at, started_at, finished_at`,
+    [input.mediaAssetId, PIPELINE_VERSION, fingerprint, idempotencyKey],
+  )
+  if (failed.rows[0]) return mapAnalysis(failed.rows[0])
 
   const id = randomUUID()
   const result = await databasePool().query<AnalysisRow>(

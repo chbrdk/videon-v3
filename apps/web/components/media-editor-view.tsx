@@ -47,6 +47,7 @@ type AnalysisState = {
 type StageState = {
   stageKey: string
   status: string
+  errorMessage?: string | null
 }
 
 type TranscriptState = {
@@ -468,6 +469,25 @@ export function MediaEditorView({
             <Text role="meta" as="p">
               Analyse: {analysis?.status ?? 'keine'} · {media.lifecycleState}
             </Text>
+            {stages.length > 0 ? (
+              <>
+                <Text role="title" as="h3">
+                  Pipeline
+                </Text>
+                <ul className="videon-editor__stage-list">
+                  {stages.map((stage) => (
+                    <li key={stage.stageKey}>
+                      <span className="videon-nle__bin-item-meta">
+                        {stage.stageKey} · {stage.status}
+                      </span>
+                      {stage.status === 'failed' && stage.errorMessage ? (
+                        <span className="videon-nle__bin-item-title">{stage.errorMessage}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
 
             <Text role="title" as="h3">
               Szenen

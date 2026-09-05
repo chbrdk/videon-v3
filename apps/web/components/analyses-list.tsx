@@ -13,6 +13,8 @@ type AnalysisItem = {
   mediaLifecycleState: string
   createdAt: string
   finishedAt: string | null
+  failedStageKey?: string | null
+  failedStageMessage?: string | null
 }
 
 export function AnalysesList({ platformProjectId }: { platformProjectId: string }) {
@@ -66,7 +68,13 @@ export function AnalysesList({ platformProjectId }: { platformProjectId: string 
             <Text role="title">{item.mediaFilename}</Text>
             <Text role="meta">
               {item.status} · Medienstatus {item.mediaLifecycleState}
+              {item.status === 'failed' && item.failedStageKey
+                ? ` · ${item.failedStageKey}`
+                : ''}
             </Text>
+            {item.status === 'failed' && item.failedStageMessage ? (
+              <Text role="body">{item.failedStageMessage}</Text>
+            ) : null}
           </div>
           <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
             <Button variant="ghost">Im Editor öffnen</Button>

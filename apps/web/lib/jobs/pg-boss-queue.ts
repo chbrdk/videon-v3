@@ -77,7 +77,20 @@ export async function registerMediaAnalysisHandler(
       if (!payload?.analysisRunId || !payload?.mediaAssetId) {
         throw new Error('Invalid media analysis job payload')
       }
-      await handler(payload)
+      try {
+        await handler(payload)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(
+          '[VIDEON-v3] Media analysis job failed',
+          JSON.stringify({
+            analysisRunId: payload.analysisRunId,
+            mediaAssetId: payload.mediaAssetId,
+            message,
+          }),
+        )
+        throw error
+      }
     }
   })
 }
