@@ -79,6 +79,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3010
 ENV HOSTNAME=0.0.0.0
 ENV PLEXON_FEDERATION_MODE=dummy
+ENV VIDEON_REPO_ROOT=/workspace/videon-v3
 EXPOSE 3010
 
 # Coolify Dockerfile healthchecks shell out to curl/wget.

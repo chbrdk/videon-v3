@@ -141,16 +141,38 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
     let transcriptSegments: TranscriptSegment[] = []
     await runStage(analysisRunId, 'audio', fingerprint, 1, async () => {
       const extracted = await extractAudioTrack({ sourcePath: tempPath, destinationPath: audioPath })
-      const transcript = extracted ? await transcribeAudioFile(audioPath) : null
-      if (transcript) transcriptSegments = transcript.segments
+      if (!extracted) {
+        await upsertMediaTranscript({
+          mediaAssetId: media.id,
+          analysisRunId,
+          status: 'skipped',
+          transcriptText: null,
+          segments: [],
+        })
+        return 'no_audio_track'
+      }
+
+      const transcript = await transcribeAudioFile(audioPath)
+      if (!transcript) {
+        await upsertMediaTranscript({
+          mediaAssetId: media.id,
+          analysisRunId,
+          status: 'skipped',
+          transcriptText: null,
+          segments: [],
+        })
+        return 'transcription_disabled'
+      }
+
+      transcriptSegments = transcript.segments
       await upsertMediaTranscript({
         mediaAssetId: media.id,
         analysisRunId,
-        status: transcript ? 'ready' : extracted ? 'skipped' : 'skipped',
-        transcriptText: transcript?.text ?? null,
-        segments: transcript?.segments ?? [],
+        status: 'ready',
+        transcriptText: transcript.text,
+        segments: transcript.segments,
       })
-      return transcript ? 'transcribed' : extracted ? 'audio_extracted' : 'no_audio_track'
+      return transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
     })
 
     await runStage(analysisRunId, 'vision', fingerprint, sceneFrames.length, async () => {

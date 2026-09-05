@@ -548,6 +548,20 @@ export function MediaEditorView({
                   ))}
                 </ul>
               </>
+            ) : transcript?.status === 'skipped' ? (
+              <>
+                <Text role="title" as="h3">
+                  Transkript
+                </Text>
+                <Text role="body">Kein Transkript — keine Tonspur oder Transkription deaktiviert.</Text>
+              </>
+            ) : transcript?.status === 'failed' ? (
+              <>
+                <Text role="title" as="h3">
+                  Transkript
+                </Text>
+                <Text role="body">Transkription fehlgeschlagen. Analyse erneut starten.</Text>
+              </>
             ) : null}
           </div>
         </aside>

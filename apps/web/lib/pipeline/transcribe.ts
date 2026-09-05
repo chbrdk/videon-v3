@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { access } from 'node:fs/promises'
-import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { resolveRepoScript } from '@/lib/repo-root'
 import { transcriptionConfig } from '@/lib/runtime-config'
 
 const execFileAsync = promisify(execFile)
@@ -41,10 +41,10 @@ export async function transcribeAudioFile(audioPath: string): Promise<Transcript
   try {
     await access(audioPath)
   } catch {
-    return null
+    throw new Error('Extracted audio file is missing')
   }
 
-  const scriptPath = join(process.cwd(), 'scripts', 'transcribe-audio.py')
+  const scriptPath = await resolveRepoScript('scripts/transcribe-audio.py')
   try {
     const { stdout } = await execFileAsync('python3', [scriptPath, audioPath], {
       env: {
@@ -56,12 +56,13 @@ export async function transcribeAudioFile(audioPath: string): Promise<Transcript
       timeout: 15 * 60 * 1000,
     })
     const parsed = JSON.parse(stdout) as { text?: string; segments?: TranscriptSegment[]; error?: string }
-    if (parsed.error) return null
+    if (parsed.error) throw new Error(parsed.error)
     return {
       text: parsed.text?.trim() ?? '',
       segments: Array.isArray(parsed.segments) ? parsed.segments : [],
     }
-  } catch {
-    return null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Whisper transcription failed'
+    throw new Error(message)
   }
 }
