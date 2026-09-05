@@ -61,7 +61,7 @@ export async function sampleSceneFrames(input: {
   const frames: VisionFrame[] = []
   for (let index = 0; index < uniquePoints.length; index += 1) {
     frames.push(
-      await extractFrame(sourcePath, uniquePoints[index], `${input.sceneKey}-f${index}`),
+      await extractFrame(input.sourcePath, uniquePoints[index], `${input.sceneKey}-f${index}`),
     )
   }
   return frames
