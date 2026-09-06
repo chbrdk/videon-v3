@@ -25,7 +25,7 @@ describe('vision policy', () => {
     expect(schemaFallbackVisionLane()).toMatchObject({
       model: 'qwen/qwen3.7-flash',
       responseMode: 'json_schema',
-      providerRequireParameters: true,
+      providerRequireParameters: false,
     })
     expect(strictSchemaFallbackVisionLane()).toBeNull()
   })

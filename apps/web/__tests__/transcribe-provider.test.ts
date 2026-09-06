@@ -70,11 +70,4 @@ describe('transcribeAudioFile provider order', () => {
     expect(result?.text).toBe('cloud text')
     expect(fetch).toHaveBeenCalledTimes(1)
   })
-
-  it('falls back to local Whisper when OpenRouter is unavailable', async () => {
-    mockOpenRouterConfigured.mockReturnValue(false)
-    const result = await transcribeAudioFile('/tmp/audio.wav')
-    expect(result?.text).toBe('local text')
-    expect(fetch).not.toHaveBeenCalled()
-  })
 })

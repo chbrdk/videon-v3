@@ -59,15 +59,15 @@ describe('OpenRouter scene gateway', () => {
     expect(result.provenance.usage.costUsd).toBe('0.000100')
   })
 
-  it('sends strict JSON Schema on the same-model retry lane', async () => {
+  it('retries with strict JSON Schema without require_parameters routing', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
     process.env.OPENROUTER_API_BASE_URL = 'https://router.invalid/api/v1'
     process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
     const fetcher: typeof fetch = async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as { response_format: Record<string, unknown>; provider: Record<string, unknown>; model: string }
+      const body = JSON.parse(String(init?.body)) as { response_format: Record<string, unknown>; provider?: Record<string, unknown>; model: string }
       expect(body.model).toBe('qwen/qwen3.7-flash')
       expect(body.response_format).toMatchObject({ type: 'json_schema' })
-      expect(body.provider).toMatchObject({ require_parameters: true })
+      expect(body.provider?.require_parameters).toBeUndefined()
       return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 })
     }
     await expect(
@@ -82,5 +82,67 @@ describe('OpenRouter scene gateway', () => {
         { lane: schemaFallbackVisionLane(), fetcher },
       ),
     ).rejects.toMatchObject({ code: 'invalid_output', retryable: true })
+  })
+
+  it('retries without response_format when OpenRouter rejects parameter routing', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key'
+    process.env.OPENROUTER_API_BASE_URL = 'https://router.invalid/api/v1'
+    process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
+    process.env.VIDEON_OPENROUTER_DATA_COLLECTION = 'deny'
+    let attempts = 0
+    const fetcher: typeof fetch = async (_url, init) => {
+      attempts += 1
+      const body = JSON.parse(String(init?.body)) as { response_format?: Record<string, unknown> }
+      if (attempts === 1) {
+        expect(body.response_format).toMatchObject({ type: 'json_object' })
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'No endpoints found that can handle the requested parameters.',
+              code: 404,
+            },
+          }),
+          { status: 404 },
+        )
+      }
+      expect(body.response_format).toBeUndefined()
+      return new Response(
+        JSON.stringify({
+          model: 'qwen/qwen3.7-flash',
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  schemaVersion: 'videon.scene-insight.v1',
+                  summary: 'Recovered after routing fallback.',
+                  subjects: [],
+                  actions: [],
+                  setting: { location: 'unknown', timeOfDay: 'unknown', details: [] },
+                  mood: [],
+                  notableDetails: [],
+                  safetyFlags: [],
+                }),
+              },
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, cost: 0.0001 },
+        }),
+        { status: 200 },
+      )
+    }
+
+    const result = await analyzeSceneWithOpenRouter(
+      {
+        locale: 'de',
+        startMs: 0,
+        endMs: 1000,
+        frames: [{ id: 'frame-1', timestampMs: 500, dataUrl: 'data:image/jpeg;base64,AA==' }],
+        userPseudonym: 'u_hash',
+      },
+      { fetcher },
+    )
+
+    expect(attempts).toBeGreaterThan(1)
+    expect(result.insight.summary).toBe('Recovered after routing fallback.')
   })
 })

@@ -75,22 +75,25 @@ async function analyzeSceneWithFallback(input: Parameters<typeof analyzeSceneWit
   try {
     return await analyzeSceneWithOpenRouter(input, { lane: defaultVisionLane() })
   } catch (error) {
-    if (!(error instanceof OpenRouterGatewayError) || error.code !== 'invalid_output') {
-      throw error
-    }
-    try {
-      return await analyzeSceneWithOpenRouter(input, { lane: schemaFallbackVisionLane() })
-    } catch (retryError) {
-      const strictLane = strictSchemaFallbackVisionLane()
-      if (
-        strictLane &&
-        retryError instanceof OpenRouterGatewayError &&
-        retryError.code === 'invalid_output'
-      ) {
-        return analyzeSceneWithOpenRouter(input, { lane: strictLane })
+    if (
+      error instanceof OpenRouterGatewayError &&
+      (error.code === 'invalid_output' || (error.code === 'upstream' && error.retryable))
+    ) {
+      try {
+        return await analyzeSceneWithOpenRouter(input, { lane: schemaFallbackVisionLane() })
+      } catch (retryError) {
+        const strictLane = strictSchemaFallbackVisionLane()
+        if (
+          strictLane &&
+          retryError instanceof OpenRouterGatewayError &&
+          (retryError.code === 'invalid_output' || (retryError.code === 'upstream' && retryError.retryable))
+        ) {
+          return analyzeSceneWithOpenRouter(input, { lane: strictLane })
+        }
+        throw retryError
       }
-      throw retryError
     }
+    throw error
   }
 }
 

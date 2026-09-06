@@ -46,6 +46,12 @@ export class OpenRouterGatewayError extends Error {
   }
 }
 
+type VisionRequestProfile = {
+  responseMode: VisionLane['responseMode'] | 'none'
+  providerRequireParameters: boolean
+  includeProviderPolicy: boolean
+}
+
 function scenePrompt(input: AnalyzeSceneInput): string {
   const frameIds = input.frames.map((frame) => frame.id).join(', ')
   return [
@@ -70,6 +76,60 @@ function asCost(value: unknown): string | null {
   return null
 }
 
+function responseFormatForProfile(profile: VisionRequestProfile) {
+  if (profile.responseMode === 'json_schema') {
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: 'videon_scene_insight_v1',
+        strict: true,
+        schema: sceneInsightJsonSchema,
+      },
+    }
+  }
+  if (profile.responseMode === 'json_object') {
+    return { type: 'json_object' }
+  }
+  return undefined
+}
+
+function isParameterRoutingFailure(status: number, detail: string): boolean {
+  if (status !== 404 && status !== 422) return false
+  return /parameter|routing|endpoint/i.test(detail)
+}
+
+function visionRequestProfiles(lane: VisionLane): VisionRequestProfile[] {
+  const profiles: VisionRequestProfile[] = [
+    {
+      responseMode: lane.responseMode,
+      providerRequireParameters: lane.providerRequireParameters,
+      includeProviderPolicy: true,
+    },
+  ]
+
+  if (lane.responseMode === 'json_schema' || lane.providerRequireParameters) {
+    profiles.push({
+      responseMode: 'json_object',
+      providerRequireParameters: false,
+      includeProviderPolicy: true,
+    })
+  }
+
+  profiles.push({
+    responseMode: 'none',
+    providerRequireParameters: false,
+    includeProviderPolicy: true,
+  })
+
+  profiles.push({
+    responseMode: 'none',
+    providerRequireParameters: false,
+    includeProviderPolicy: false,
+  })
+
+  return profiles
+}
+
 /** Server-only OpenRouter boundary. Browser clients never receive API keys or provider routing controls. */
 export async function analyzeSceneWithOpenRouter(
   input: AnalyzeSceneInput,
@@ -90,29 +150,14 @@ export async function analyzeSceneWithOpenRouter(
   }
   const fetcher = options.fetcher ?? fetch
   const policy = openRouterProviderPolicy()
-  const responseFormat =
-    lane.responseMode === 'json_schema'
-      ? {
-          type: 'json_schema',
-          json_schema: {
-            name: 'videon_scene_insight_v1',
-            strict: true,
-            schema: sceneInsightJsonSchema,
-          },
-        }
-      : { type: 'json_object' }
-  const response = await fetcher(`${apiBase}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const profiles = visionRequestProfiles(lane)
+  const routingErrors: string[] = []
+
+  for (const profile of profiles) {
+    const responseFormat = responseFormatForProfile(profile)
+    const body: Record<string, unknown> = {
       model: lane.model,
       user: input.userPseudonym,
-      response_format: responseFormat,
-      provider: {
-        data_collection: policy.dataCollection,
-        ...(policy.zdr ? { zdr: true } : {}),
-        ...(lane.providerRequireParameters ? { require_parameters: true } : {}),
-      },
       messages: [
         {
           role: 'user',
@@ -122,55 +167,80 @@ export async function analyzeSceneWithOpenRouter(
           ],
         },
       ],
-    }),
-  })
+    }
+    if (responseFormat) body.response_format = responseFormat
+    if (profile.includeProviderPolicy) {
+      body.provider = {
+        data_collection: policy.dataCollection,
+        ...(policy.zdr ? { zdr: true } : {}),
+        ...(profile.providerRequireParameters ? { require_parameters: true } : {}),
+      }
+    }
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '')
-    const detail = errorBody.trim().slice(0, 400)
-    throw new OpenRouterGatewayError(
-      detail
+    const response = await fetcher(`${apiBase}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '')
+      const detail = errorBody.trim().slice(0, 400)
+      const message = detail
         ? `OpenRouter request failed (${response.status}): ${detail}`
-        : `OpenRouter request failed (${response.status})`,
-      'upstream',
-      response.status >= 500 || response.status === 429,
-    )
-  }
+        : `OpenRouter request failed (${response.status})`
+      if (isParameterRoutingFailure(response.status, detail)) {
+        routingErrors.push(message)
+        continue
+      }
+      throw new OpenRouterGatewayError(
+        message,
+        'upstream',
+        response.status >= 500 || response.status === 429,
+      )
+    }
 
-  const body = (await response.json()) as Record<string, unknown>
-  const choices = Array.isArray(body.choices) ? body.choices : []
-  const first = choices[0] as { message?: { content?: unknown } } | undefined
-  const content = typeof first?.message?.content === 'string' ? first.message.content : ''
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch {
-    throw new OpenRouterGatewayError('OpenRouter returned invalid JSON', 'invalid_output', true)
-  }
-  const insight = parseSceneInsight(parsed, input.frames.map((frame) => frame.id))
-  if (!insight) {
-    throw new OpenRouterGatewayError('OpenRouter output does not satisfy the scene schema', 'invalid_output', true)
-  }
+    const payload = (await response.json()) as Record<string, unknown>
+    const choices = Array.isArray(payload.choices) ? payload.choices : []
+    const first = choices[0] as { message?: { content?: unknown } } | undefined
+    const content = typeof first?.message?.content === 'string' ? first.message.content : ''
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(content)
+    } catch {
+      throw new OpenRouterGatewayError('OpenRouter returned invalid JSON', 'invalid_output', true)
+    }
+    const insight = parseSceneInsight(parsed, input.frames.map((frame) => frame.id))
+    if (!insight) {
+      throw new OpenRouterGatewayError('OpenRouter output does not satisfy the scene schema', 'invalid_output', true)
+    }
 
-  const usage = (body.usage ?? {}) as Record<string, unknown>
-  const details = usage.completion_tokens_details as Record<string, unknown> | undefined
-  const promptDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined
-  return {
-    insight,
-    provenance: {
-      requestedModel: lane.model,
-      actualModel: typeof body.model === 'string' ? body.model : lane.model,
-      provider: typeof body.provider === 'string' ? body.provider : null,
-      requestId: response.headers.get('x-request-id'),
-      promptVersion: 'videon.scene-analysis-prompt.v1',
-      schemaVersion: SCENE_INSIGHT_SCHEMA_VERSION,
-      usage: {
-        promptTokens: asNumber(usage.prompt_tokens),
-        completionTokens: asNumber(usage.completion_tokens),
-        reasoningTokens: asNumber(details?.reasoning_tokens),
-        cachedTokens: asNumber(promptDetails?.cached_tokens),
-        costUsd: asCost(usage.cost),
+    const usage = (payload.usage ?? {}) as Record<string, unknown>
+    const details = usage.completion_tokens_details as Record<string, unknown> | undefined
+    const promptDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined
+    return {
+      insight,
+      provenance: {
+        requestedModel: lane.model,
+        actualModel: typeof payload.model === 'string' ? payload.model : lane.model,
+        provider: typeof payload.provider === 'string' ? payload.provider : null,
+        requestId: response.headers.get('x-request-id'),
+        promptVersion: 'videon.scene-analysis-prompt.v1',
+        schemaVersion: SCENE_INSIGHT_SCHEMA_VERSION,
+        usage: {
+          promptTokens: asNumber(usage.prompt_tokens),
+          completionTokens: asNumber(usage.completion_tokens),
+          reasoningTokens: asNumber(details?.reasoning_tokens),
+          cachedTokens: asNumber(promptDetails?.cached_tokens),
+          costUsd: asCost(usage.cost),
+        },
       },
-    },
+    }
   }
+
+  throw new OpenRouterGatewayError(
+    routingErrors.at(-1) ?? 'OpenRouter request failed (404): no compatible provider route',
+    'upstream',
+    true,
+  )
 }

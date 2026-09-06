@@ -31,7 +31,7 @@ export function schemaFallbackVisionLane(): VisionLane {
     inputMode: 'frames',
     responseMode: 'json_schema',
     localSchemaValidation: true,
-    providerRequireParameters: true,
+    providerRequireParameters: false,
   }
 }
 
@@ -43,7 +43,7 @@ export function strictSchemaFallbackVisionLane(): VisionLane | null {
     inputMode: 'frames',
     responseMode: 'json_schema',
     localSchemaValidation: true,
-    providerRequireParameters: true,
+    providerRequireParameters: false,
   }
 }
 
