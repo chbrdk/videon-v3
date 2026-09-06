@@ -11,7 +11,6 @@ import { resolveMediaInWorkspace, resolveWorkspaceForMediaRequest } from '@/lib/
 import { requireSessionUserId } from '@/lib/session-user'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMedia } from '@/lib/db/media-stems'
-import { stemDemucsEnabled } from '@/lib/runtime-config'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
@@ -74,10 +73,6 @@ export async function GET(request: Request, context: RouteContext) {
     scenes,
     transcript,
     stems,
-    stemOptions: {
-      demucsEnabled: stemDemucsEnabled(),
-      defaultMethod: 'ffmpeg_mid_side',
-    },
   })
 }
 

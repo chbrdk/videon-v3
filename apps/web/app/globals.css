@@ -399,6 +399,32 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   cursor: pointer;
 }
 
+.videon-nle__stem-method {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: 0.15rem;
+}
+
+.videon-nle__stem-method-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--nle-muted, var(--muted));
+}
+
+.videon-nle__stem-method-select {
+  appearance: none;
+  border: 1px solid var(--nle-border, var(--line));
+  background: var(--nle-panel-2, transparent);
+  color: var(--nle-text, inherit);
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  max-width: 12rem;
+}
+
 .videon-nle__toolbar-title {
   display: grid;
   gap: 0.1rem;

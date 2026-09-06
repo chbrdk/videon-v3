@@ -138,8 +138,3 @@ export function transcriptionConfig(): {
     language: env(paths.envWhisperLanguage) || 'de',
   }
 }
-
-/** Neural Demucs stems are opt-in and require VIDEON_STEM_DEMUCS_ENABLED plus a local demucs install. */
-export function stemDemucsEnabled(): boolean {
-  return asBoolean(env(paths.envStemDemucsEnabled))
-}

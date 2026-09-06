@@ -79,8 +79,7 @@ export function MediaEditorView({
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
-  const [demucsEnabled, setDemucsEnabled] = useState(false)
-  const [useDemucsStems, setUseDemucsStems] = useState(false)
+  const [stemMethod, setStemMethod] = useState<'ffmpeg_mid_side' | 'demucs'>('ffmpeg_mid_side')
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -117,7 +116,6 @@ export function MediaEditorView({
       scenes?: SceneItem[]
       transcript?: TranscriptState
       stems?: { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null } | null
-      stemOptions?: { demucsEnabled?: boolean; defaultMethod?: string } | null
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Mediendetails konnten nicht geladen werden')
@@ -128,7 +126,6 @@ export function MediaEditorView({
     setTranscript(body.transcript ?? null)
     setVoicePeaks(body.stems?.voicePeaks ?? [])
     setMusicPeaks(body.stems?.musicPeaks ?? [])
-    setDemucsEnabled(Boolean(body.stemOptions?.demucsEnabled))
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -302,7 +299,7 @@ export function MediaEditorView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stemMethod: demucsEnabled && useDemucsStems ? 'demucs' : 'ffmpeg_mid_side',
+          stemMethod,
         }),
       })
       const body = (await response.json()) as { error?: { message?: string } }
@@ -482,6 +479,21 @@ export function MediaEditorView({
               In/Out zum Cut
             </Button>
           ) : null}
+          <label className="videon-nle__stem-method">
+            <span className="videon-nle__stem-method-label">Stems</span>
+            <select
+              className="videon-nle__stem-method-select"
+              value={stemMethod}
+              disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+              onChange={(event) =>
+                setStemMethod(event.target.value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
+              }
+              title="Voice/Music-Trennung für die nächste Analyse"
+            >
+              <option value="ffmpeg_mid_side">Schnell (Mid/Side)</option>
+              <option value="demucs">Neural (Demucs)</option>
+            </select>
+          </label>
           <Button
             type="button"
             variant="ghost"
@@ -496,17 +508,6 @@ export function MediaEditorView({
               <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
                 Aktualisieren
               </Button>
-              {demucsEnabled ? (
-                <label className="videon-nle__toolbar-check">
-                  <input
-                    type="checkbox"
-                    checked={useDemucsStems}
-                    onChange={(event) => setUseDemucsStems(event.target.checked)}
-                    disabled={Boolean(busy)}
-                  />
-                  <span>Neural Stems (Demucs)</span>
-                </label>
-              ) : null}
               {scenes.length > 1 ? (
                 <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
                   Alle Szenen als Cut
