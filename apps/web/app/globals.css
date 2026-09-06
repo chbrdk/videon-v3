@@ -328,6 +328,8 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 
 .videon-nle--player-first {
   min-height: min(86vh, 64rem);
+  /* Keep the program monitor visible when the timeline grows (A1+A2+TX). */
+  grid-template-rows: auto minmax(18rem, 1fr) minmax(10rem, 34vh);
 }
 
 .videon-nle__toolbar {
@@ -518,7 +520,8 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 .videon-nle__monitor {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: clamp(16rem, 54vh, 42rem);
+  min-height: clamp(16rem, 42vh, 42rem);
+  height: 100%;
 }
 
 .videon-nle__monitor.is-fullscreen {
@@ -610,9 +613,11 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 .videon-nle__player-wrap {
   position: relative;
   background: #000;
-  min-height: clamp(14rem, 50vh, 38rem);
+  min-height: clamp(14rem, 38vh, 34rem);
+  height: 100%;
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
 
 .videon-nle__monitor-hud {
@@ -700,7 +705,9 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 .videon-nle__video {
   display: block;
   width: 100%;
-  max-height: clamp(12rem, 34vh, 24rem);
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
   background: #000;
 }
 
@@ -812,7 +819,9 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 .videon-nle__timeline-dock {
   border-top: 1px solid var(--nle-border-strong);
   background: var(--nle-panel);
-  min-height: 12rem;
+  min-height: 10rem;
+  max-height: 34vh;
+  overflow: auto;
 }
 
 .videon-nle__shortcuts {

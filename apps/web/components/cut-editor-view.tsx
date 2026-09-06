@@ -344,8 +344,16 @@ export function CutEditorView({
     const frameMs = frameDurationMs(cut?.frameRate)
 
     const onLoaded = () => {
+      if (video.readyState < 1) return
       const playhead = cutPlayheadRef.current
-      video.currentTime = (clip.scene.startMs + Math.max(playhead - item.cutStartMs, 0)) / 1000
+      const targetSec = (clip.scene.startMs + Math.max(playhead - item.cutStartMs, 0)) / 1000
+      if (Number.isFinite(targetSec)) {
+        try {
+          video.currentTime = targetSec
+        } catch {
+          // Ignore seeks before the media timeline is ready.
+        }
+      }
       if (playingRef.current) void video.play().catch(() => {})
     }
     const onTime = () => {
@@ -353,6 +361,7 @@ export function CutEditorView({
       const nextCutMs = cutPlayheadForSourceMs(timeline, clip.scene.id, sourceMs)
       setCutPlayheadMs(nextCutMs)
 
+      if (!playingRef.current) return
       if (advanceLockRef.current === activeIndex) return
       if (
         !shouldAdvanceAtSourceMs({
@@ -425,12 +434,14 @@ export function CutEditorView({
       setIsPlaying(false)
     }
     video.addEventListener('loadedmetadata', onLoaded)
+    video.addEventListener('loadeddata', onLoaded)
     video.addEventListener('timeupdate', onTime)
     video.addEventListener('play', onPlay)
     video.addEventListener('pause', onPause)
-    onLoaded()
+    if (video.readyState >= 1) onLoaded()
     return () => {
       video.removeEventListener('loadedmetadata', onLoaded)
+      video.removeEventListener('loadeddata', onLoaded)
       video.removeEventListener('timeupdate', onTime)
       video.removeEventListener('play', onPlay)
       video.removeEventListener('pause', onPause)
