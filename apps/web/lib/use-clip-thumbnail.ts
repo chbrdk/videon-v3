@@ -10,9 +10,14 @@ async function captureThumbnail(videoUrl: string, atMs: number): Promise<string 
   const cached = thumbnailCache.get(cacheKey)
   if (cached) return cached
 
+  const sameOrigin =
+    videoUrl.startsWith('/') ||
+    (typeof window !== 'undefined' &&
+      (videoUrl.startsWith(window.location.origin) || videoUrl.startsWith(`${window.location.origin}/`)))
+
   return new Promise((resolve) => {
     const video = document.createElement('video')
-    video.crossOrigin = 'anonymous'
+    if (!sameOrigin) video.crossOrigin = 'anonymous'
     video.muted = true
     video.preload = 'auto'
     video.playsInline = true

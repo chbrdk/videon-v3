@@ -1,14 +1,19 @@
-import { apiError, apiJson } from '@/lib/api-response'
+import { apiError } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import { resolveMediaInWorkspace } from '@/lib/media-access'
-import { paths } from '@/lib/paths'
 import { objectStorageConfig } from '@/lib/runtime-config'
+import { resolveMediaInWorkspace } from '@/lib/media-access'
 import { requireSessionUserId } from '@/lib/session-user'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
+import { Readable } from 'node:stream'
 
 export const dynamic = 'force-dynamic'
 
 type RouteContext = { params: Promise<{ mediaAssetId: string }> }
+
+function contentDisposition(filename: string): string {
+  const clean = filename.replace(/[\r\n"\\]/g, '_').slice(0, 180) || 'video'
+  return `inline; filename="${clean}"`
+}
 
 export async function GET(request: Request, context: RouteContext) {
   const userId = await requireSessionUserId()
@@ -45,21 +50,25 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 409, 'invalid_payload', 'Upload is not complete yet')
   }
 
+  const range = request.headers.get('range')
   const store = new S3ObjectStore()
-  const target = await store.createDownloadTarget({
+  const object = await store.openObjectStream({
     workspaceId: resolved.workspace.id,
     storageKey: resolved.media.storageKey,
-    mediaAssetId: resolved.media.id,
-    filename: resolved.media.originalFilename,
-    disposition: 'inline',
+    range,
   })
 
-  const origin = new URL(request.url).origin
+  const headers = new Headers({
+    'Content-Type': object.contentType ?? resolved.media.mimeType ?? 'application/octet-stream',
+    'Content-Disposition': contentDisposition(resolved.media.originalFilename),
+    'Accept-Ranges': object.acceptRanges ?? 'bytes',
+    'Cache-Control': 'private, max-age=60',
+  })
+  if (object.contentLength !== undefined) headers.set('Content-Length', String(object.contentLength))
+  if (object.contentRange) headers.set('Content-Range', object.contentRange)
 
-  return apiJson(request, {
-    playbackUrl: `${origin}${paths.routes.apiMediaStream(mediaAssetId, platformProjectId)}`,
-    signedPlaybackUrl: target.uploadUrl,
-    expiresAt: target.expiresAt,
-    mimeType: resolved.media.mimeType,
+  return new Response(Readable.toWeb(object.body) as ReadableStream, {
+    status: object.statusCode,
+    headers,
   })
 }

@@ -164,27 +164,39 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
         return 'no_audio_track'
       }
 
-      const transcript = await transcribeAudioFile(audioPath)
-      if (!transcript) {
+      try {
+        const transcript = await transcribeAudioFile(audioPath)
+        if (!transcript) {
+          await upsertMediaTranscript({
+            mediaAssetId: media.id,
+            analysisRunId,
+            status: 'skipped',
+            transcriptText: null,
+            segments: [],
+          })
+          return 'transcription_disabled'
+        }
+
+        transcriptSegments = transcript.segments
         await upsertMediaTranscript({
           mediaAssetId: media.id,
           analysisRunId,
-          status: 'skipped',
+          status: 'ready',
+          transcriptText: transcript.text,
+          segments: transcript.segments,
+        })
+        return transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Transcription failed'
+        await upsertMediaTranscript({
+          mediaAssetId: media.id,
+          analysisRunId,
+          status: 'failed',
           transcriptText: null,
           segments: [],
         })
-        return 'transcription_disabled'
+        return `transcription_failed:${message.slice(0, 240)}`
       }
-
-      transcriptSegments = transcript.segments
-      await upsertMediaTranscript({
-        mediaAssetId: media.id,
-        analysisRunId,
-        status: 'ready',
-        transcriptText: transcript.text,
-        segments: transcript.segments,
-      })
-      return transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
     })
 
     await runStage(analysisRunId, 'vision', fingerprint, sceneFrames.length, async () => {

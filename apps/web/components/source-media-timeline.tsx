@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text } from '@msqdx/ui'
+import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import { formatClock } from '@/lib/editor-time'
 import {
   buildTimelineTicks,
@@ -28,6 +29,7 @@ type SourceTranscriptSegment = {
 type SourceMediaTimelineProps = {
   durationMs: number
   playheadMs: number
+  playbackUrl?: string | null
   scenes: SourceScene[]
   transcriptSegments?: SourceTranscriptSegment[]
   peaks: number[]
@@ -43,6 +45,7 @@ const ZOOM_LEVELS = [1, 2, 4, 8] as const
 export function SourceMediaTimeline({
   durationMs,
   playheadMs,
+  playbackUrl = null,
   scenes,
   transcriptSegments = [],
   peaks,
@@ -193,7 +196,9 @@ export function SourceMediaTimeline({
                     }}
                   />
                 ) : null}
-                {scenes.map((scene) => (
+                {scenes.map((scene) => {
+                  const thumbMs = scene.startMs + Math.floor((scene.endMs - scene.startMs) / 2)
+                  return (
                   <button
                     key={scene.sceneKey}
                     type="button"
@@ -208,9 +213,11 @@ export function SourceMediaTimeline({
                     }}
                     title={scene.summary}
                   >
+                    <TimelineClipThumbnail playbackUrl={playbackUrl} sourceMs={thumbMs} />
                     <span className="videon-cut-timeline__clip-label">{scene.summary}</span>
                   </button>
-                ))}
+                  )
+                })}
               </div>
 
               <div className="videon-cut-timeline__track videon-cut-timeline__track--audio">

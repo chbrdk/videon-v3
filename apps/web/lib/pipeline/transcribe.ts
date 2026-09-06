@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { resolveRepoScript } from '@/lib/repo-root'
 import { transcriptionConfig } from '@/lib/runtime-config'
+import { transcribeAudioWithOpenRouter } from '@/lib/pipeline/openrouter-transcribe'
 
 const execFileAsync = promisify(execFile)
 
@@ -34,6 +35,26 @@ export function transcriptExcerptForScene(
   return excerpt || undefined
 }
 
+async function transcribeAudioLocally(audioPath: string): Promise<TranscriptResult> {
+  const config = transcriptionConfig()
+  const scriptPath = await resolveRepoScript('scripts/transcribe-audio.py')
+  const { stdout } = await execFileAsync('python3', [scriptPath, audioPath], {
+    env: {
+      ...process.env,
+      VIDEON_WHISPER_MODEL: config.whisperModel,
+      VIDEON_WHISPER_LANGUAGE: config.language,
+    },
+    maxBuffer: 8 * 1024 * 1024,
+    timeout: 15 * 60 * 1000,
+  })
+  const parsed = JSON.parse(stdout) as { text?: string; segments?: TranscriptSegment[]; error?: string }
+  if (parsed.error) throw new Error(parsed.error)
+  return {
+    text: parsed.text?.trim() ?? '',
+    segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+  }
+}
+
 export async function transcribeAudioFile(audioPath: string): Promise<TranscriptResult | null> {
   const config = transcriptionConfig()
   if (!config.enabled) return null
@@ -44,25 +65,32 @@ export async function transcribeAudioFile(audioPath: string): Promise<Transcript
     throw new Error('Extracted audio file is missing')
   }
 
-  const scriptPath = await resolveRepoScript('scripts/transcribe-audio.py')
-  try {
-    const { stdout } = await execFileAsync('python3', [scriptPath, audioPath], {
-      env: {
-        ...process.env,
-        VIDEON_WHISPER_MODEL: config.whisperModel,
-        VIDEON_WHISPER_LANGUAGE: config.language,
-      },
-      maxBuffer: 8 * 1024 * 1024,
-      timeout: 15 * 60 * 1000,
-    })
-    const parsed = JSON.parse(stdout) as { text?: string; segments?: TranscriptSegment[]; error?: string }
-    if (parsed.error) throw new Error(parsed.error)
-    return {
-      text: parsed.text?.trim() ?? '',
-      segments: Array.isArray(parsed.segments) ? parsed.segments : [],
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Whisper transcription failed'
-    throw new Error(message)
+  const errors: string[] = []
+
+  if (config.provider === 'openrouter') {
+    return transcribeAudioWithOpenRouter(audioPath)
   }
+
+  if (config.provider === 'local' || config.provider === 'auto') {
+    try {
+      return await transcribeAudioLocally(audioPath)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Local Whisper transcription failed'
+      errors.push(message)
+      if (config.provider === 'local') {
+        throw new Error(message)
+      }
+    }
+  }
+
+  if (config.provider === 'auto') {
+    try {
+      return await transcribeAudioWithOpenRouter(audioPath)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'OpenRouter transcription failed'
+      errors.push(message)
+    }
+  }
+
+  throw new Error(errors.join(' · ') || 'Transcription failed')
 }

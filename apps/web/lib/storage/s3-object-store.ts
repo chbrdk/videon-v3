@@ -149,6 +149,37 @@ export class S3ObjectStore implements ObjectStore {
     await pipeline(object.Body as Readable, createWriteStream(input.destinationPath))
   }
 
+  async openObjectStream(input: {
+    workspaceId: string
+    storageKey: string
+    range?: string | null
+  }): Promise<{
+    body: Readable
+    contentType: string | undefined
+    contentLength: number | undefined
+    contentRange: string | undefined
+    acceptRanges: string | undefined
+    statusCode: 200 | 206
+  }> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    const object = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: input.storageKey,
+        ...(input.range ? { Range: input.range } : {}),
+      }),
+    )
+    if (!object.Body) throw new Error('Stored object body is missing')
+    return {
+      body: object.Body as Readable,
+      contentType: object.ContentType,
+      contentLength: object.ContentLength,
+      contentRange: object.ContentRange,
+      acceptRanges: object.AcceptRanges,
+      statusCode: object.ContentRange ? 206 : 200,
+    }
+  }
+
   async removeObject(input: { workspaceId: string; storageKey: string }): Promise<void> {
     assertWorkspaceKey(input.workspaceId, input.storageKey)
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: input.storageKey }))

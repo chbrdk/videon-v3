@@ -54,6 +54,8 @@ export const paths = {
   envOpenRouterDataCollection: 'VIDEON_OPENROUTER_DATA_COLLECTION',
   envOpenRouterRequireZdr: 'VIDEON_OPENROUTER_REQUIRE_ZDR',
   envTranscriptionEnabled: 'VIDEON_TRANSCRIPTION_ENABLED',
+  envTranscriptionProvider: 'VIDEON_TRANSCRIPTION_PROVIDER',
+  envTranscriptionOpenRouterModel: 'VIDEON_TRANSCRIPTION_OPENROUTER_MODEL',
   envWhisperModel: 'VIDEON_WHISPER_MODEL',
   envWhisperLanguage: 'VIDEON_WHISPER_LANGUAGE',
   routes: {
@@ -78,6 +80,8 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaPlayback: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/playback?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaStream: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaAnalysis: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaSearch: (platformProjectId: string, query: string) =>

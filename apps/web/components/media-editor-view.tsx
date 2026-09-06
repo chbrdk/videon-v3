@@ -561,6 +561,7 @@ export function MediaEditorView({
         <SourceMediaTimeline
           durationMs={timelineDuration}
           playheadMs={currentMs}
+          playbackUrl={playbackUrl}
           scenes={scenes.map((scene) => ({
             sceneKey: scene.sceneKey,
             startMs: scene.startMs,

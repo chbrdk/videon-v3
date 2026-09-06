@@ -113,14 +113,23 @@ export function isPlexonAuthConfigured(): boolean {
 
 export function transcriptionConfig(): {
   enabled: boolean
+  provider: 'local' | 'openrouter' | 'auto'
+  openRouterModel: string
   whisperModel: string
   language: string
 } {
   const enabled = env(paths.envTranscriptionEnabled)
     ? asBoolean(env(paths.envTranscriptionEnabled))
     : true
+  const providerRaw = env(paths.envTranscriptionProvider).toLowerCase()
+  const provider =
+    providerRaw === 'local' || providerRaw === 'openrouter' || providerRaw === 'auto'
+      ? providerRaw
+      : 'auto'
   return {
     enabled,
+    provider,
+    openRouterModel: env(paths.envTranscriptionOpenRouterModel) || 'openai/whisper-large-v3',
     whisperModel: env(paths.envWhisperModel) || 'tiny',
     language: env(paths.envWhisperLanguage) || 'de',
   }
