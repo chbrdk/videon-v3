@@ -65,6 +65,10 @@ export function openRouterApiKey(): string {
   return env(paths.envOpenRouterApiKey)
 }
 
+export function isOpenRouterTranscriptionConfigured(): boolean {
+  return Boolean(openRouterApiKey() && openRouterApiBaseUrl())
+}
+
 export function openRouterApiBaseUrl(): string {
   return env(paths.envOpenRouterApiBaseUrl).replace(/\/$/, '')
 }
@@ -129,8 +133,8 @@ export function transcriptionConfig(): {
   return {
     enabled,
     provider,
-    openRouterModel: env(paths.envTranscriptionOpenRouterModel) || 'openai/whisper-large-v3',
-    whisperModel: env(paths.envWhisperModel) || 'tiny',
+    openRouterModel: env(paths.envTranscriptionOpenRouterModel) || 'openai/gpt-4o-mini-transcribe',
+    whisperModel: env(paths.envWhisperModel) || 'small',
     language: env(paths.envWhisperLanguage) || 'de',
   }
 }

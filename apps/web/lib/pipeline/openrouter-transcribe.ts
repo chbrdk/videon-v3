@@ -40,37 +40,51 @@ export async function transcribeAudioWithOpenRouter(
   const config = transcriptionConfig()
   const audioBytes = await readFile(audioPath)
   const fetcher = options.fetcher ?? fetch
-  const response = await fetcher(`${apiBase}/audio/transcriptions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: config.openRouterModel,
-      language: config.language,
-      response_format: 'verbose_json',
-      input_audio: {
-        data: audioBytes.toString('base64'),
-        format: 'wav',
+  const models = [config.openRouterModel]
+  if (!models.includes('openai/whisper-large-v3')) {
+    models.push('openai/whisper-large-v3')
+  }
+
+  const errors: string[] = []
+  for (const model of models) {
+    const response = await fetcher(`${apiBase}/audio/transcriptions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
-    }),
-  })
+      body: JSON.stringify({
+        model,
+        language: config.language,
+        temperature: 0,
+        response_format: 'verbose_json',
+        timestamp_granularities: ['segment'],
+        input_audio: {
+          data: audioBytes.toString('base64'),
+          format: 'wav',
+        },
+      }),
+    })
 
-  const bodyText = await response.text()
-  let body: VerboseTranscriptionResponse
-  try {
-    body = JSON.parse(bodyText) as VerboseTranscriptionResponse
-  } catch {
-    throw new Error(`OpenRouter transcription returned invalid JSON (${response.status})`)
+    const bodyText = await response.text()
+    let body: VerboseTranscriptionResponse
+    try {
+      body = JSON.parse(bodyText) as VerboseTranscriptionResponse
+    } catch {
+      errors.push(`${model}: invalid JSON (${response.status})`)
+      continue
+    }
+
+    if (!response.ok) {
+      const message = body.error?.message ?? bodyText.slice(0, 240)
+      errors.push(`${model}: ${message}`)
+      continue
+    }
+
+    const segments = mapVerboseSegments(body.segments)
+    const text = body.text?.trim() || segments.map((segment) => segment.text).join(' ').trim()
+    return { text, segments }
   }
 
-  if (!response.ok) {
-    const message = body.error?.message ?? bodyText.slice(0, 240)
-    throw new Error(`OpenRouter transcription failed (${response.status}): ${message}`)
-  }
-
-  const segments = mapVerboseSegments(body.segments)
-  const text = body.text?.trim() || segments.map((segment) => segment.text).join(' ').trim()
-  return { text, segments }
+  throw new Error(`OpenRouter transcription failed: ${errors.join(' · ')}`)
 }

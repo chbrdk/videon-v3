@@ -4,6 +4,18 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(async () => Buffer.from('fake-wav')),
 }))
 
+vi.mock('@/lib/runtime-config', () => ({
+  transcriptionConfig: () => ({
+    enabled: true,
+    provider: 'openrouter',
+    openRouterModel: 'openai/gpt-4o-mini-transcribe',
+    whisperModel: 'small',
+    language: 'de',
+  }),
+  openRouterApiBaseUrl: () => 'https://openrouter.ai/api/v1',
+  openRouterApiKey: () => 'test-key',
+}))
+
 describe('transcribeAudioWithOpenRouter', () => {
   beforeEach(() => {
     vi.stubGlobal(

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { resolveRepoScript } from '@/lib/repo-root'
-import { transcriptionConfig } from '@/lib/runtime-config'
+import { isOpenRouterTranscriptionConfigured, transcriptionConfig } from '@/lib/runtime-config'
 import { transcribeAudioWithOpenRouter } from '@/lib/pipeline/openrouter-transcribe'
 
 const execFileAsync = promisify(execFile)
@@ -55,6 +55,20 @@ async function transcribeAudioLocally(audioPath: string): Promise<TranscriptResu
   }
 }
 
+async function runTranscriptionAttempt(
+  label: string,
+  fn: () => Promise<TranscriptResult>,
+  errors: string[],
+): Promise<TranscriptResult | null> {
+  try {
+    return await fn()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `${label} failed`
+    errors.push(message)
+    return null
+  }
+}
+
 export async function transcribeAudioFile(audioPath: string): Promise<TranscriptResult | null> {
   const config = transcriptionConfig()
   if (!config.enabled) return null
@@ -68,28 +82,27 @@ export async function transcribeAudioFile(audioPath: string): Promise<Transcript
   const errors: string[] = []
 
   if (config.provider === 'openrouter') {
-    return transcribeAudioWithOpenRouter(audioPath)
+    const result = await runTranscriptionAttempt('OpenRouter transcription', () => transcribeAudioWithOpenRouter(audioPath), errors)
+    if (result) return result
+    throw new Error(errors.join(' · ') || 'OpenRouter transcription failed')
   }
 
-  if (config.provider === 'local' || config.provider === 'auto') {
-    try {
-      return await transcribeAudioLocally(audioPath)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Local Whisper transcription failed'
-      errors.push(message)
-      if (config.provider === 'local') {
-        throw new Error(message)
-      }
-    }
+  if (config.provider === 'local') {
+    const result = await runTranscriptionAttempt('Local Whisper transcription', () => transcribeAudioLocally(audioPath), errors)
+    if (result) return result
+    throw new Error(errors.join(' · ') || 'Local Whisper transcription failed')
   }
 
-  if (config.provider === 'auto') {
-    try {
-      return await transcribeAudioWithOpenRouter(audioPath)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'OpenRouter transcription failed'
-      errors.push(message)
-    }
+  // auto: prefer OpenRouter when configured (much better than CPU tiny/small), local as offline fallback.
+  const attempts: Array<{ label: string; fn: () => Promise<TranscriptResult> }> = []
+  if (isOpenRouterTranscriptionConfigured()) {
+    attempts.push({ label: 'OpenRouter transcription', fn: () => transcribeAudioWithOpenRouter(audioPath) })
+  }
+  attempts.push({ label: 'Local Whisper transcription', fn: () => transcribeAudioLocally(audioPath) })
+
+  for (const attempt of attempts) {
+    const result = await runTranscriptionAttempt(attempt.label, attempt.fn, errors)
+    if (result) return result
   }
 
   throw new Error(errors.join(' · ') || 'Transcription failed')

@@ -12,7 +12,7 @@ def main() -> int:
         return 2
 
     audio_path = sys.argv[1]
-    model_name = os.environ.get("VIDEON_WHISPER_MODEL", "tiny")
+    model_name = os.environ.get("VIDEON_WHISPER_MODEL", "small")
     language = os.environ.get("VIDEON_WHISPER_LANGUAGE", "de")
 
     try:
@@ -22,7 +22,16 @@ def main() -> int:
         return 3
 
     model = WhisperModel(model_name, device="cpu", compute_type="int8")
-    segments_iter, _info = model.transcribe(audio_path, beam_size=5, language=language)
+    segments_iter, _info = model.transcribe(
+        audio_path,
+        beam_size=8,
+        language=language,
+        vad_filter=True,
+        condition_on_previous_text=False,
+        compression_ratio_threshold=2.4,
+        log_prob_threshold=-1.0,
+        no_speech_threshold=0.6,
+    )
     segments = []
     texts = []
     for segment in segments_iter:
