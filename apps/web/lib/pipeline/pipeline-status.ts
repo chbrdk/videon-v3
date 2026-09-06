@@ -39,7 +39,7 @@ export const PIPELINE_STAGE_HINTS: Record<PipelineStageKey, string> = {
   probe: 'Dauer, Auflösung und Framerate',
   scene_detect: 'Schnittpunkte im Video',
   frame_sample: 'Stichproben pro Szene',
-  audio: 'Tonspur und Transkript',
+  audio: 'Tonspur, Stems und Transkript',
   vision: 'KI-Szenenanalyse über OpenRouter',
   aggregate: 'Ergebnisse werden zusammengeführt',
   index: 'Suche und Metadaten-Index',

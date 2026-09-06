@@ -10,6 +10,7 @@ import { objectStorageConfig } from '@/lib/runtime-config'
 import { resolveMediaInWorkspace, resolveWorkspaceForMediaRequest } from '@/lib/media-access'
 import { requireSessionUserId } from '@/lib/session-user'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
+import { listLatestAudioStemsForMedia } from '@/lib/db/media-stems'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +54,17 @@ export async function GET(request: Request, context: RouteContext) {
   const stages = analysis ? await listStagesForAnalysis(analysis.id) : []
   const scenes = analysis ? await listSceneInsightsForAnalysis(analysis.id) : []
   const transcript = await findLatestTranscriptForMedia(resolved.media.id)
+  const stemRows = await listLatestAudioStemsForMedia(resolved.media.id)
+  const voice = stemRows.find((stem) => stem.stemKind === 'voice')
+  const music = stemRows.find((stem) => stem.stemKind === 'music')
+  const stems =
+    voice || music
+      ? {
+          voicePeaks: voice?.peaks ?? [],
+          musicPeaks: music?.peaks ?? [],
+          method: voice?.method ?? music?.method ?? null,
+        }
+      : null
 
   return apiJson(request, {
     media: resolved.media,
@@ -60,6 +72,7 @@ export async function GET(request: Request, context: RouteContext) {
     stages,
     scenes,
     transcript,
+    stems,
   })
 }
 

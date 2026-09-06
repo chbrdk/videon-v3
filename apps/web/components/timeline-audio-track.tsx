@@ -9,9 +9,12 @@ type TimelineAudioTrackProps = {
   totalDurationMs: number
   msPerPixel: number
   peaksByUrl: Record<string, number[]>
+  peaksByMediaId?: Record<string, number[]>
   playbackUrlByMediaId: Record<string, string>
   sourceDurationMsByMediaId: Record<string, number>
   clips: Array<{ scene: { mediaAssetId: string; startMs: number; endMs: number } }>
+  color?: string
+  label?: string
 }
 
 export function TimelineAudioTrack({
@@ -19,9 +22,12 @@ export function TimelineAudioTrack({
   totalDurationMs,
   msPerPixel,
   peaksByUrl,
+  peaksByMediaId = {},
   playbackUrlByMediaId,
   sourceDurationMsByMediaId,
   clips,
+  color = '#2d6a9f',
+  label = 'Audio-Spur A1',
 }: TimelineAudioTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
@@ -35,15 +41,15 @@ export function TimelineAudioTrack({
     if (width <= 0 || height <= 0) return
     canvas.width = width * window.devicePixelRatio
     canvas.height = height * window.devicePixelRatio
-    context.scale(window.devicePixelRatio, window.devicePixelRatio)
+    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
     context.clearRect(0, 0, width, height)
-    context.fillStyle = '#2d6a9f'
+    context.fillStyle = color
 
     for (const item of timeline) {
       const clip = clips[item.index]
       if (!clip) continue
       const url = playbackUrlByMediaId[clip.scene.mediaAssetId]
-      const peaks = url ? peaksByUrl[url] : null
+      const peaks = peaksByMediaId[clip.scene.mediaAssetId] ?? (url ? peaksByUrl[url] : null)
       if (!peaks?.length) continue
 
       const left = timelineLeftPx(item.cutStartMs, msPerPixel)
@@ -66,7 +72,17 @@ export function TimelineAudioTrack({
         context.fillRect(x, mid - barHeight / 2, barWidth, barHeight)
       }
     }
-  }, [clips, msPerPixel, peaksByUrl, playbackUrlByMediaId, sourceDurationMsByMediaId, timeline, totalDurationMs])
+  }, [
+    clips,
+    color,
+    msPerPixel,
+    peaksByMediaId,
+    peaksByUrl,
+    playbackUrlByMediaId,
+    sourceDurationMsByMediaId,
+    timeline,
+    totalDurationMs,
+  ])
 
-  return <canvas ref={canvasRef} className="videon-cut-timeline__audio-canvas" aria-label="Audio-Spur A1" />
+  return <canvas ref={canvasRef} className="videon-cut-timeline__audio-canvas" aria-label={label} />
 }

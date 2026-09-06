@@ -77,6 +77,8 @@ export function MediaEditorView({
   const [stages, setStages] = useState<StageState[]>([])
   const [scenes, setScenes] = useState<SceneItem[]>([])
   const [transcript, setTranscript] = useState<TranscriptState>(null)
+  const [voicePeaks, setVoicePeaks] = useState<number[]>([])
+  const [musicPeaks, setMusicPeaks] = useState<number[]>([])
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -112,6 +114,7 @@ export function MediaEditorView({
       stages?: StageState[]
       scenes?: SceneItem[]
       transcript?: TranscriptState
+      stems?: { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null } | null
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Mediendetails konnten nicht geladen werden')
@@ -120,6 +123,8 @@ export function MediaEditorView({
     setStages(body.stages ?? [])
     setScenes(body.scenes ?? [])
     setTranscript(body.transcript ?? null)
+    setVoicePeaks(body.stems?.voicePeaks ?? [])
+    setMusicPeaks(body.stems?.musicPeaks ?? [])
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -695,6 +700,8 @@ export function MediaEditorView({
           }))}
           transcriptSegments={transcript?.segments ?? []}
           peaks={waveformPeaks}
+          voicePeaks={voicePeaks}
+          musicPeaks={musicPeaks}
           activeSceneKey={activeSceneKey}
           markInMs={markInMs}
           markOutMs={markOutMs}

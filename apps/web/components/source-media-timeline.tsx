@@ -6,6 +6,8 @@ import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import { formatClock } from '@/lib/editor-time'
 import {
   buildTimelineTicks,
+  defaultTimelineZoomIndex,
+  TIMELINE_ZOOM_LEVELS,
   timelineContentWidthPx,
   timelineLeftPx,
   timelineMsPerPixel,
@@ -34,6 +36,8 @@ type SourceMediaTimelineProps = {
   scenes: SourceScene[]
   transcriptSegments?: SourceTranscriptSegment[]
   peaks: number[]
+  voicePeaks?: number[]
+  musicPeaks?: number[]
   activeSceneKey?: string | null
   markInMs?: number | null
   markOutMs?: number | null
@@ -41,7 +45,34 @@ type SourceMediaTimelineProps = {
   onSeek: (ms: number) => void
 }
 
-const ZOOM_LEVELS = [1, 2, 4, 8] as const
+function paintSourcePeaks(
+  canvas: HTMLCanvasElement | null,
+  peaks: number[],
+  durationMs: number,
+  msPerPixel: number,
+  color: string,
+) {
+  if (!canvas || peaks.length === 0 || durationMs <= 0) return
+  const context = canvas.getContext('2d')
+  if (!context) return
+  const width = canvas.clientWidth
+  const height = canvas.clientHeight
+  if (width <= 0 || height <= 0) return
+  canvas.width = width * window.devicePixelRatio
+  canvas.height = height * window.devicePixelRatio
+  context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
+  context.clearRect(0, 0, width, height)
+  context.fillStyle = color
+  const mid = height / 2
+  const bucketMs = durationMs / peaks.length
+  for (const [index, peak] of peaks.entries()) {
+    const bucketStart = index * bucketMs
+    const left = timelineLeftPx(bucketStart, msPerPixel)
+    const right = timelineLeftPx(bucketStart + bucketMs, msPerPixel)
+    const barHeight = Math.max(peak * (height - 4), 1)
+    context.fillRect(left, mid - barHeight / 2, Math.max(right - left, 1), barHeight)
+  }
+}
 
 export function SourceMediaTimeline({
   durationMs,
@@ -50,6 +81,8 @@ export function SourceMediaTimeline({
   scenes,
   transcriptSegments = [],
   peaks,
+  voicePeaks,
+  musicPeaks,
   activeSceneKey,
   markInMs = null,
   markOutMs = null,
@@ -58,13 +91,16 @@ export function SourceMediaTimeline({
 }: SourceMediaTimelineProps) {
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [zoomIndex, setZoomIndex] = useState(0)
+  const voiceCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const musicCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [zoomIndex, setZoomIndex] = useState(defaultTimelineZoomIndex)
 
-  const zoomLevel = ZOOM_LEVELS[zoomIndex] ?? 1
+  const zoomLevel = TIMELINE_ZOOM_LEVELS[zoomIndex] ?? 1
   const msPerPixel = timelineMsPerPixel(zoomLevel)
   const contentWidthPx = timelineContentWidthPx(durationMs, zoomLevel)
   const ticks = useMemo(() => buildTimelineTicks(durationMs, zoomLevel), [durationMs, zoomLevel])
+  const resolvedVoicePeaks = voicePeaks?.length ? voicePeaks : peaks
+  const resolvedMusicPeaks = musicPeaks ?? []
 
   const seekFromPointer = useCallback(
     (clientX: number) => {
@@ -86,28 +122,12 @@ export function SourceMediaTimeline({
   )
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || peaks.length === 0 || durationMs <= 0) return
-    const context = canvas.getContext('2d')
-    if (!context) return
-    const width = canvas.clientWidth
-    const height = canvas.clientHeight
-    if (width <= 0 || height <= 0) return
-    canvas.width = width * window.devicePixelRatio
-    canvas.height = height * window.devicePixelRatio
-    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
-    context.clearRect(0, 0, width, height)
-    context.fillStyle = '#2d6a9f'
-    const mid = height / 2
-    const bucketMs = durationMs / peaks.length
-    for (const [index, peak] of peaks.entries()) {
-      const bucketStart = index * bucketMs
-      const left = timelineLeftPx(bucketStart, msPerPixel)
-      const right = timelineLeftPx(bucketStart + bucketMs, msPerPixel)
-      const barHeight = Math.max(peak * (height - 4), 1)
-      context.fillRect(left, mid - barHeight / 2, Math.max(right - left, 1), barHeight)
-    }
-  }, [durationMs, msPerPixel, peaks])
+    paintSourcePeaks(voiceCanvasRef.current, resolvedVoicePeaks, durationMs, msPerPixel, '#2d6a9f')
+  }, [durationMs, msPerPixel, resolvedVoicePeaks])
+
+  useEffect(() => {
+    paintSourcePeaks(musicCanvasRef.current, resolvedMusicPeaks, durationMs, msPerPixel, '#8a6a2d')
+  }, [durationMs, msPerPixel, resolvedMusicPeaks])
 
   const onTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (disabled) return
@@ -148,8 +168,8 @@ export function SourceMediaTimeline({
           <button
             type="button"
             className="videon-nle__tool-btn"
-            disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
-            onClick={() => setZoomIndex((current) => Math.min(current + 1, ZOOM_LEVELS.length - 1))}
+            disabled={zoomIndex >= TIMELINE_ZOOM_LEVELS.length - 1}
+            onClick={() => setZoomIndex((current) => Math.min(current + 1, TIMELINE_ZOOM_LEVELS.length - 1))}
             aria-label="Zoom in"
           >
             +
@@ -162,7 +182,8 @@ export function SourceMediaTimeline({
           <div className="videon-cut-timeline__headers" aria-hidden="true">
             <div className="videon-cut-timeline__header-spacer" />
             <div className="videon-cut-timeline__header-label">V1</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1</div>
+            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1 Voice</div>
+            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A2 Music</div>
             <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div>
           </div>
           <div className="videon-cut-timeline__lanes-wrap">
@@ -219,29 +240,41 @@ export function SourceMediaTimeline({
                 {scenes.map((scene) => {
                   const thumbMs = scene.startMs + Math.floor((scene.endMs - scene.startMs) / 2)
                   return (
-                  <button
-                    key={scene.sceneKey}
-                    type="button"
-                    className={`videon-cut-timeline__clip videon-cut-timeline__clip--scene${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-                    style={{
-                      left: `${timelineLeftPx(scene.startMs, msPerPixel)}px`,
-                      width: `${timelineWidthPx(scene.endMs - scene.startMs, msPerPixel)}px`,
-                    }}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onSeek(scene.startMs)
-                    }}
-                    title={scene.summary}
-                  >
-                    <TimelineClipThumbnail playbackUrl={playbackUrl} sourceMs={thumbMs} />
-                    <span className="videon-cut-timeline__clip-label">{scene.summary}</span>
-                  </button>
+                    <button
+                      key={scene.sceneKey}
+                      type="button"
+                      className={`videon-cut-timeline__clip videon-cut-timeline__clip--scene${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
+                      style={{
+                        left: `${timelineLeftPx(scene.startMs, msPerPixel)}px`,
+                        width: `${timelineWidthPx(scene.endMs - scene.startMs, msPerPixel)}px`,
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSeek(scene.startMs)
+                      }}
+                      title={scene.summary}
+                    >
+                      <TimelineClipThumbnail playbackUrl={playbackUrl} sourceMs={thumbMs} />
+                      <span className="videon-cut-timeline__clip-label">{scene.summary}</span>
+                    </button>
                   )
                 })}
               </div>
 
               <div className="videon-cut-timeline__track videon-cut-timeline__track--audio">
-                <canvas ref={canvasRef} className="videon-cut-timeline__audio-canvas" aria-label="Audio-Spur A1" />
+                <canvas
+                  ref={voiceCanvasRef}
+                  className="videon-cut-timeline__audio-canvas"
+                  aria-label="Audio-Spur A1 Voice"
+                />
+              </div>
+
+              <div className="videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music">
+                <canvas
+                  ref={musicCanvasRef}
+                  className="videon-cut-timeline__audio-canvas"
+                  aria-label="Audio-Spur A2 Music"
+                />
               </div>
 
               <div className="videon-cut-timeline__track videon-cut-timeline__track--transcript">

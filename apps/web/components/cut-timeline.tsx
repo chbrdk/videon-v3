@@ -13,6 +13,8 @@ import {
 import { formatClock } from '@/lib/editor-time'
 import {
   buildTimelineTicks,
+  defaultTimelineZoomIndex,
+  TIMELINE_ZOOM_LEVELS,
   timelineContentWidthPx,
   timelineLeftPx,
   timelineMsPerPixel,
@@ -51,6 +53,8 @@ type CutTimelineProps = {
   disabled?: boolean
   playbackUrlByMediaId?: Record<string, string>
   peaksByUrl?: Record<string, number[]>
+  voicePeaksByMediaId?: Record<string, number[]>
+  musicPeaksByMediaId?: Record<string, number[]>
   sourceDurationMsByMediaId?: Record<string, number>
   onSelectClip: (index: number) => void
   onSeek: (cutMs: number) => void
@@ -60,7 +64,6 @@ type CutTimelineProps = {
   onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null }) => void
 }
 
-const ZOOM_LEVELS = [1, 2, 4, 8] as const
 
 export function CutTimeline({
   clips,
@@ -72,6 +75,8 @@ export function CutTimeline({
   disabled = false,
   playbackUrlByMediaId = {},
   peaksByUrl = {},
+  voicePeaksByMediaId = {},
+  musicPeaksByMediaId = {},
   sourceDurationMsByMediaId = {},
   onSelectClip,
   onSeek,
@@ -84,7 +89,8 @@ export function CutTimeline({
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const [dragSceneId, setDragSceneId] = useState<string | null>(null)
-  const [zoomIndex, setZoomIndex] = useState(0)
+  const [zoomIndex, setZoomIndex] = useState(defaultTimelineZoomIndex)
+
   const [trimPreview, setTrimPreview] = useState<{
     sceneId: string
     startMs: number
@@ -103,7 +109,7 @@ export function CutTimeline({
     nextClip?: { startMs: number; endMs: number; sameMedia: boolean }
   } | null>(null)
 
-  const zoomLevel = ZOOM_LEVELS[zoomIndex] ?? 1
+  const zoomLevel = TIMELINE_ZOOM_LEVELS[zoomIndex] ?? 1
   const msPerPixel = timelineMsPerPixel(zoomLevel)
   const contentWidthPx = timelineContentWidthPx(totalDurationMs, zoomLevel)
   const ticks = useMemo(() => buildTimelineTicks(totalDurationMs, zoomLevel), [totalDurationMs, zoomLevel])
@@ -306,8 +312,8 @@ export function CutTimeline({
           <button
             type="button"
             className="videon-nle__tool-btn"
-            disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
-            onClick={() => setZoomIndex((current) => Math.min(current + 1, ZOOM_LEVELS.length - 1))}
+            disabled={zoomIndex >= TIMELINE_ZOOM_LEVELS.length - 1}
+            onClick={() => setZoomIndex((current) => Math.min(current + 1, TIMELINE_ZOOM_LEVELS.length - 1))}
             aria-label="Zoom in"
           >
             +
@@ -320,7 +326,8 @@ export function CutTimeline({
           <div className="videon-cut-timeline__headers" aria-hidden="true">
             <div className="videon-cut-timeline__header-spacer" />
             <div className="videon-cut-timeline__header-label">V1</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1</div>
+            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1 Voice</div>
+            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A2 Music</div>
             <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div>
           </div>
           <div className="videon-cut-timeline__lanes-wrap">
@@ -431,9 +438,27 @@ export function CutTimeline({
                   totalDurationMs={totalDurationMs}
                   msPerPixel={msPerPixel}
                   peaksByUrl={peaksByUrl}
+                  peaksByMediaId={voicePeaksByMediaId}
                   playbackUrlByMediaId={playbackUrlByMediaId}
                   sourceDurationMsByMediaId={sourceDurationMsByMediaId}
                   clips={clips}
+                  color="#2d6a9f"
+                  label="Audio-Spur A1 Voice"
+                />
+              </div>
+
+              <div className="videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music">
+                <TimelineAudioTrack
+                  timeline={timeline}
+                  totalDurationMs={totalDurationMs}
+                  msPerPixel={msPerPixel}
+                  peaksByUrl={{}}
+                  peaksByMediaId={musicPeaksByMediaId}
+                  playbackUrlByMediaId={playbackUrlByMediaId}
+                  sourceDurationMsByMediaId={sourceDurationMsByMediaId}
+                  clips={clips}
+                  color="#8a6a2d"
+                  label="Audio-Spur A2 Music"
                 />
               </div>
 

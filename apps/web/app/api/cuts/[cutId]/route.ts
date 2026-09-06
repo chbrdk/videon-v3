@@ -16,6 +16,7 @@ import {
 } from '@/lib/db/cuts'
 import { findMediaAsset } from '@/lib/db/media'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
+import { listLatestAudioStemsForMediaIds } from '@/lib/db/media-stems'
 import type { TranscriptSegment } from '@/lib/cut-timeline'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
@@ -77,7 +78,21 @@ export async function GET(request: Request, context: RouteContext) {
     )
   }
 
-  return apiJson(request, { cut, clips: media, transcripts })
+  const stemsByMediaId = await listLatestAudioStemsForMediaIds(mediaIds)
+  const stems: Record<string, { voicePeaks: number[]; musicPeaks: number[]; method: string | null }> = {}
+  for (const mediaAssetId of mediaIds) {
+    const list = stemsByMediaId[mediaAssetId] ?? []
+    const voice = list.find((stem) => stem.stemKind === 'voice')
+    const music = list.find((stem) => stem.stemKind === 'music')
+    if (!voice && !music) continue
+    stems[mediaAssetId] = {
+      voicePeaks: voice?.peaks ?? [],
+      musicPeaks: music?.peaks ?? [],
+      method: voice?.method ?? music?.method ?? null,
+    }
+  }
+
+  return apiJson(request, { cut, clips: media, transcripts, stems })
 }
 
 export async function DELETE(request: Request, context: RouteContext) {

@@ -96,6 +96,8 @@ export function CutEditorView({
   const [trimMode, setTrimMode] = useState<TrimMode>('trim')
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
   const [peaksByUrl, setPeaksByUrl] = useState<Record<string, number[]>>({})
+  const [voicePeaksByMediaId, setVoicePeaksByMediaId] = useState<Record<string, number[]>>({})
+  const [musicPeaksByMediaId, setMusicPeaksByMediaId] = useState<Record<string, number[]>>({})
 
   const timeline = useMemo(
     () =>
@@ -151,6 +153,7 @@ export function CutEditorView({
       cut?: CutDetail
       clips?: Clip[]
       transcripts?: Record<string, TranscriptSegment[]>
+      stems?: Record<string, { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null }>
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
@@ -164,6 +167,14 @@ export function CutEditorView({
     }
     setClips(body.clips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
+    const nextVoice: Record<string, number[]> = {}
+    const nextMusic: Record<string, number[]> = {}
+    for (const [mediaId, stem] of Object.entries(body.stems ?? {})) {
+      if (stem.voicePeaks?.length) nextVoice[mediaId] = stem.voicePeaks
+      if (stem.musicPeaks?.length) nextMusic[mediaId] = stem.musicPeaks
+    }
+    setVoicePeaksByMediaId(nextVoice)
+    setMusicPeaksByMediaId(nextMusic)
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
   }, [cutId, platformProjectId])
 
@@ -869,6 +880,8 @@ export function CutEditorView({
           disabled={busy}
           playbackUrlByMediaId={playbackUrlByMediaId}
           peaksByUrl={peaksByUrl}
+          voicePeaksByMediaId={voicePeaksByMediaId}
+          musicPeaksByMediaId={musicPeaksByMediaId}
           sourceDurationMsByMediaId={sourceDurationMsByMediaId}
           onSelectClip={setActiveIndex}
           onSeek={seekToCutMs}

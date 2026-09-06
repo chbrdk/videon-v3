@@ -544,8 +544,13 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   cursor: default;
 }
 
+.videon-cut-timeline__track--music .videon-cut-timeline__audio-canvas {
+  opacity: 0.95;
+}
+
 .videon-cut-timeline__header-label--audio {
   min-height: 2.2rem;
+  font-size: 0.68rem;
 }
 
 .videon-cut-timeline__audio-canvas {

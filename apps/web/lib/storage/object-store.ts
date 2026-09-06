@@ -7,6 +7,22 @@ export function mediaSourceStorageKey(workspaceId: string, mediaAssetId: string)
   return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/source`
 }
 
+export function mediaStemStorageKey(
+  workspaceId: string,
+  mediaAssetId: string,
+  stemKind: 'voice' | 'music',
+): string {
+  const safe = (value: string, label: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
+    return trimmed
+  }
+  if (stemKind !== 'voice' && stemKind !== 'music') {
+    throw new Error('stemKind must be voice or music')
+  }
+  return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/stems/${stemKind}.wav`
+}
+
 export function cutExportStorageKey(workspaceId: string, cutId: string, exportId: string): string {
   const safe = (value: string, label: string) => {
     const trimmed = value.trim()

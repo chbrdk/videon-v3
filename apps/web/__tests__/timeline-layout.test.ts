@@ -23,4 +23,9 @@ describe('timeline layout', () => {
   it('expands content width when zooming in', () => {
     expect(timelineContentWidthPx(60_000, 4)).toBeGreaterThan(timelineContentWidthPx(60_000, 1))
   })
+
+  it('shrinks content width when zooming out below 1×', () => {
+    expect(timelineMsPerPixel(0.5)).toBeGreaterThan(timelineMsPerPixel(1))
+    expect(timelineContentWidthPx(60_000, 0.5)).toBeLessThan(timelineContentWidthPx(60_000, 1))
+  })
 })

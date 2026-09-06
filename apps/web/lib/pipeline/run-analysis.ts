@@ -18,6 +18,7 @@ import { defaultVisionLane, schemaFallbackVisionLane, strictSchemaFallbackVision
 import { PIPELINE_STAGES, type PipelineStageKey } from '@/lib/pipeline/constants'
 import { detectScenesFromFile } from '@/lib/pipeline/scene-detect'
 import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
+import { separateAndStoreAudioStems } from '@/lib/pipeline/audio-stems'
 import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
 import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
@@ -167,6 +168,14 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
         return 'no_audio_track'
       }
 
+      const stemResult = await separateAndStoreAudioStems({
+        sourcePath: tempPath,
+        workspaceId: media.workspaceId,
+        mediaAssetId: media.id,
+        analysisRunId,
+        store,
+      })
+
       try {
         const transcript = await transcribeAudioFile(audioPath)
         if (!transcript) {
@@ -177,7 +186,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
             transcriptText: null,
             segments: [],
           })
-          return 'transcription_disabled'
+          return `transcription_disabled:${stemResult}`
         }
 
         transcriptSegments = transcript.segments
@@ -188,7 +197,8 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
           transcriptText: transcript.text,
           segments: transcript.segments,
         })
-        return transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
+        const transcriptLabel = transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
+        return `${transcriptLabel}:${stemResult}`
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Transcription failed'
         await upsertMediaTranscript({
@@ -198,7 +208,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
           transcriptText: null,
           segments: [],
         })
-        return `transcription_failed:${message.slice(0, 240)}`
+        return `transcription_failed:${message.slice(0, 240)}:${stemResult}`
       }
     })
 
