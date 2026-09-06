@@ -12,6 +12,7 @@ import { SourceMediaTimeline } from '@/components/source-media-timeline'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
 import { EditorTransport } from '@/components/editor-transport'
 import { frameDurationMs, formatClock, normalizeInOutRange } from '@/lib/editor-time'
+import { normalizeMediaPlaybackUrl } from '@/lib/media-playback-url'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
 import { PipelineStatusTrack } from '@/components/pipeline-status-track'
@@ -134,7 +135,7 @@ export function MediaEditorView({
     })
     const body = (await response.json()) as { playbackUrl?: string; error?: { message?: string } }
     if (!response.ok) throw new Error(body.error?.message || 'Wiedergabe-URL konnte nicht geladen werden')
-    setPlaybackUrl(body.playbackUrl ?? null)
+    setPlaybackUrl(normalizeMediaPlaybackUrl(body.playbackUrl))
   }, [mediaAssetId, platformProjectId])
 
   const refresh = useCallback(async () => {

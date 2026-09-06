@@ -10,8 +10,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang={paths.defaultLocale} data-theme={paths.defaultTheme}>
-      <body><AppProviders>{children}</AppProviders></body>
+    <html lang={paths.defaultLocale} data-theme={paths.defaultTheme} suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   )
 }

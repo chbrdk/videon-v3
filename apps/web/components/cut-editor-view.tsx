@@ -23,6 +23,7 @@ import { EditorTransport } from '@/components/editor-transport'
 import { IconRedo, IconSplit, IconUndo } from '@/components/editor-icons'
 import { writeStoredActiveCut } from '@/lib/active-cut'
 import { frameDurationMs, formatClock } from '@/lib/editor-time'
+import { normalizeMediaPlaybackUrl } from '@/lib/media-playback-url'
 import {
   nextPlaybackTarget,
   resolveClipTransition,
@@ -204,9 +205,10 @@ export function CutEditorView({
       })
       const body = (await response.json()) as { playbackUrl?: string; error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Wiedergabe nicht verfügbar')
-      playbackCacheRef.current.set(mediaId, body.playbackUrl ?? '')
+      const playback = normalizeMediaPlaybackUrl(body.playbackUrl)
+      playbackCacheRef.current.set(mediaId, playback ?? '')
       currentMediaIdRef.current = mediaId
-      setPlaybackUrl(body.playbackUrl ?? null)
+      setPlaybackUrl(playback)
     },
     [platformProjectId],
   )
@@ -285,8 +287,9 @@ export function CutEditorView({
         }
         const response = await fetch(paths.routes.apiMediaPlayback(mediaId, platformProjectId), { cache: 'no-store' })
         const body = (await response.json()) as { playbackUrl?: string }
-        if (body.playbackUrl) playbackCacheRef.current.set(mediaId, body.playbackUrl)
-        return { mediaId, url: body.playbackUrl ?? '' }
+        const playback = normalizeMediaPlaybackUrl(body.playbackUrl)
+        if (playback) playbackCacheRef.current.set(mediaId, playback)
+        return { mediaId, url: playback ?? '' }
       }),
     ).then((entries) => {
       if (cancelled) return

@@ -1,7 +1,7 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { resolveMediaInWorkspace } from '@/lib/media-access'
-import { paths } from '@/lib/paths'
+import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
@@ -54,10 +54,9 @@ export async function GET(request: Request, context: RouteContext) {
     disposition: 'inline',
   })
 
-  const origin = new URL(request.url).origin
-
   return apiJson(request, {
-    playbackUrl: `${origin}${paths.routes.apiMediaStream(mediaAssetId, platformProjectId)}`,
+    // Relative same-origin path — never bake container-local origins into the browser.
+    playbackUrl: mediaStreamPlaybackUrl(mediaAssetId, platformProjectId),
     signedPlaybackUrl: target.uploadUrl,
     expiresAt: target.expiresAt,
     mimeType: resolved.media.mimeType,
