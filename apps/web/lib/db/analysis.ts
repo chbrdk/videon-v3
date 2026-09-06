@@ -3,6 +3,7 @@ import {
   analysisInputFingerprint,
   DEFAULT_REQUESTED_CAPABILITIES,
   PIPELINE_VERSION,
+  resolveRequestedCapabilities,
   type PipelineStageKey,
 } from '@/lib/pipeline/constants'
 import { SCENE_INSIGHT_SCHEMA_VERSION } from '@/lib/vision-schema'
@@ -245,6 +246,7 @@ export async function createRerunAnalysisForMedia(input: {
   mediaAssetId: string
   requestedByPlexonUserId: string
   checksumSha256: string
+  extraCapabilities?: string[]
 }): Promise<AnalysisRun> {
   const fingerprint = analysisInputFingerprint(input.checksumSha256)
   const idempotencyKey = `rerun:${input.mediaAssetId}:${randomUUID()}`
@@ -274,7 +276,7 @@ export async function createRerunAnalysisForMedia(input: {
       input.requestedByPlexonUserId,
       PIPELINE_VERSION,
       SCENE_INSIGHT_SCHEMA_VERSION,
-      JSON.stringify([...DEFAULT_REQUESTED_CAPABILITIES]),
+      JSON.stringify(resolveRequestedCapabilities(input.extraCapabilities ?? [])),
       fingerprint,
       idempotencyKey,
     ],

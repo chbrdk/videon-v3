@@ -7,11 +7,13 @@ export async function scheduleMediaAnalysisRerun(input: {
   workspaceId: string
   requestedByPlexonUserId: string
   checksumSha256: string
+  extraCapabilities?: string[]
 }): Promise<{ analysisRunId: string; queued: boolean }> {
   const analysis = await createRerunAnalysisForMedia({
     mediaAssetId: input.mediaAssetId,
     requestedByPlexonUserId: input.requestedByPlexonUserId,
     checksumSha256: input.checksumSha256,
+    extraCapabilities: input.extraCapabilities,
   })
 
   if (!pipelineQueueConfigured()) {

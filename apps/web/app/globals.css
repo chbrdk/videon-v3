@@ -389,6 +389,16 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
 }
 
+.videon-nle__toolbar-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.4rem;
+  font-size: 0.78rem;
+  color: var(--nle-text, inherit);
+  cursor: pointer;
+}
+
 .videon-nle__toolbar-title {
   display: grid;
   gap: 0.1rem;

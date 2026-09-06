@@ -79,6 +79,8 @@ export function MediaEditorView({
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
+  const [demucsEnabled, setDemucsEnabled] = useState(false)
+  const [useDemucsStems, setUseDemucsStems] = useState(false)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -115,6 +117,7 @@ export function MediaEditorView({
       scenes?: SceneItem[]
       transcript?: TranscriptState
       stems?: { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null } | null
+      stemOptions?: { demucsEnabled?: boolean; defaultMethod?: string } | null
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Mediendetails konnten nicht geladen werden')
@@ -125,6 +128,7 @@ export function MediaEditorView({
     setTranscript(body.transcript ?? null)
     setVoicePeaks(body.stems?.voicePeaks ?? [])
     setMusicPeaks(body.stems?.musicPeaks ?? [])
+    setDemucsEnabled(Boolean(body.stemOptions?.demucsEnabled))
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -296,6 +300,10 @@ export function MediaEditorView({
     try {
       const response = await fetch(paths.routes.apiMediaAnalysis(mediaAssetId, platformProjectId), {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stemMethod: demucsEnabled && useDemucsStems ? 'demucs' : 'ffmpeg_mid_side',
+        }),
       })
       const body = (await response.json()) as { error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Analyse konnte nicht gestartet werden')
@@ -488,6 +496,17 @@ export function MediaEditorView({
               <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
                 Aktualisieren
               </Button>
+              {demucsEnabled ? (
+                <label className="videon-nle__toolbar-check">
+                  <input
+                    type="checkbox"
+                    checked={useDemucsStems}
+                    onChange={(event) => setUseDemucsStems(event.target.checked)}
+                    disabled={Boolean(busy)}
+                  />
+                  <span>Neural Stems (Demucs)</span>
+                </label>
+              ) : null}
               {scenes.length > 1 ? (
                 <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
                   Alle Szenen als Cut

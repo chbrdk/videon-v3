@@ -1,7 +1,9 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
+import { STEM_DEMUCS_CAPABILITY } from '@/lib/pipeline/constants'
 import { scheduleMediaAnalysisRerun } from '@/lib/pipeline/enqueue'
 import { resolveMediaInWorkspace } from '@/lib/media-access'
+import { stemDemucsEnabled } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +22,13 @@ export async function POST(request: Request, context: RouteContext) {
   const platformProjectId = new URL(request.url).searchParams.get('platformProjectId')?.trim() || ''
   if (!platformProjectId) {
     return apiError(request, 400, 'invalid_payload', 'platformProjectId is required')
+  }
+
+  let body: { stemMethod?: string } = {}
+  try {
+    body = (await request.json()) as { stemMethod?: string }
+  } catch {
+    body = {}
   }
 
   const { mediaAssetId } = await context.params
@@ -43,14 +52,28 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(request, 403, 'collection_access_denied', 'Archived media cannot be analyzed')
   }
 
+  const wantsDemucs = body.stemMethod === 'demucs'
+  if (wantsDemucs && !stemDemucsEnabled()) {
+    return apiError(
+      request,
+      400,
+      'invalid_payload',
+      'Neural Demucs stems are disabled. Set VIDEON_STEM_DEMUCS_ENABLED=true and install demucs.',
+    )
+  }
+
   try {
     const scheduled = await scheduleMediaAnalysisRerun({
       mediaAssetId: resolved.media.id,
       workspaceId: resolved.workspace.id,
       requestedByPlexonUserId: userId,
       checksumSha256: resolved.media.checksumSha256,
+      extraCapabilities: wantsDemucs ? [STEM_DEMUCS_CAPABILITY] : [],
     })
-    return apiJson(request, { analysis: scheduled })
+    return apiJson(request, {
+      analysis: scheduled,
+      stemMethod: wantsDemucs ? 'demucs' : 'ffmpeg_mid_side',
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Analysis could not be scheduled'
     return apiError(request, 503, 'dependency_unavailable', message, { retryable: true })

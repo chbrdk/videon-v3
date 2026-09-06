@@ -18,7 +18,7 @@ import { defaultVisionLane, schemaFallbackVisionLane, strictSchemaFallbackVision
 import { PIPELINE_STAGES, type PipelineStageKey } from '@/lib/pipeline/constants'
 import { detectScenesFromFile } from '@/lib/pipeline/scene-detect'
 import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
-import { separateAndStoreAudioStems } from '@/lib/pipeline/audio-stems'
+import { separateAndStoreAudioStems, resolveStemMethod } from '@/lib/pipeline/audio-stems'
 import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
 import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
@@ -174,6 +174,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
         mediaAssetId: media.id,
         analysisRunId,
         store,
+        method: resolveStemMethod(analysis.requestedCapabilities),
       })
 
       try {

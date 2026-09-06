@@ -58,6 +58,7 @@ export const paths = {
   envTranscriptionOpenRouterModel: 'VIDEON_TRANSCRIPTION_OPENROUTER_MODEL',
   envWhisperModel: 'VIDEON_WHISPER_MODEL',
   envWhisperLanguage: 'VIDEON_WHISPER_LANGUAGE',
+  envStemDemucsEnabled: 'VIDEON_STEM_DEMUCS_ENABLED',
   routes: {
     home: '/',
     library: '/library',

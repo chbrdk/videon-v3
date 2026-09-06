@@ -90,6 +90,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     && pip3 install --break-system-packages faster-whisper \
+    # Optional neural stems: also `pip3 install --break-system-packages demucs` + VIDEON_STEM_DEMUCS_ENABLED=true \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/videon-v3/package.json ./package.json
