@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
 import { EditorMonitor } from '@/components/editor-monitor'
+import { EditorSideDrawer, toggleSidePanel, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { MediaSearch } from '@/components/media-search'
 import { SourceMediaTimeline } from '@/components/source-media-timeline'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
@@ -87,6 +88,7 @@ export function MediaEditorView({
   const [markOutMs, setMarkOutMs] = useState<number | null>(null)
   const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>(null)
   const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
   const markedRange = useMemo(
     () =>
@@ -252,6 +254,15 @@ export function MediaEditorView({
     onMarkOut: () => setMarkOutMs(currentMs),
   })
 
+  useEffect(() => {
+    if (!sidePanel) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidePanel(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [sidePanel])
+
   const rerunAnalysis = async () => {
     setBusy('analysis')
     setError(null)
@@ -358,9 +369,23 @@ export function MediaEditorView({
   if (!media) return null
 
   const timelineDuration = media.durationMs ?? durationMs ?? Math.max(...scenes.map((s) => s.endMs), 1)
+  const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey) ?? null
+  const analysisBusy = analysis?.status === 'running' || analysis?.status === 'queued'
+  const analysisAttention =
+    analysisBusy || analysis?.status === 'failed' || media.lifecycleState === 'processing'
+  const sidePanelTitle =
+    sidePanel === 'scenes'
+      ? 'Szenen'
+      : sidePanel === 'transcript'
+        ? 'Transkript'
+        : sidePanel === 'search'
+          ? 'Suche & Cut'
+          : sidePanel === 'pipeline'
+            ? 'Analyse-Pipeline'
+            : ''
 
   return (
-    <div className="videon-nle">
+    <div className="videon-nle videon-nle--player-first">
       <header className="videon-nle__toolbar">
         <div className="videon-nle__toolbar-title">
           <h2>{media.originalFilename}</h2>
@@ -369,10 +394,39 @@ export function MediaEditorView({
             {media.width && media.height ? ` · ${media.width}×${media.height}` : ''}
           </p>
         </div>
+        <div className="videon-nle__panel-tabs" role="tablist" aria-label="Editor-Panels">
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${sidePanel === 'scenes' ? ' is-active' : ''}`}
+            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'scenes'))}
+          >
+            Szenen{scenes.length ? ` (${scenes.length})` : ''}
+          </button>
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${sidePanel === 'transcript' ? ' is-active' : ''}`}
+            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'transcript'))}
+          >
+            TX
+          </button>
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${sidePanel === 'search' ? ' is-active' : ''}`}
+            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'search'))}
+          >
+            Suche
+          </button>
+          {analysisAttention ? (
+            <button
+              type="button"
+              className={`videon-nle__tool-btn${sidePanel === 'pipeline' ? ' is-active' : ''}`}
+              onClick={() => setSidePanel((current) => toggleSidePanel(current, 'pipeline'))}
+            >
+              Pipeline
+            </button>
+          ) : null}
+        </div>
         <div className="videon-nle__toolbar-groups">
-          <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
-            Aktualisieren
-          </Button>
           <Button type="button" variant="ghost" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
             {busy === 'cut' ? 'Speichert …' : markedRange ? 'In/Out als Cut' : 'Szene als Cut'}
           </Button>
@@ -386,11 +440,6 @@ export function MediaEditorView({
               In/Out zum Cut
             </Button>
           ) : null}
-          {scenes.length > 1 ? (
-            <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
-              Alle Szenen als Cut
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -399,13 +448,45 @@ export function MediaEditorView({
           >
             {busy === 'analysis' ? 'Startet …' : 'Analyse'}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => void deleteMedia()} disabled={Boolean(busy)}>
-            {busy === 'delete' ? 'Löscht …' : 'Löschen'}
-          </Button>
+          <details className="videon-nle__toolbar-menu">
+            <summary className="videon-nle__tool-btn">Mehr</summary>
+            <div className="videon-nle__toolbar-menu-body">
+              <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
+                Aktualisieren
+              </Button>
+              {scenes.length > 1 ? (
+                <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
+                  Alle Szenen als Cut
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={() => void deleteMedia()} disabled={Boolean(busy)}>
+                {busy === 'delete' ? 'Löscht …' : 'Löschen'}
+              </Button>
+            </div>
+          </details>
         </div>
       </header>
 
       {error ? <p className="videon-nle__error">{error}</p> : null}
+
+      {analysisAttention ? (
+        <div className="videon-nle__pipeline-strip">
+          <PipelineStatusTrack
+            analysis={analysis}
+            stages={stages}
+            mediaLifecycleState={media.lifecycleState}
+            showLifecycle
+            variant="compact"
+          />
+          <button
+            type="button"
+            className="videon-nle__tool-btn"
+            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'pipeline'))}
+          >
+            Details
+          </button>
+        </div>
+      ) : null}
 
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
@@ -416,6 +497,23 @@ export function MediaEditorView({
             frameMs={frameDurationMs(media.frameRate)}
             disabled={!playbackUrl || Boolean(busy)}
             onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
+            hud={
+              <>
+                {activeScene ? (
+                  <div className="videon-nle__monitor-scene">
+                    <span className="videon-nle__monitor-scene-time">
+                      {formatClock(activeScene.startMs)} – {formatClock(activeScene.endMs)}
+                    </span>
+                    <p className="videon-nle__monitor-scene-text">{activeScene.insight.summary}</p>
+                  </div>
+                ) : null}
+                {markedRange ? (
+                  <div className="videon-nle__monitor-mark">
+                    In {formatClock(markedRange.startMs)} · Out {formatClock(markedRange.endMs)}
+                  </div>
+                ) : null}
+              </>
+            }
           >
             {playbackUrl ? (
               <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
@@ -449,28 +547,15 @@ export function MediaEditorView({
               setMarkOutMs(null)
             }}
           />
-
         </section>
+      </div>
 
-        <aside className="videon-nle__inspector">
-          <div className="videon-nle__inspector-header">Metadaten</div>
-          <div className="videon-nle__inspector-body">
-            <PipelineStatusTrack
-              analysis={analysis}
-              stages={stages}
-              mediaLifecycleState={media.lifecycleState}
-              showLifecycle
-              variant="detailed"
-            />
-
-            <Text role="title" as="h3">
-              Szenen
-            </Text>
+      <EditorSideDrawer open={sidePanel !== null} title={sidePanelTitle} onClose={() => setSidePanel(null)}>
+        {sidePanel === 'scenes' ? (
+          <>
             {scenes.length === 0 ? (
               <Text role="body">
-                {analysis?.status === 'running' || analysis?.status === 'queued'
-                  ? 'Analyse läuft — Szenen erscheinen nach Abschluss.'
-                  : 'Noch keine Szenen.'}
+                {analysisBusy ? 'Analyse läuft — Szenen erscheinen nach Abschluss.' : 'Noch keine Szenen.'}
               </Text>
             ) : (
               <ul className="videon-editor__scene-list">
@@ -479,7 +564,10 @@ export function MediaEditorView({
                     <button
                       type="button"
                       className={`videon-nle__bin-item${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-                      onClick={() => seekTo(scene.startMs)}
+                      onClick={() => {
+                        seekTo(scene.startMs)
+                        setActiveSceneKey(scene.sceneKey)
+                      }}
                     >
                       <span className="videon-nle__bin-item-title">{scene.insight.summary}</span>
                       <span className="videon-nle__bin-item-meta">
@@ -490,72 +578,72 @@ export function MediaEditorView({
                 ))}
               </ul>
             )}
+          </>
+        ) : null}
 
-            <Text role="title" as="h3">
-              Suche & Cut
-            </Text>
-            <MediaSearch
-              platformProjectId={platformProjectId}
-              activeCutName={activeCut?.platformProjectId === platformProjectId ? activeCut.name : null}
-              onAddToCut={async (hit) => {
-                let startMs = hit.startMs ?? 0
-                let endMs = hit.endMs ?? media?.durationMs ?? durationMs
-                if ((!hit.startMs || !hit.endMs) && hit.mediaAssetId !== mediaAssetId) {
-                  const response = await fetch(paths.routes.apiMediaDetail(hit.mediaAssetId, platformProjectId), {
-                    cache: 'no-store',
-                  })
-                  const body = (await response.json()) as {
-                    media?: { durationMs?: number | null }
-                    scenes?: SceneItem[]
-                  }
-                  const scene = body.scenes?.find((entry) => entry.sceneKey === hit.sceneKey)
-                  startMs = scene?.startMs ?? 0
-                  endMs = scene?.endMs ?? body.media?.durationMs ?? 60_000
-                } else if (hit.sceneKey && (!hit.startMs || !hit.endMs)) {
-                  const scene = scenes.find((entry) => entry.sceneKey === hit.sceneKey)
-                  startMs = scene?.startMs ?? 0
-                  endMs = scene?.endMs ?? media?.durationMs ?? durationMs
-                }
-                await addRangeToActiveCut(startMs, endMs, hit.mediaAssetId)
-              }}
-            />
-
+        {sidePanel === 'transcript' ? (
+          <>
             {transcript?.segments?.length ? (
-              <>
-                <Text role="title" as="h3">
-                  Transkript
-                </Text>
-                <ul className="videon-editor__stage-list">
-                  {transcript.segments.map((segment) => (
-                    <li key={`${segment.startMs}-${segment.endMs}`}>
-                      <button type="button" className="videon-nle__bin-item" onClick={() => seekTo(segment.startMs)}>
-                        <span className="videon-nle__bin-item-meta">
-                          {formatClock(segment.startMs)} – {formatClock(segment.endMs)}
-                        </span>
-                        <span className="videon-nle__bin-item-title">{segment.text}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
+              <ul className="videon-editor__stage-list">
+                {transcript.segments.map((segment) => (
+                  <li key={`${segment.startMs}-${segment.endMs}`}>
+                    <button type="button" className="videon-nle__bin-item" onClick={() => seekTo(segment.startMs)}>
+                      <span className="videon-nle__bin-item-meta">
+                        {formatClock(segment.startMs)} – {formatClock(segment.endMs)}
+                      </span>
+                      <span className="videon-nle__bin-item-title">{segment.text}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             ) : transcript?.status === 'skipped' ? (
-              <>
-                <Text role="title" as="h3">
-                  Transkript
-                </Text>
-                <Text role="body">Kein Transkript — keine Tonspur oder Transkription deaktiviert.</Text>
-              </>
+              <Text role="body">Kein Transkript — keine Tonspur oder Transkription deaktiviert.</Text>
             ) : transcript?.status === 'failed' ? (
-              <>
-                <Text role="title" as="h3">
-                  Transkript
-                </Text>
-                <Text role="body">Transkription fehlgeschlagen. Analyse erneut starten.</Text>
-              </>
-            ) : null}
-          </div>
-        </aside>
-      </div>
+              <Text role="body">Transkription fehlgeschlagen. Analyse erneut starten.</Text>
+            ) : (
+              <Text role="body">Noch kein Transkript. Analyse starten oder erneut ausführen.</Text>
+            )}
+          </>
+        ) : null}
+
+        {sidePanel === 'search' ? (
+          <MediaSearch
+            platformProjectId={platformProjectId}
+            activeCutName={activeCut?.platformProjectId === platformProjectId ? activeCut.name : null}
+            onAddToCut={async (hit) => {
+              let startMs = hit.startMs ?? 0
+              let endMs = hit.endMs ?? media?.durationMs ?? durationMs
+              if ((!hit.startMs || !hit.endMs) && hit.mediaAssetId !== mediaAssetId) {
+                const response = await fetch(paths.routes.apiMediaDetail(hit.mediaAssetId, platformProjectId), {
+                  cache: 'no-store',
+                })
+                const body = (await response.json()) as {
+                  media?: { durationMs?: number | null }
+                  scenes?: SceneItem[]
+                }
+                const scene = body.scenes?.find((entry) => entry.sceneKey === hit.sceneKey)
+                startMs = scene?.startMs ?? 0
+                endMs = scene?.endMs ?? body.media?.durationMs ?? 60_000
+              } else if (hit.sceneKey && (!hit.startMs || !hit.endMs)) {
+                const scene = scenes.find((entry) => entry.sceneKey === hit.sceneKey)
+                startMs = scene?.startMs ?? 0
+                endMs = scene?.endMs ?? media?.durationMs ?? durationMs
+              }
+              await addRangeToActiveCut(startMs, endMs, hit.mediaAssetId)
+            }}
+          />
+        ) : null}
+
+        {sidePanel === 'pipeline' ? (
+          <PipelineStatusTrack
+            analysis={analysis}
+            stages={stages}
+            mediaLifecycleState={media.lifecycleState}
+            showLifecycle
+            variant="detailed"
+          />
+        ) : null}
+      </EditorSideDrawer>
 
       <footer className="videon-nle__timeline-dock">
         <SourceMediaTimeline
@@ -578,7 +666,7 @@ export function MediaEditorView({
         />
       </footer>
 
-      <p className="videon-nle__shortcuts">
+      <p className="videon-nle__shortcuts" hidden>
         Mausrad Jog · Shift+Mausrad ±1s · Vollbild am Monitor · I/O In/Out · Leertaste Play/Pause
       </p>
     </div>

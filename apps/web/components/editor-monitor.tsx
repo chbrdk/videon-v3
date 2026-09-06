@@ -11,6 +11,7 @@ type EditorMonitorProps = {
   frameMs?: number
   disabled?: boolean
   onSeekDelta?: (deltaMs: number) => void
+  hud?: ReactNode
   children?: ReactNode
 }
 
@@ -21,6 +22,7 @@ export function EditorMonitor({
   frameMs = 40,
   disabled = false,
   onSeekDelta,
+  hud,
   children,
 }: EditorMonitorProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -71,6 +73,7 @@ export function EditorMonitor({
               <Text role="body">Keine Wiedergabe</Text>
             </div>
           ))}
+        {hud ? <div className="videon-nle__monitor-hud">{hud}</div> : null}
       </div>
     </div>
   )

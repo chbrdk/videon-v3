@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button, Text } from '@msqdx/ui'
 import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
 import { EditorMonitor } from '@/components/editor-monitor'
+import { EditorSideDrawer, toggleSidePanel, type EditorSidePanel } from '@/components/editor-side-drawer'
 import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
@@ -25,8 +26,7 @@ import { frameDurationMs, formatClock } from '@/lib/editor-time'
 import type { TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
-import { prefetchWaveformPeaks, useWaveformPeaks } from '@/lib/use-waveform'
-import { TimelineWaveform } from '@/components/timeline-waveform'
+import { prefetchWaveformPeaks } from '@/lib/use-waveform'
 
 type Clip = {
   scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
@@ -71,6 +71,7 @@ export function CutEditorView({
   cutPlayheadRef.current = cutPlayheadMs
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>(null)
   const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
   const [libraryMedia, setLibraryMedia] = useState<LibraryMedia[]>([])
   const [selectedMediaId, setSelectedMediaId] = useState('')
@@ -121,17 +122,6 @@ export function CutEditorView({
     return next
   }, [clips])
   const activeClip = clips[activeIndex]
-  const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
-  const sourcePlayheadMs = activeClip
-    ? activeClip.scene.startMs + Math.max(cutPlayheadMs - (timeline[activeIndex]?.cutStartMs ?? 0), 0)
-    : 0
-  const sourceDurationMs = activeClip?.media
-    ? Math.max(
-        ...clips.filter((clip) => clip.media?.id === activeClip.media?.id).map((clip) => clip.scene.endMs),
-        activeClip.scene.endMs,
-        1,
-      )
-    : totalDurationMs
 
   const rememberSnapshot = useCallback(() => {
     if (restoringRef.current || clips.length === 0) return
@@ -481,13 +471,22 @@ export function CutEditorView({
   if (!cut) return <Text role="body">Cut wird geladen …</Text>
 
   return (
-    <div className="videon-nle">
+    <div className="videon-nle videon-nle--player-first">
       <header className="videon-nle__toolbar">
         <div className="videon-nle__toolbar-title">
           <h2>{cut.name}</h2>
           <p className="videon-nle__toolbar-meta">
             Cut · {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
           </p>
+        </div>
+        <div className="videon-nle__panel-tabs">
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${sidePanel === 'bin' ? ' is-active' : ''}`}
+            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'bin'))}
+          >
+            Bin ({clips.length})
+          </button>
         </div>
         <div className="videon-nle__toolbar-groups">
           <div className="videon-nle__tool-group">
@@ -562,6 +561,18 @@ export function CutEditorView({
             frameMs={frameDurationMs(cut.frameRate)}
             disabled={!playbackUrl || busy}
             onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
+            hud={
+              activeClip ? (
+                <div className="videon-nle__monitor-scene">
+                  <span className="videon-nle__monitor-scene-time">
+                    V1 · {formatClock(activeClip.scene.startMs)} – {formatClock(activeClip.scene.endMs)}
+                  </span>
+                  <p className="videon-nle__monitor-scene-text">
+                    {activeClip.media?.originalFilename ?? `Clip ${activeIndex + 1}`}
+                  </p>
+                </div>
+              ) : null
+            }
           >
             {playbackUrl ? (
               <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
@@ -587,105 +598,85 @@ export function CutEditorView({
             onFrameForward={() => frameStep(1)}
           />
 
-          <div className="videon-nle__waveform-slot">
-            <TimelineWaveform
-              peaks={waveformPeaks}
-              durationMs={sourceDurationMs}
-              playheadMs={sourcePlayheadMs}
-              viewStartMs={activeClip?.scene.startMs ?? 0}
-              viewEndMs={activeClip?.scene.endMs ?? sourceDurationMs}
-              label="Audio"
-              onSeek={(ms) => {
-                if (!activeClip) return
-                const cutMs = (timeline[activeIndex]?.cutStartMs ?? 0) + (ms - activeClip.scene.startMs)
-                seekToCutMs(cutMs)
-              }}
-            />
-          </div>
         </section>
-
-        <aside className="videon-nle__inspector">
-          <div className="videon-nle__inspector-header">Projekt-Bin</div>
-          <div className="videon-nle__inspector-body">
-            <div className="videon-nle__field-row">
-              <Text role="meta" as="span">
-                Clip einfügen
-              </Text>
-              <select value={selectedMediaId} onChange={(event) => setSelectedMediaId(event.target.value)} disabled={busy}>
-                <option value="">Video wählen …</option>
-                {libraryMedia.map((media) => (
-                  <option key={media.id} value={media.id}>
-                    {media.originalFilename}
-                  </option>
-                ))}
-              </select>
-              <Button type="button" variant="ghost" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
-                Nach aktivem Clip einfügen
-              </Button>
-            </div>
-
-            <Text role="meta" as="span">
-              Mediathek · in Timeline ziehen
-            </Text>
-            <ul className="videon-editor__scene-list">
-              {libraryMedia.map((media) => (
-                <li key={media.id}>
-                  <button
-                    type="button"
-                    className="videon-nle__bin-item videon-nle__bin-item--draggable"
-                    draggable={!busy}
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData(
-                        MEDIA_DRAG_TYPE,
-                        JSON.stringify({
-                          mediaAssetId: media.id,
-                          startMs: 0,
-                          endMs: media.durationMs ?? 60_000,
-                        }),
-                      )
-                      event.dataTransfer.effectAllowed = 'copy'
-                    }}
-                    onClick={() => setSelectedMediaId(media.id)}
-                  >
-                    <span className="videon-nle__bin-item-title">{media.originalFilename}</span>
-                    <span className="videon-nle__bin-item-meta">Ziehen oder klicken zum Auswählen</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <ul className="videon-editor__scene-list">
-              {clips.map((clip, index) => (
-                <li key={clip.scene.id}>
-                  <button
-                    type="button"
-                    className={`videon-nle__bin-item${index === activeIndex ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setActiveIndex(index)
-                      const item = timeline[index]
-                      if (item) seekToCutMs(item.cutStartMs)
-                    }}
-                  >
-                    <span className="videon-nle__bin-item-title">
-                      V1 · {clip.media?.originalFilename ?? 'Unbekannt'}
-                    </span>
-                    <span className="videon-nle__bin-item-meta">
-                      {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
-                      {formatClock(timeline[index]?.cutStartMs ?? 0)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            {activeClip?.media ? (
-              <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
-                <Button variant="ghost">Quellvideo öffnen</Button>
-              </Link>
-            ) : null}
-          </div>
-        </aside>
       </div>
+
+      <EditorSideDrawer open={sidePanel === 'bin'} title="Projekt-Bin" onClose={() => setSidePanel(null)}>
+        <div className="videon-nle__field-row">
+          <Text role="meta" as="span">
+            Clip einfügen
+          </Text>
+          <select value={selectedMediaId} onChange={(event) => setSelectedMediaId(event.target.value)} disabled={busy}>
+            <option value="">Video wählen …</option>
+            {libraryMedia.map((media) => (
+              <option key={media.id} value={media.id}>
+                {media.originalFilename}
+              </option>
+            ))}
+          </select>
+          <Button type="button" variant="ghost" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
+            Nach aktivem Clip einfügen
+          </Button>
+        </div>
+
+        <Text role="meta" as="span">
+          Mediathek · in Timeline ziehen
+        </Text>
+        <ul className="videon-editor__scene-list">
+          {libraryMedia.map((media) => (
+            <li key={media.id}>
+              <button
+                type="button"
+                className="videon-nle__bin-item videon-nle__bin-item--draggable"
+                draggable={!busy}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(
+                    MEDIA_DRAG_TYPE,
+                    JSON.stringify({
+                      mediaAssetId: media.id,
+                      startMs: 0,
+                      endMs: media.durationMs ?? 60_000,
+                    }),
+                  )
+                  event.dataTransfer.effectAllowed = 'copy'
+                }}
+                onClick={() => setSelectedMediaId(media.id)}
+              >
+                <span className="videon-nle__bin-item-title">{media.originalFilename}</span>
+                <span className="videon-nle__bin-item-meta">Ziehen oder klicken zum Auswählen</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <ul className="videon-editor__scene-list">
+          {clips.map((clip, index) => (
+            <li key={clip.scene.id}>
+              <button
+                type="button"
+                className={`videon-nle__bin-item${index === activeIndex ? ' is-active' : ''}`}
+                onClick={() => {
+                  setActiveIndex(index)
+                  const item = timeline[index]
+                  if (item) seekToCutMs(item.cutStartMs)
+                }}
+              >
+                <span className="videon-nle__bin-item-title">V1 · {clip.media?.originalFilename ?? 'Unbekannt'}</span>
+                <span className="videon-nle__bin-item-meta">
+                  {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
+                  {formatClock(timeline[index]?.cutStartMs ?? 0)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {activeClip?.media ? (
+          <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
+            <Button variant="ghost">Quellvideo öffnen</Button>
+          </Link>
+        ) : null}
+      </EditorSideDrawer>
 
       <footer className="videon-nle__timeline-dock">
         <CutTimeline
@@ -710,7 +701,7 @@ export function CutEditorView({
         />
       </footer>
 
-      <p className="videon-nle__shortcuts">
+      <p className="videon-nle__shortcuts" hidden>
         Mausrad Jog · Shift+Mausrad ±1s · Vollbild am Monitor · Trim/Ripple/Roll · Mediathek in Timeline ziehen · S Teilen · ⌘Z
       </p>
     </div>

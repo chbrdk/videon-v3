@@ -318,7 +318,7 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
-  min-height: min(78vh, 56rem);
+  min-height: min(82vh, 60rem);
   border: 1px solid var(--nle-border);
   border-radius: 0.35rem;
   overflow: hidden;
@@ -326,15 +326,67 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   color: var(--nle-text);
 }
 
+.videon-nle--player-first {
+  min-height: min(86vh, 64rem);
+}
+
 .videon-nle__toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem;
-  flex-wrap: wrap;
   padding: 0.55rem 0.75rem;
   background: linear-gradient(180deg, var(--nle-panel-2), var(--nle-panel));
   border-bottom: 1px solid var(--nle-border);
+}
+
+.videon-nle__panel-tabs {
+  display: flex;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.videon-nle__pipeline-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--nle-border);
+  background: color-mix(in srgb, var(--nle-panel) 88%, black);
+}
+
+.videon-nle__pipeline-strip .videon-pipeline {
+  flex: 1;
+  min-width: 0;
+}
+
+.videon-nle__toolbar-menu {
+  position: relative;
+}
+
+.videon-nle__toolbar-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.videon-nle__toolbar-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.videon-nle__toolbar-menu-body {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  z-index: 12;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 11rem;
+  padding: 0.45rem;
+  border: 1px solid var(--nle-border);
+  border-radius: 0.35rem;
+  background: var(--nle-panel-2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
 }
 
 .videon-nle__toolbar-title {
@@ -412,22 +464,25 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 
 .videon-nle__workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
 }
 
 .videon-nle__program {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 0;
   min-width: 0;
-  border-right: 1px solid var(--nle-border);
+}
+
+.videon-nle--player-first .videon-nle__program {
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .videon-nle__monitor {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
+  min-height: clamp(16rem, 54vh, 42rem);
 }
 
 .videon-nle__monitor.is-fullscreen {
@@ -514,9 +569,91 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
 .videon-nle__player-wrap {
   position: relative;
   background: #000;
-  min-height: clamp(12rem, 34vh, 24rem);
+  min-height: clamp(14rem, 50vh, 38rem);
   display: grid;
   place-items: center;
+}
+
+.videon-nle__monitor-hud {
+  position: absolute;
+  inset: auto 0 0;
+  display: grid;
+  gap: 0.35rem;
+  padding: 2.5rem 0.85rem 0.75rem;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.82));
+  pointer-events: none;
+}
+
+.videon-nle__monitor-scene-time,
+.videon-nle__monitor-mark {
+  font-family: var(--nle-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--nle-text) 88%, white);
+}
+
+.videon-nle__monitor-scene-text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--nle-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.videon-nle__monitor-mark {
+  color: #fbbf24;
+}
+
+.videon-nle__drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  background: rgba(0, 0, 0, 0.48);
+  cursor: pointer;
+}
+
+.videon-nle__drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  width: min(24rem, 92vw);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-left: 1px solid var(--nle-border);
+  background: var(--nle-panel);
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.38);
+}
+
+.videon-nle__drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--nle-border);
+  background: var(--nle-panel-2);
+}
+
+.videon-nle__drawer-header h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.videon-nle__drawer-body {
+  overflow: auto;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
 }
 
 .videon-nle__video {
@@ -1436,8 +1573,16 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .videon-nle__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .videon-nle__panel-tabs,
+  .videon-nle__toolbar-groups {
+    justify-content: flex-start;
+  }
+
   .videon-nle__program {
-    border-right: 0;
     border-bottom: 1px solid var(--nle-border, var(--line));
   }
 
