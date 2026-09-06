@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Text } from '@msqdx/ui'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 
@@ -13,6 +13,12 @@ type EditorMonitorProps = {
   onSeekDelta?: (deltaMs: number) => void
   hud?: ReactNode
   children?: ReactNode
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable
 }
 
 export function EditorMonitor({
@@ -38,7 +44,7 @@ export function EditorMonitor({
 
   useJogShuttle(wrapRef, seekDelta, { enabled: Boolean(onSeekDelta) && !disabled, frameMs })
 
-  const toggleFullscreen = async () => {
+  const toggleFullscreen = useCallback(async () => {
     const node = wrapRef.current
     if (!node) return
     if (!document.fullscreenElement) {
@@ -48,7 +54,26 @@ export function EditorMonitor({
       await document.exitFullscreen()
       setIsFullscreen(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === wrapRef.current)
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (disabled || isTypingTarget(event.target)) return
+      if (event.key.toLowerCase() !== 'f' || event.metaKey || event.ctrlKey || event.altKey) return
+      event.preventDefault()
+      void toggleFullscreen()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [disabled, toggleFullscreen])
 
   return (
     <div ref={wrapRef} className={`videon-nle__monitor${isFullscreen ? ' is-fullscreen' : ''}`}>

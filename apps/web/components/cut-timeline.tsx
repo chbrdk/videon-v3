@@ -19,6 +19,7 @@ import {
   timelineWidthPx,
 } from '@/lib/timeline-layout'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
+import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 import { computeTrimPreview, type TrimMode } from '@/lib/trim-modes'
 
 export type CutTimelineClip = {
@@ -267,6 +268,15 @@ export function CutTimeline({
 
   const playheadLeftPx = timelineLeftPx(cutPlayheadMs, msPerPixel)
   const dropHintLeftPx = dropHintMs !== null ? timelineLeftPx(dropHintMs, msPerPixel) : null
+  usePlayheadFollow(viewportRef, playheadLeftPx, !disabled)
+  const activeTxIndex = useMemo(
+    () =>
+      activeTranscriptIndex(
+        cutPlayheadMs,
+        transcriptSegments.map((segment) => ({ startMs: segment.cutStartMs, endMs: segment.cutEndMs })),
+      ),
+    [cutPlayheadMs, transcriptSegments],
+  )
 
   return (
     <div className="videon-cut-timeline">
@@ -414,7 +424,7 @@ export function CutTimeline({
                     <button
                       key={`${segment.cutStartMs}-${index}`}
                       type="button"
-                      className="videon-cut-timeline__transcript-segment"
+                      className={`videon-cut-timeline__transcript-segment${activeTxIndex === index ? ' is-active' : ''}`}
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                       title={segment.text}
                       onClick={() => onSeek(segment.cutStartMs)}

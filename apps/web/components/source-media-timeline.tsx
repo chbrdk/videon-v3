@@ -12,6 +12,7 @@ import {
   timelineWidthPx,
 } from '@/lib/timeline-layout'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
+import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 
 type SourceScene = {
   sceneKey: string
@@ -77,6 +78,13 @@ export function SourceMediaTimeline({
 
   useJogShuttle(viewportRef, (deltaMs) => onSeek(playheadMs + deltaMs), { enabled: !disabled })
 
+  const playheadLeftPx = timelineLeftPx(playheadMs, msPerPixel)
+  usePlayheadFollow(viewportRef, playheadLeftPx, !disabled)
+  const activeTxIndex = useMemo(
+    () => activeTranscriptIndex(playheadMs, transcriptSegments),
+    [playheadMs, transcriptSegments],
+  )
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || peaks.length === 0 || durationMs <= 0) return
@@ -87,7 +95,7 @@ export function SourceMediaTimeline({
     if (width <= 0 || height <= 0) return
     canvas.width = width * window.devicePixelRatio
     canvas.height = height * window.devicePixelRatio
-    context.scale(window.devicePixelRatio, window.devicePixelRatio)
+    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
     context.clearRect(0, 0, width, height)
     context.fillStyle = '#2d6a9f'
     const mid = height / 2
@@ -118,8 +126,6 @@ export function SourceMediaTimeline({
     window.addEventListener('pointerup', onUp)
     seekFromPointer(event.clientX)
   }
-
-  const playheadLeftPx = timelineLeftPx(playheadMs, msPerPixel)
 
   return (
     <div className="videon-cut-timeline videon-cut-timeline--source">
@@ -196,6 +202,20 @@ export function SourceMediaTimeline({
                     }}
                   />
                 ) : null}
+                {markInMs !== null ? (
+                  <div
+                    className="videon-cut-timeline__mark videon-cut-timeline__mark--in"
+                    style={{ left: `${timelineLeftPx(markInMs, msPerPixel)}px` }}
+                    title={`In ${formatClock(markInMs)}`}
+                  />
+                ) : null}
+                {markOutMs !== null ? (
+                  <div
+                    className="videon-cut-timeline__mark videon-cut-timeline__mark--out"
+                    style={{ left: `${timelineLeftPx(markOutMs, msPerPixel)}px` }}
+                    title={`Out ${formatClock(markOutMs)}`}
+                  />
+                ) : null}
                 {scenes.map((scene) => {
                   const thumbMs = scene.startMs + Math.floor((scene.endMs - scene.startMs) / 2)
                   return (
@@ -229,7 +249,7 @@ export function SourceMediaTimeline({
                   <button
                     key={`${segment.startMs}-${index}`}
                     type="button"
-                    className="videon-cut-timeline__transcript-segment"
+                    className={`videon-cut-timeline__transcript-segment${activeTxIndex === index ? ' is-active' : ''}`}
                     style={{
                       left: `${timelineLeftPx(segment.startMs, msPerPixel)}px`,
                       width: `${timelineWidthPx(segment.endMs - segment.startMs, msPerPixel)}px`,

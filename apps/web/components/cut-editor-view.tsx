@@ -72,6 +72,15 @@ export function CutEditorView({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>(null)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [latestExport, setLatestExport] = useState<{
+    id: string
+    status: string
+    errorMessage?: string | null
+    downloadUrl?: string | null
+  } | null>(null)
   const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
   const [libraryMedia, setLibraryMedia] = useState<LibraryMedia[]>([])
   const [selectedMediaId, setSelectedMediaId] = useState('')
@@ -438,6 +447,62 @@ export function CutEditorView({
     setSelectedMediaId('')
   }
 
+  const startExport = async () => {
+    setExportBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const body = (await response.json()) as {
+        export?: { id: string; status: string; errorMessage?: string | null }
+        error?: { message?: string }
+      }
+      if (!response.ok || !body.export) throw new Error(body.error?.message || 'Export konnte nicht gestartet werden')
+      setLatestExport({ id: body.export.id, status: body.export.status, errorMessage: body.export.errorMessage })
+      setNotice('Export gestartet …')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export fehlgeschlagen')
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!latestExport || (latestExport.status !== 'queued' && latestExport.status !== 'running')) return
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const response = await fetch(
+          paths.routes.apiCutExportDetail(cutId, latestExport.id, platformProjectId),
+          { cache: 'no-store' },
+        )
+        const body = (await response.json()) as {
+          export?: { id: string; status: string; errorMessage?: string | null }
+          downloadUrl?: string | null
+        }
+        if (!body.export) return
+        setLatestExport({
+          id: body.export.id,
+          status: body.export.status,
+          errorMessage: body.export.errorMessage,
+          downloadUrl: body.downloadUrl,
+        })
+        if (body.export.status === 'succeeded') setNotice('Export fertig — Download verfügbar')
+        if (body.export.status === 'failed') setError(body.export.errorMessage || 'Export fehlgeschlagen')
+      })()
+    }, 2500)
+    return () => window.clearInterval(timer)
+  }, [cutId, latestExport, platformProjectId])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
   useEditorKeyboard({
     enabled: Boolean(cut) && !busy,
     onTogglePlay: () => void togglePlayback(),
@@ -458,6 +523,27 @@ export function CutEditorView({
     onUndo: undo,
     onRedo: redo,
   })
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSidePanel(null)
+        setShowShortcuts(false)
+        return
+      }
+      if (event.key === '?' && !event.metaKey && !event.ctrlKey) {
+        const target = event.target
+        if (target instanceof HTMLElement) {
+          const tag = target.tagName
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+        }
+        event.preventDefault()
+        setShowShortcuts((current) => !current)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   if (error && !cut) {
     return (
@@ -498,13 +584,17 @@ export function CutEditorView({
             </button>
           </div>
           <div className="videon-nle__tool-group">
-            {(['trim', 'ripple', 'roll'] as TrimMode[]).map((mode) => (
+            {([
+              { mode: 'trim' as const, title: 'Trim: Quellfenster ändern (Sequenz folgt)' },
+              { mode: 'ripple' as const, title: 'Ripple: Dauer ändern — nachfolgende Clips rücken nach' },
+              { mode: 'roll' as const, title: 'Roll: gemeinsame Schnittgrenze zweier Clips' },
+            ]).map(({ mode, title }) => (
               <button
                 key={mode}
                 type="button"
                 className={`videon-nle__tool-btn${trimMode === mode ? ' is-active' : ''}`}
                 onClick={() => setTrimMode(mode)}
-                title={`Trim-Modus: ${mode}`}
+                title={title}
               >
                 {mode.toUpperCase()}
               </button>
@@ -544,6 +634,25 @@ export function CutEditorView({
               Löschen
             </Button>
           </div>
+          <Button type="button" variant="ghost" onClick={() => void startExport()} disabled={busy || exportBusy || clips.length === 0}>
+            {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
+              ? 'Export …'
+              : 'Export MP4'}
+          </Button>
+          {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
+            <a className="videon-nle__tool-btn" href={latestExport.downloadUrl} download>
+              Download
+            </a>
+          ) : null}
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${showShortcuts ? ' is-active' : ''}`}
+            onClick={() => setShowShortcuts((current) => !current)}
+            title="Tastaturkürzel (?)"
+            aria-label="Tastaturkürzel"
+          >
+            ?
+          </button>
           <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
             Archivieren
           </Button>
@@ -551,6 +660,7 @@ export function CutEditorView({
       </header>
 
       {error ? <p className="videon-nle__error">{error}</p> : null}
+      {notice ? <p className="videon-nle__notice">{notice}</p> : null}
 
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
@@ -701,9 +811,34 @@ export function CutEditorView({
         />
       </footer>
 
-      <p className="videon-nle__shortcuts" hidden>
-        Mausrad Jog · Shift+Mausrad ±1s · Vollbild am Monitor · Trim/Ripple/Roll · Mediathek in Timeline ziehen · S Teilen · ⌘Z
-      </p>
+      {showShortcuts ? (
+        <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
+          <div className="videon-nle__shortcuts-panel-header">
+            <strong>Tastaturkürzel</strong>
+            <button type="button" className="videon-nle__tool-btn" onClick={() => setShowShortcuts(false)} aria-label="Schließen">
+              ✕
+            </button>
+          </div>
+          <ul>
+            <li>
+              <kbd>Space</kbd> / <kbd>K</kbd> Play/Pause
+            </li>
+            <li>
+              <kbd>J</kbd> / <kbd>L</kbd> ±1 s · <kbd>,</kbd> / <kbd>.</kbd> Frame
+            </li>
+            <li>
+              <kbd>S</kbd> Teilen · <kbd>⌫</kbd> Clip löschen
+            </li>
+            <li>
+              <kbd>⌘Z</kbd> Undo · <kbd>⌘⇧Z</kbd> Redo
+            </li>
+            <li>
+              <kbd>F</kbd> Vollbild · <kbd>?</kbd> Hilfe · <kbd>Esc</kbd> schließen
+            </li>
+            <li>Mausrad Jog · Mediathek in Timeline ziehen</li>
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }

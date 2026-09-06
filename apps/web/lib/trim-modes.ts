@@ -2,6 +2,11 @@ import { MIN_CUT_CLIP_MS } from '@/lib/cut-timeline'
 
 export type TrimMode = 'trim' | 'ripple' | 'roll'
 
+/**
+ * Contiguous cut sequences already ripple subsequent clips when a clip's
+ * duration changes. Ripple mode therefore matches trim for source windows,
+ * while roll moves a shared boundary between neighboring same-media clips.
+ */
 export function computeTrimPreview(input: {
   mode: TrimMode
   edge: 'start' | 'end'
@@ -21,6 +26,7 @@ export function computeTrimPreview(input: {
       }
       return { startMs, endMs: input.endMs, rollBoundaryMs }
     }
+    // trim + ripple: shorten/extend source in-point; sequence duration ripples automatically
     return { startMs, endMs: input.endMs }
   }
 

@@ -89,6 +89,8 @@ export function MediaEditorView({
   const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
   const markedRange = useMemo(
     () =>
@@ -221,6 +223,7 @@ export function MediaEditorView({
     }
     setBusy('cut')
     setError(null)
+    setNotice(null)
     try {
       const response = await fetch(paths.routes.apiCutDetail(activeCut.cutId, platformProjectId), {
         method: 'PATCH',
@@ -234,6 +237,7 @@ export function MediaEditorView({
       })
       const body = (await response.json()) as { error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Clip konnte nicht eingefügt werden')
+      setNotice(`Zum Cut „${activeCut.name}“ hinzugefügt (${formatClock(startMs)} – ${formatClock(endMs)})`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Clip konnte nicht eingefügt werden')
     } finally {
@@ -255,13 +259,31 @@ export function MediaEditorView({
   })
 
   useEffect(() => {
-    if (!sidePanel) return
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSidePanel(null)
+      if (event.key === 'Escape') {
+        setSidePanel(null)
+        setShowShortcuts(false)
+        return
+      }
+      if (event.key === '?' && !event.metaKey && !event.ctrlKey) {
+        const target = event.target
+        if (target instanceof HTMLElement) {
+          const tag = target.tagName
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+        }
+        event.preventDefault()
+        setShowShortcuts((current) => !current)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sidePanel])
+  }, [])
 
   const rerunAnalysis = async () => {
     setBusy('analysis')
@@ -416,15 +438,22 @@ export function MediaEditorView({
           >
             Suche
           </button>
-          {analysisAttention ? (
-            <button
-              type="button"
-              className={`videon-nle__tool-btn${sidePanel === 'pipeline' ? ' is-active' : ''}`}
-              onClick={() => setSidePanel((current) => toggleSidePanel(current, 'pipeline'))}
-            >
-              Pipeline
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${sidePanel === 'pipeline' ? ' is-active' : ''}${analysisAttention ? ' is-attention' : ''}`}
+            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'pipeline'))}
+          >
+            Pipeline
+          </button>
+          <button
+            type="button"
+            className={`videon-nle__tool-btn${showShortcuts ? ' is-active' : ''}`}
+            onClick={() => setShowShortcuts((current) => !current)}
+            title="Tastaturkürzel (?)"
+            aria-label="Tastaturkürzel"
+          >
+            ?
+          </button>
         </div>
         <div className="videon-nle__toolbar-groups">
           <Button type="button" variant="ghost" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
@@ -468,6 +497,7 @@ export function MediaEditorView({
       </header>
 
       {error ? <p className="videon-nle__error">{error}</p> : null}
+      {notice ? <p className="videon-nle__notice">{notice}</p> : null}
 
       {analysisAttention ? (
         <div className="videon-nle__pipeline-strip">
@@ -585,16 +615,23 @@ export function MediaEditorView({
           <>
             {transcript?.segments?.length ? (
               <ul className="videon-editor__stage-list">
-                {transcript.segments.map((segment) => (
-                  <li key={`${segment.startMs}-${segment.endMs}`}>
-                    <button type="button" className="videon-nle__bin-item" onClick={() => seekTo(segment.startMs)}>
-                      <span className="videon-nle__bin-item-meta">
-                        {formatClock(segment.startMs)} – {formatClock(segment.endMs)}
-                      </span>
-                      <span className="videon-nle__bin-item-title">{segment.text}</span>
-                    </button>
-                  </li>
-                ))}
+                {transcript.segments.map((segment) => {
+                  const active = currentMs >= segment.startMs && currentMs < segment.endMs
+                  return (
+                    <li key={`${segment.startMs}-${segment.endMs}`}>
+                      <button
+                        type="button"
+                        className={`videon-nle__bin-item${active ? ' is-active' : ''}`}
+                        onClick={() => seekTo(segment.startMs)}
+                      >
+                        <span className="videon-nle__bin-item-meta">
+                          {formatClock(segment.startMs)} – {formatClock(segment.endMs)}
+                        </span>
+                        <span className="videon-nle__bin-item-title">{segment.text}</span>
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             ) : transcript?.status === 'skipped' ? (
               <Text role="body">Kein Transkript — keine Tonspur oder Transkription deaktiviert.</Text>
@@ -666,9 +703,40 @@ export function MediaEditorView({
         />
       </footer>
 
-      <p className="videon-nle__shortcuts" hidden>
-        Mausrad Jog · Shift+Mausrad ±1s · Vollbild am Monitor · I/O In/Out · Leertaste Play/Pause
-      </p>
+      {showShortcuts ? (
+        <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
+          <div className="videon-nle__shortcuts-panel-header">
+            <strong>Tastaturkürzel</strong>
+            <button type="button" className="videon-nle__tool-btn" onClick={() => setShowShortcuts(false)} aria-label="Schließen">
+              ✕
+            </button>
+          </div>
+          <ul>
+            <li>
+              <kbd>Space</kbd> / <kbd>K</kbd> Play/Pause
+            </li>
+            <li>
+              <kbd>J</kbd> / <kbd>L</kbd> ±1 s
+            </li>
+            <li>
+              <kbd>,</kbd> / <kbd>.</kbd> Frame ±
+            </li>
+            <li>
+              <kbd>←</kbd> / <kbd>→</kbd> Szene ±
+            </li>
+            <li>
+              <kbd>I</kbd> / <kbd>O</kbd> In / Out
+            </li>
+            <li>
+              <kbd>F</kbd> Vollbild
+            </li>
+            <li>
+              <kbd>?</kbd> diese Hilfe · <kbd>Esc</kbd> schließen
+            </li>
+            <li>Mausrad Jog · Shift+Mausrad ±1 s</li>
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }
