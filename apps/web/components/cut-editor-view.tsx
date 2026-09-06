@@ -23,7 +23,12 @@ import { EditorTransport } from '@/components/editor-transport'
 import { IconRedo, IconSplit, IconUndo } from '@/components/editor-icons'
 import { writeStoredActiveCut } from '@/lib/active-cut'
 import { frameDurationMs, formatClock } from '@/lib/editor-time'
-import type { TrimMode } from '@/lib/trim-modes'
+import {
+  nextPlaybackTarget,
+  resolveClipTransition,
+  shouldAdvanceAtSourceMs,
+} from '@/lib/cut-playback'
+import { TRIM_MODE_HELP, type TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { prefetchWaveformPeaks } from '@/lib/use-waveform'
@@ -61,6 +66,7 @@ export function CutEditorView({
   const cutPlayheadRef = useRef(0)
   const playingRef = useRef(false)
   const restoringRef = useRef(false)
+  const advanceLockRef = useRef<number | null>(null)
   const playbackCacheRef = useRef<Map<string, string>>(new Map())
   const currentMediaIdRef = useRef<string | null>(null)
   const [cut, setCut] = useState<CutDetail | null>(null)
@@ -239,6 +245,7 @@ export function CutEditorView({
 
   const seekToCutMs = useCallback(
     (cutMs: number) => {
+      advanceLockRef.current = null
       const clamped = Math.max(0, Math.min(cutMs, totalDurationMs))
       setCutPlayheadMs(clamped)
       const item = timeline.find((entry) => clamped >= entry.cutStartMs && clamped < entry.cutEndMs) ?? timeline.at(-1)
@@ -323,6 +330,8 @@ export function CutEditorView({
     const item = timeline[activeIndex]
     if (!video || !clip || !item || !playbackUrl) return
 
+    const frameMs = frameDurationMs(cut?.frameRate)
+
     const onLoaded = () => {
       const playhead = cutPlayheadRef.current
       video.currentTime = (clip.scene.startMs + Math.max(playhead - item.cutStartMs, 0)) / 1000
@@ -332,14 +341,69 @@ export function CutEditorView({
       const sourceMs = Math.floor(video.currentTime * 1000)
       const nextCutMs = cutPlayheadForSourceMs(timeline, clip.scene.id, sourceMs)
       setCutPlayheadMs(nextCutMs)
-      if (sourceMs >= clip.scene.endMs - 50) {
-        if (activeIndex + 1 < clips.length) {
-          setActiveIndex(activeIndex + 1)
-        } else {
-          playingRef.current = false
-          video.pause()
-        }
+
+      if (advanceLockRef.current === activeIndex) return
+      if (
+        !shouldAdvanceAtSourceMs({
+          sourceMs,
+          clipEndMs: clip.scene.endMs,
+          frameMs,
+        })
+      ) {
+        return
       }
+
+      const nextTarget = nextPlaybackTarget(timeline, activeIndex)
+      const nextClip = nextTarget ? clips[nextTarget.index] ?? null : null
+      const transition = resolveClipTransition({
+        current: {
+          mediaAssetId: clip.scene.mediaAssetId,
+          startMs: clip.scene.startMs,
+          endMs: clip.scene.endMs,
+        },
+        next: nextClip
+          ? {
+              mediaAssetId: nextClip.scene.mediaAssetId,
+              startMs: nextClip.scene.startMs,
+              endMs: nextClip.scene.endMs,
+            }
+          : null,
+      })
+
+      advanceLockRef.current = activeIndex
+
+      if (transition === 'sequence-end' || !nextTarget || !nextClip) {
+        playingRef.current = false
+        video.pause()
+        setCutPlayheadMs(totalDurationMs)
+        return
+      }
+
+      setCutPlayheadMs(nextTarget.cutStartMs)
+
+      if (transition === 'same-media-seek') {
+        video.currentTime = nextTarget.sourceStartMs / 1000
+        setActiveIndex(nextTarget.index)
+        if (playingRef.current) void video.play().catch(() => {})
+        return
+      }
+
+      const prefetchUrl =
+        playbackUrlByMediaId[nextTarget.mediaAssetId] ??
+        playbackCacheRef.current.get(nextTarget.mediaAssetId) ??
+        null
+      playingRef.current = true
+      if (prefetchUrl) {
+        playbackCacheRef.current.set(nextTarget.mediaAssetId, prefetchUrl)
+        currentMediaIdRef.current = nextTarget.mediaAssetId
+        setPlaybackUrl(prefetchUrl)
+        setActiveIndex(nextTarget.index)
+        return
+      }
+      setActiveIndex(nextTarget.index)
+      void loadPlayback(nextClip).catch((err) =>
+        setError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'),
+      )
     }
     const onPlay = () => {
       playingRef.current = true
@@ -360,12 +424,22 @@ export function CutEditorView({
       video.removeEventListener('play', onPlay)
       video.removeEventListener('pause', onPause)
     }
-  }, [clips, activeIndex, playbackUrl, timeline])
+  }, [
+    clips,
+    activeIndex,
+    playbackUrl,
+    timeline,
+    cut?.frameRate,
+    totalDurationMs,
+    playbackUrlByMediaId,
+    loadPlayback,
+  ])
 
   const togglePlayback = async () => {
     const video = videoRef.current
     if (!video) return
     if (video.paused) {
+      advanceLockRef.current = null
       playingRef.current = true
       await video.play()
     } else {
@@ -584,17 +658,13 @@ export function CutEditorView({
             </button>
           </div>
           <div className="videon-nle__tool-group">
-            {([
-              { mode: 'trim' as const, title: 'Trim: Quellfenster ändern (Sequenz folgt)' },
-              { mode: 'ripple' as const, title: 'Ripple: Dauer ändern — nachfolgende Clips rücken nach' },
-              { mode: 'roll' as const, title: 'Roll: gemeinsame Schnittgrenze zweier Clips' },
-            ]).map(({ mode, title }) => (
+            {(['trim', 'ripple', 'roll'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
                 className={`videon-nle__tool-btn${trimMode === mode ? ' is-active' : ''}`}
                 onClick={() => setTrimMode(mode)}
-                title={title}
+                title={TRIM_MODE_HELP[mode]}
               >
                 {mode.toUpperCase()}
               </button>

@@ -20,7 +20,7 @@ import {
 } from '@/lib/timeline-layout'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
-import { computeTrimPreview, type TrimMode } from '@/lib/trim-modes'
+import { computeTrimPreview, TRIM_MODE_HELP, TRIM_MODE_LABELS, type TrimMode } from '@/lib/trim-modes'
 
 export type CutTimelineClip = {
   scene: {
@@ -99,6 +99,7 @@ export function CutTimeline({
     endMs: number
     pointerStartX: number
     clipWidthPx: number
+    mediaDurationMs: number
     nextClip?: { startMs: number; endMs: number; sameMedia: boolean }
   } | null>(null)
 
@@ -217,6 +218,8 @@ export function CutTimeline({
     if (!clipElement) return
     const nextClip = clips[item.index + 1]
     const sameMedia = nextClip?.scene.mediaAssetId === item.scene.mediaAssetId
+    const mediaDurationMs =
+      sourceDurationMsByMediaId[item.scene.mediaAssetId] ?? Math.max(item.scene.endMs, item.durationMs)
     trimRef.current = {
       sceneId: item.scene.id,
       edge,
@@ -224,6 +227,7 @@ export function CutTimeline({
       endMs: item.scene.endMs,
       pointerStartX: event.clientX,
       clipWidthPx: clipElement.getBoundingClientRect().width,
+      mediaDurationMs,
       nextClip: nextClip
         ? { startMs: nextClip.scene.startMs, endMs: nextClip.scene.endMs, sameMedia }
         : undefined,
@@ -243,6 +247,7 @@ export function CutTimeline({
       startMs: trim.startMs,
       endMs: trim.endMs,
       sourceDelta,
+      mediaDurationMs: trim.mediaDurationMs,
       nextClip: trim.nextClip ?? null,
     })
     if (!preview) return
@@ -281,7 +286,9 @@ export function CutTimeline({
   return (
     <div className="videon-cut-timeline">
       <div className="videon-cut-timeline__meta">
-        <span className="videon-cut-timeline__title">Sequenz · {trimMode.toUpperCase()}</span>
+        <span className="videon-cut-timeline__title" title={TRIM_MODE_HELP[trimMode]}>
+          Sequenz · {TRIM_MODE_LABELS[trimMode]}
+        </span>
         <Text role="meta">
           {formatClock(cutPlayheadMs)} / {formatClock(totalDurationMs)}
         </Text>
@@ -381,6 +388,13 @@ export function CutTimeline({
                         <>
                           <span
                             className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--start"
+                            title={
+                              trimMode === 'trim'
+                                ? 'Slip: Fenster schieben'
+                                : trimMode === 'ripple'
+                                  ? 'Ripple: Startkante (Dauer)'
+                                  : 'Roll: gemeinsame Grenze'
+                            }
                             onPointerDown={(event) => startTrim(event, item, 'start')}
                             onPointerMove={onTrimPointerMove}
                             onPointerUp={endTrim}
@@ -388,6 +402,13 @@ export function CutTimeline({
                           />
                           <span
                             className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--end"
+                            title={
+                              trimMode === 'trim'
+                                ? 'Slip: Fenster schieben'
+                                : trimMode === 'ripple'
+                                  ? 'Ripple: Endkante (Dauer)'
+                                  : 'Roll: gemeinsame Grenze'
+                            }
                             onPointerDown={(event) => startTrim(event, item, 'end')}
                             onPointerMove={onTrimPointerMove}
                             onPointerUp={endTrim}
