@@ -2,8 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button, EmptyState, Text } from '@msqdx/ui'
+import {
+  Button,
+  EmptyState,
+  HubIndexCard,
+  LoadingText,
+  RankedList,
+  RankedRow,
+  Text,
+} from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
+import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { paths } from '@/lib/paths'
 
 type CollectionItem = {
@@ -16,6 +25,7 @@ type CollectionItem = {
 
 export function CollectionPicker() {
   const { setPlatformProjectId } = useActiveCollection()
+  const { layout, setLayout } = useHubIndexLayout()
   const [items, setItems] = useState<CollectionItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -49,7 +59,7 @@ export function CollectionPicker() {
   if (loading) {
     return (
       <EmptyState>
-        <Text role="body">Collections werden geladen …</Text>
+        <LoadingText>Collections werden geladen …</LoadingText>
       </EmptyState>
     )
   }
@@ -75,33 +85,55 @@ export function CollectionPicker() {
   }
 
   return (
-    <ul className="videon-collection-list" aria-label="Zugängliche Collections">
-      {items.map((item) => (
-        <li key={item.id} className="videon-collection-card">
-          <div>
-            <Text role="meta" as="p">
-              {item.domain || item.companyId}
-            </Text>
-            <Text role="headline" as="h3">
-              {item.name}
-            </Text>
-            <Text role="meta" as="p">
-              {item.status}
-            </Text>
-          </div>
-          <div className="videon-collection-card__actions">
-            <Link
+    <div className="videon-hub-index">
+      <div className="videon-hub-index__toolbar">
+        <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
+      </div>
+      {layout === 'cards' ? (
+        <ul className="ds-hub-index-grid" aria-label="Zugängliche Collections">
+          {items.map((item) => (
+            <li key={item.id}>
+              <HubIndexCard
+                href={paths.routes.libraryFor(item.id)}
+                onClick={() => setPlatformProjectId(item.id)}
+                title={item.name}
+                meta={
+                  <>
+                    <span>{item.domain || item.companyId}</span>
+                    <span aria-hidden>·</span>
+                    <span>{item.status}</span>
+                  </>
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <RankedList>
+          {items.map((item, index) => (
+            <RankedRow
+              key={item.id}
+              index={index + 1}
+              label={item.name}
+              secondary={`${item.domain || item.companyId} · ${item.status}`}
               href={paths.routes.libraryFor(item.id)}
-              onClick={() => setPlatformProjectId(item.id)}
-            >
-              <Button variant="primary">Mediathek öffnen</Button>
-            </Link>
-            <Link href={paths.routes.uploadFor(item.id)} onClick={() => setPlatformProjectId(item.id)}>
-              <Button variant="ghost">Upload</Button>
-            </Link>
-          </div>
-        </li>
-      ))}
-    </ul>
+              linkComponent={Link}
+              onActivate={() => setPlatformProjectId(item.id)}
+            />
+          ))}
+        </RankedList>
+      )}
+      <div className="videon-hub__actions videon-hub__actions--spaced">
+        {items.slice(0, 1).map((item) => (
+          <Link
+            key={`upload-${item.id}`}
+            href={paths.routes.uploadFor(item.id)}
+            onClick={() => setPlatformProjectId(item.id)}
+          >
+            <Button variant="ghost">Ersten Upload starten</Button>
+          </Link>
+        ))}
+      </div>
+    </div>
   )
 }

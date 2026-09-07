@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { Button, Text } from '@msqdx/ui'
+import { Button, EmptyState, Text } from '@msqdx/ui'
 import { AppShell } from '@/components/app-shell'
+import { HubPageHeader } from '@/components/hub-page-header'
 import { MediaEditorView } from '@/components/media-editor-view'
 import { paths } from '@/lib/paths'
 
@@ -20,16 +21,15 @@ export default async function MediaDetailPage({ params, searchParams }: MediaPag
     return (
       <AppShell description="Medien-Editor benötigt einen Collection-Kontext.">
         <article className="videon-hub">
-          <header>
-            <p className="videon-spread__eyebrow">Editor</p>
-            <h1 className="videon-spread__headline">Video</h1>
-          </header>
-          <Text role="body" as="p">
-            Öffne ein Video aus der Mediathek oder wähle zuerst eine Collection.
-          </Text>
-          <Link href={paths.routes.collections}>
-            <Button variant="primary">Collection wählen</Button>
-          </Link>
+          <HubPageHeader eyebrow="Editor" title="Video" />
+          <EmptyState>
+            <Text role="body" as="p">
+              Öffne ein Video aus der Mediathek oder wähle zuerst eine Collection.
+            </Text>
+            <Link href={paths.routes.collections}>
+              <Button variant="primary">Collection wählen</Button>
+            </Link>
+          </EmptyState>
         </article>
       </AppShell>
     )

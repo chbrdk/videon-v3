@@ -2,9 +2,32 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button, Text } from '@msqdx/ui'
-import { PipelineStatusTrack } from '@/components/pipeline-status-track'
-import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
+import {
+  Alert,
+  Button,
+  Chip,
+  EmptyState,
+  LoadingText,
+  Meter,
+  MeterList,
+  StatusDot,
+  StepStrip,
+  StepStripItem,
+  Text,
+  type StatusLevel,
+} from '@msqdx/ui'
+import {
+  analysisStatusLabel,
+  computePipelineProgress,
+  mediaLifecycleLabel,
+  mergeStagesWithPipeline,
+  pipelineStageHint,
+  pipelineStageLabel,
+  pipelineStatusHeadline,
+  stageStatusLabel,
+  type AnalysisStatusSnapshot,
+  type PipelineStageSnapshot,
+} from '@/lib/pipeline/pipeline-status'
 import { paths } from '@/lib/paths'
 
 type AnalysisItem = {
@@ -19,6 +42,12 @@ type AnalysisItem = {
   failedStageKey?: string | null
   failedStageMessage?: string | null
   stages?: PipelineStageSnapshot[]
+}
+
+function statusLevel(status: string): StatusLevel {
+  if (status === 'failed') return 'critical'
+  if (status === 'running' || status === 'processing' || status === 'queued') return 'warn'
+  return 'ok'
 }
 
 export function AnalysesList({ platformProjectId }: { platformProjectId: string }) {
@@ -54,39 +83,109 @@ export function AnalysesList({ platformProjectId }: { platformProjectId: string 
     }
   }, [platformProjectId])
 
-  if (loading && items.length === 0) return <Text role="body">Analysen werden geladen …</Text>
-  if (error) return <Text role="body">{error}</Text>
+  if (loading && items.length === 0) {
+    return (
+      <EmptyState>
+        <LoadingText>Analysen werden geladen …</LoadingText>
+      </EmptyState>
+    )
+  }
+  if (error) {
+    return (
+      <EmptyState>
+        <Alert tone="error">{error}</Alert>
+      </EmptyState>
+    )
+  }
   if (items.length === 0) {
     return (
-      <Text role="body">
-        Noch keine Analysen. Lade ein Video hoch — die Pipeline startet automatisch nach dem Upload.
-      </Text>
+      <EmptyState>
+        <Text role="title">Noch keine Analysen</Text>
+        <Text role="body">
+          Lade ein Video hoch — die Pipeline startet automatisch nach dem Upload.
+        </Text>
+        <Link href={paths.routes.uploadFor(platformProjectId)}>
+          <Button variant="primary">Video hochladen</Button>
+        </Link>
+      </EmptyState>
     )
   }
 
   return (
-    <ul className="videon-media-list videon-media-list--analyses">
-      {items.map((item) => (
-        <li key={item.id} className="videon-media-list__item videon-media-list__item--analysis">
-          <div className="videon-media-list__analysis-main">
-            <Text role="title">{item.mediaFilename}</Text>
-            <PipelineStatusTrack
-              analysis={{
-                status: item.status,
-                startedAt: item.startedAt ?? null,
-                finishedAt: item.finishedAt,
-              }}
-              stages={item.stages ?? []}
-              mediaLifecycleState={item.mediaLifecycleState}
-              showLifecycle
-              variant="compact"
-            />
-          </div>
-          <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
-            <Button variant="ghost">Im Editor öffnen</Button>
-          </Link>
-        </li>
-      ))}
+    <ul className="videon-analyses-list" aria-label="Analysen">
+      {items.map((item) => {
+        const stages = item.stages ?? []
+        const progress = computePipelineProgress(stages)
+        const analysis: AnalysisStatusSnapshot = {
+          status: item.status,
+          startedAt: item.startedAt ?? null,
+          finishedAt: item.finishedAt,
+        }
+        const merged = mergeStagesWithPipeline(stages)
+        const headline = pipelineStatusHeadline({
+          analysis,
+          stages,
+          mediaLifecycleState: item.mediaLifecycleState,
+        })
+        const activeIndex = merged.findIndex((stage) => stage.status === 'running')
+
+        return (
+          <li key={item.id} className="videon-analyses-list__item">
+            <div className="videon-analyses-list__main">
+              <div className="videon-analyses-list__head">
+                <Text role="title" as="h3">
+                  {item.mediaFilename}
+                </Text>
+                <div className="videon-analyses-list__chips">
+                  <StatusDot level={statusLevel(item.status)} />
+                  <Chip static size="sm">
+                    {analysisStatusLabel(item.status)}
+                  </Chip>
+                  <Chip static size="sm">
+                    {mediaLifecycleLabel(item.mediaLifecycleState)}
+                  </Chip>
+                </div>
+              </div>
+              <Text role="meta" as="p">
+                {headline}
+              </Text>
+              <MeterList aria-label="Pipeline-Fortschritt">
+                <Meter
+                  label="Pipeline"
+                  value={progress}
+                  valueLabel={`${progress}%`}
+                  disabled
+                />
+              </MeterList>
+              <StepStrip
+                aria-label="Pipeline-Stufen"
+                scrollToIndex={activeIndex >= 0 ? activeIndex : null}
+                hint={pipelineStageHint(merged[activeIndex]?.stageKey ?? merged[0]?.stageKey ?? 'probe')}
+              >
+                {merged.map((stage, index) => (
+                  <StepStripItem
+                    key={stage.stageKey}
+                    index={index}
+                    label={pipelineStageLabel(stage.stageKey)}
+                    active={stage.status === 'running'}
+                    selected={stage.status === 'succeeded'}
+                  >
+                    <Text role="label" as="span">
+                      {pipelineStageLabel(stage.stageKey)}
+                    </Text>
+                    <Text role="meta" as="span">
+                      {stageStatusLabel(stage.status)}
+                    </Text>
+                  </StepStripItem>
+                ))}
+              </StepStrip>
+            </div>
+            <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
+              <Button variant="ghost">Im Editor öffnen</Button>
+            </Link>
+          </li>
+        )
+      })}
     </ul>
   )
 }

@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Text } from '@msqdx/ui'
+import { Button, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
+import { useToast } from '@msqdx/ui-client'
 import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
 import { EditorMonitor } from '@/components/editor-monitor'
-import { EditorSideDrawer, toggleSidePanel, type EditorSidePanel } from '@/components/editor-side-drawer'
+import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
+import { EditorStatusStrip, exportStatusLevel } from '@/components/editor-status-strip'
 import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
@@ -29,7 +31,7 @@ import {
   resolveClipTransition,
   shouldAdvanceAtSourceMs,
 } from '@/lib/cut-playback'
-import { TRIM_MODE_HELP, type TrimMode } from '@/lib/trim-modes'
+import { type TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { prefetchWaveformPeaks } from '@/lib/use-waveform'
@@ -63,6 +65,7 @@ export function CutEditorView({
   cutId: string
 }) {
   const router = useRouter()
+  const toast = useToast()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const cutPlayheadRef = useRef(0)
   const playingRef = useRef(false)
@@ -78,9 +81,17 @@ export function CutEditorView({
   cutPlayheadRef.current = cutPlayheadMs
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>(null)
+  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>('bin')
+  const [inspectOpen, setInspectOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+
+  const notifyOk = useCallback((message: string) => {
+    toast.push({ message, tone: 'ok' })
+  }, [toast])
+  const notifyError = useCallback((message: string) => {
+    setError(message)
+    toast.push({ message, tone: 'error' })
+  }, [toast])
   const [exportBusy, setExportBusy] = useState(false)
   const [latestExport, setLatestExport] = useState<{
     id: string
@@ -227,7 +238,7 @@ export function CutEditorView({
       if (!response.ok) throw new Error(body.error?.message || 'Timeline-Änderung fehlgeschlagen')
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Timeline-Änderung fehlgeschlagen')
+      notifyError(err instanceof Error ? err.message : 'Timeline-Änderung fehlgeschlagen')
     } finally {
       setBusy(false)
     }
@@ -249,7 +260,7 @@ export function CutEditorView({
       setCutPlayheadMs(snapshot.cutPlayheadMs)
       setActiveIndex(snapshot.activeIndex)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rückgängig fehlgeschlagen')
+      notifyError(err instanceof Error ? err.message : 'Rückgängig fehlgeschlagen')
     } finally {
       restoringRef.current = false
       setBusy(false)
@@ -335,7 +346,7 @@ export function CutEditorView({
     if (!clip) return
     const mediaId = clip.media?.id ?? null
     if (mediaId && currentMediaIdRef.current === mediaId && playbackUrl) return
-    void loadPlayback(clip).catch((err) => setError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
+    void loadPlayback(clip).catch((err) => notifyError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
   }, [clips, activeIndex, loadPlayback, playbackUrl])
 
   useEffect(() => {
@@ -425,7 +436,7 @@ export function CutEditorView({
       }
       setActiveIndex(nextTarget.index)
       void loadPlayback(nextClip).catch((err) =>
-        setError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'),
+        notifyError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'),
       )
     }
     const onPlay = () => {
@@ -498,7 +509,7 @@ export function CutEditorView({
       if (!response.ok) throw new Error(body.error?.message || 'Löschen fehlgeschlagen')
       router.push(paths.routes.cutsFor(platformProjectId))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
+      notifyError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
     } finally {
       setBusy(false)
     }
@@ -549,7 +560,6 @@ export function CutEditorView({
   const startExport = async () => {
     setExportBusy(true)
     setError(null)
-    setNotice(null)
     try {
       const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), {
         method: 'POST',
@@ -562,9 +572,9 @@ export function CutEditorView({
       }
       if (!response.ok || !body.export) throw new Error(body.error?.message || 'Export konnte nicht gestartet werden')
       setLatestExport({ id: body.export.id, status: body.export.status, errorMessage: body.export.errorMessage })
-      setNotice('Export gestartet …')
+      notifyOk('Export gestartet …')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export fehlgeschlagen')
+      notifyError(err instanceof Error ? err.message : 'Export fehlgeschlagen')
     } finally {
       setExportBusy(false)
     }
@@ -589,18 +599,13 @@ export function CutEditorView({
           errorMessage: body.export.errorMessage,
           downloadUrl: body.downloadUrl,
         })
-        if (body.export.status === 'succeeded') setNotice('Export fertig — Download verfügbar')
-        if (body.export.status === 'failed') setError(body.export.errorMessage || 'Export fehlgeschlagen')
+        if (body.export.status === 'succeeded') notifyOk('Export fertig — Download verfügbar')
+        if (body.export.status === 'failed') notifyError(body.export.errorMessage || 'Export fehlgeschlagen')
       })()
     }, 2500)
     return () => window.clearInterval(timer)
   }, [cutId, latestExport, platformProjectId])
 
-  useEffect(() => {
-    if (!notice) return
-    const timer = window.setTimeout(() => setNotice(null), 5000)
-    return () => window.clearTimeout(timer)
-  }, [notice])
 
   useEditorKeyboard({
     enabled: Boolean(cut) && !busy,
@@ -626,7 +631,7 @@ export function CutEditorView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setSidePanel(null)
+        setInspectOpen(false)
         setShowShortcuts(false)
         return
       }
@@ -664,44 +669,30 @@ export function CutEditorView({
             Cut · {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
           </p>
         </div>
-        <div className="videon-nle__panel-tabs">
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${sidePanel === 'bin' ? ' is-active' : ''}`}
-            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'bin'))}
-          >
-            Bin ({clips.length})
-          </button>
-        </div>
         <div className="videon-nle__toolbar-groups">
           <div className="videon-nle__tool-group">
-            <button type="button" className="videon-nle__tool-btn" disabled={busy || !canUndo} onClick={undo} title="Rückgängig (⌘Z)" aria-label="Rückgängig">
+            <ToolButton label="Rückgängig" disabled={busy || !canUndo} onClick={undo}>
               <IconUndo />
-            </button>
-            <button type="button" className="videon-nle__tool-btn" disabled={busy || !canRedo} onClick={redo} title="Wiederholen (⌘⇧Z)" aria-label="Wiederholen">
+            </ToolButton>
+            <ToolButton label="Wiederholen" disabled={busy || !canRedo} onClick={redo}>
               <IconRedo />
-            </button>
+            </ToolButton>
           </div>
+          <ToggleGroup
+            aria-label="Trim-Modus"
+            size="sm"
+            value={trimMode}
+            onChange={(value) => setTrimMode(value as typeof trimMode)}
+            options={[
+              { value: 'trim', label: 'TRIM' },
+              { value: 'ripple', label: 'RIPPLE' },
+              { value: 'roll', label: 'ROLL' },
+            ]}
+          />
           <div className="videon-nle__tool-group">
-            {(['trim', 'ripple', 'roll'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={`videon-nle__tool-btn${trimMode === mode ? ' is-active' : ''}`}
-                onClick={() => setTrimMode(mode)}
-                title={TRIM_MODE_HELP[mode]}
-              >
-                {mode.toUpperCase()}
-              </button>
-            ))}
-          </div>
-          <div className="videon-nle__tool-group">
-            <button
-              type="button"
-              className="videon-nle__tool-btn"
+            <ToolButton
+              label="An Playhead teilen"
               disabled={busy || !splitTarget}
-              title="An Playhead teilen (S)"
-              aria-label="An Playhead teilen"
               onClick={() =>
                 void patchTimeline({
                   action: 'split',
@@ -711,7 +702,7 @@ export function CutEditorView({
               }
             >
               <IconSplit />
-            </button>
+            </ToolButton>
             <Button
               type="button"
               variant="ghost"
@@ -729,33 +720,65 @@ export function CutEditorView({
               Löschen
             </Button>
           </div>
-          <Button type="button" variant="ghost" onClick={() => void startExport()} disabled={busy || exportBusy || clips.length === 0}>
+          <Button type="button" variant="primary" onClick={() => void startExport()} disabled={busy || exportBusy || clips.length === 0}>
             {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
               ? 'Export …'
               : 'Export MP4'}
           </Button>
-          {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
-            <a className="videon-nle__tool-btn" href={latestExport.downloadUrl} download>
-              Download
-            </a>
-          ) : null}
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${showShortcuts ? ' is-active' : ''}`}
+          <ToolButton
+            label="Bin"
+            active={inspectOpen}
+            onClick={() => {
+              setSidePanel('bin')
+              setInspectOpen((open) => !open)
+            }}
+          >
+            Bin ({clips.length})
+          </ToolButton>
+          <ToolButton
+            label="Tastaturkürzel"
+            active={showShortcuts}
             onClick={() => setShowShortcuts((current) => !current)}
-            title="Tastaturkürzel (?)"
-            aria-label="Tastaturkürzel"
           >
             ?
-          </button>
-          <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
-            Archivieren
-          </Button>
+          </ToolButton>
+          <details className="videon-nle__toolbar-menu">
+            <summary className="videon-nle__tool-btn">Mehr</summary>
+            <div className="videon-nle__toolbar-menu-body">
+              {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
+                <a className="videon-nle__tool-btn" href={latestExport.downloadUrl} download>
+                  Download
+                </a>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
+                Archivieren
+              </Button>
+            </div>
+          </details>
         </div>
       </header>
 
-      {error ? <p className="videon-nle__error">{error}</p> : null}
-      {notice ? <p className="videon-nle__notice">{notice}</p> : null}
+      {latestExport ? (
+        <EditorStatusStrip
+          level={exportStatusLevel(latestExport.status)}
+          label={
+            latestExport.status === 'succeeded'
+              ? 'Export fertig'
+              : latestExport.status === 'failed'
+                ? 'Export fehlgeschlagen'
+                : 'Export läuft'
+          }
+          detail={latestExport.errorMessage ?? latestExport.status}
+          actionLabel={latestExport.status === 'succeeded' && latestExport.downloadUrl ? 'Download' : undefined}
+          onAction={
+            latestExport.status === 'succeeded' && latestExport.downloadUrl
+              ? () => {
+                  window.location.href = latestExport.downloadUrl!
+                }
+              : undefined
+          }
+        />
+      ) : null}
 
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
@@ -806,7 +829,17 @@ export function CutEditorView({
         </section>
       </div>
 
-      <EditorSideDrawer open={sidePanel === 'bin'} title="Projekt-Bin" onClose={() => setSidePanel(null)}>
+      <EditorSideDrawer
+        open={inspectOpen}
+        title="Inspect"
+        onClose={() => setInspectOpen(false)}
+        tabs={[{ id: 'bin', label: `Bin (${clips.length})` }]}
+        activeTab={sidePanel ?? 'bin'}
+        onTabChange={(id) => {
+          setSidePanel(id)
+          setInspectOpen(true)
+        }}
+      >
         <div className="videon-nle__field-row">
           <Text role="meta" as="span">
             Clip einfügen

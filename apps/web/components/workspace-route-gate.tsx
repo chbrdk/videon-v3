@@ -3,8 +3,9 @@
 import { useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Button, Text } from '@msqdx/ui'
+import { Button, EmptyState, LoadingText, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
+import { HubPageHeader } from '@/components/hub-page-header'
 import { paths } from '@/lib/paths'
 
 export function WorkspaceRouteGate({
@@ -28,22 +29,21 @@ export function WorkspaceRouteGate({
   if (!resolvedId) {
     return (
       <article className="videon-hub">
-        <header>
-          <p className="videon-spread__eyebrow">Collection</p>
-          <h1 className="videon-spread__headline">Kontext fehlt</h1>
-        </header>
-        <Text role="body" as="p">
-          Diese Fläche ist an eine PLEXON Collection gebunden. Wähle zuerst eine Collection.
-        </Text>
-        <Link href={paths.routes.collections}>
-          <Button variant="primary">Collection wählen</Button>
-        </Link>
+        <HubPageHeader eyebrow="Collection" title="Kontext fehlt" />
+        <EmptyState>
+          <Text role="body" as="p">
+            Diese Fläche ist an eine PLEXON Collection gebunden. Wähle zuerst eine Collection.
+          </Text>
+          <Link href={paths.routes.collections}>
+            <Button variant="primary">Collection wählen</Button>
+          </Link>
+        </EmptyState>
       </article>
     )
   }
 
   if (!platformProjectId && storedId) {
-    return <Text role="body">Collection wird geladen …</Text>
+    return <LoadingText>Collection wird geladen …</LoadingText>
   }
 
   return <>{children(resolvedId)}</>

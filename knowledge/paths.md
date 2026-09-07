@@ -11,6 +11,18 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | Staging app | `https://videon.projects-a.plygrnd.tech` |
 | Staging Brandion | `https://brandion-v3.projects-a.plygrnd.tech` |
 
+## UI / DS
+
+| Key / path | Meaning |
+|------------|---------|
+| `apps/web/lib/msqdx-ui.ts` | Shared primitives barrel |
+| `apps/web/lib/msqdx-ui-shell.ts` | AppFrame / NavRail barrel |
+| `apps/web/lib/msqdx-ui-client.ts` | Client overlays barrel |
+| `hubIndexLayoutKey` | Session storage for cards/list hub layout |
+| `specs/domain/videon-ui-surfaces.md` | Hub + editor IA |
+| `knowledge/ui-rebuild-reuse.md` | Keep/reshape import map |
+| Docker `MSQDX_UI_REF` | Pinned `chbrdk/msqdx-ui` commit for Coolify sibling fetch |
+
 ## Brandion seam
 
 | Constant / env | Path or meaning |

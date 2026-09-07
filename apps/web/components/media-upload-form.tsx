@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Field, Text } from '@msqdx/ui'
+import { Alert, Button, Field, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
 import { paths } from '@/lib/paths'
 
@@ -125,6 +125,7 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
     <form className="videon-upload-form" onSubmit={onSubmit}>
       <Field label="Video-Datei" size="md">
         <input
+          className="videon-upload-form__file"
           type="file"
           accept="video/*"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
@@ -137,7 +138,7 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
         </Text>
       ) : null}
       {progress ? <Text role="body">{progress}</Text> : null}
-      {error ? <Text role="body">{error}</Text> : null}
+      {error ? <Alert tone="error">{error}</Alert> : null}
       <Button type="submit" variant="primary" disabled={!file || busy}>
         {busy ? 'Lädt …' : 'Hochladen'}
       </Button>

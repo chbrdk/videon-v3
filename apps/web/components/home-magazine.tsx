@@ -2,17 +2,24 @@
 
 import Link from 'next/link'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button, EmptyState, Text } from '@msqdx/ui'
+import {
+  Button,
+  EmptyState,
+  HubIndexCard,
+  LoadingText,
+  RankedList,
+  RankedRow,
+  SectionChrome,
+  Text,
+} from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
 import { paths } from '../lib/paths'
 
 function HomeChapter({
-  eyebrow,
   title,
   deck,
   children,
 }: {
-  eyebrow: string
   title: string
   deck?: string
   children: ReactNode
@@ -20,11 +27,12 @@ function HomeChapter({
   return (
     <section className="videon-home-chapter">
       <header className="videon-home-chapter__head">
-        <div>
-          <p className="videon-spread__eyebrow">{eyebrow}</p>
-          <h2 className="videon-spread__headline">{title}</h2>
-          {deck ? <p className="videon-home-chapter__deck">{deck}</p> : null}
-        </div>
+        <SectionChrome title={title} quiet as="h2" />
+        {deck ? (
+          <Text role="body" as="p" className="videon-home-chapter__deck">
+            {deck}
+          </Text>
+        ) : null}
       </header>
       {children}
     </section>
@@ -81,11 +89,12 @@ export function HomeMagazine() {
   return (
     <article className="videon-magazine videon-magazine--home" data-section="home-magazine">
       <header className="videon-home-cover">
-        <h1 className="videon-home-cover__title">{paths.brandLabel}</h1>
+        <Text role="display" as="h1" className="videon-home-cover__title">
+          {paths.brandLabel}
+        </Text>
       </header>
 
       <HomeChapter
-        eyebrow="Start"
         title="Collection-Video-Arbeitsfläche"
         deck={
           platformProjectId
@@ -93,40 +102,39 @@ export function HomeMagazine() {
             : 'Mediathek, Analysen und Cuts bleiben Collection-gebunden — geöffnet aus PLEXON.'
         }
       >
-        <div className="videon-home-cta-row" role="group" aria-label="VIDEON Kapazitäten">
-          <Link href={paths.routes.collections} className="videon-capability-tile videon-home-cta">
-            <span className="videon-capability-tile__kicker">Zugang</span>
-            <span className="videon-capability-tile__label">Collections</span>
-            <span className="videon-capability-tile__deck">
-              Nur zugewiesene PLEXON Collections — Access Model B.
-            </span>
-          </Link>
-          <Link href={libraryHref} className="videon-capability-tile videon-home-cta">
-            <span className="videon-capability-tile__kicker">Medien</span>
-            <span className="videon-capability-tile__label">Mediathek</span>
-            <span className="videon-capability-tile__deck">
-              Collection-scoped Assets und signierte Uploads.
-            </span>
-          </Link>
-          <Link href={uploadHref} className="videon-capability-tile videon-home-cta">
-            <span className="videon-capability-tile__kicker">Ingest</span>
-            <span className="videon-capability-tile__label">Upload</span>
-            <span className="videon-capability-tile__deck">
-              Direkt in Object Storage — Analyse startet nach Abschluss.
-            </span>
-          </Link>
-          <Link href={analysesHref} className="videon-capability-tile videon-home-cta">
-            <span className="videon-capability-tile__kicker">Vision</span>
-            <span className="videon-capability-tile__label">Analysen</span>
-            <span className="videon-capability-tile__deck">
-              OpenRouter / Qwen mit Schema-Fallback und Szenen-Insights.
-            </span>
-          </Link>
-        </div>
+        <ul className="ds-hub-index-grid videon-home-cta-row" aria-label="VIDEON Kapazitäten">
+          <li>
+            <HubIndexCard
+              href={paths.routes.collections}
+              title="Collections"
+              meta="Nur zugewiesene PLEXON Collections — Access Model B."
+            />
+          </li>
+          <li>
+            <HubIndexCard
+              href={libraryHref}
+              title="Mediathek"
+              meta="Collection-scoped Assets und signierte Uploads."
+            />
+          </li>
+          <li>
+            <HubIndexCard
+              href={uploadHref}
+              title="Upload"
+              meta="Direkt in Object Storage — Analyse startet nach Abschluss."
+            />
+          </li>
+          <li>
+            <HubIndexCard
+              href={analysesHref}
+              title="Analysen"
+              meta="OpenRouter / Qwen mit Schema-Fallback und Szenen-Insights."
+            />
+          </li>
+        </ul>
       </HomeChapter>
 
       <HomeChapter
-        eyebrow="Aktivität"
         title="Zuletzt in der Collection"
         deck={
           platformProjectId
@@ -136,9 +144,9 @@ export function HomeMagazine() {
       >
         <div className="videon-home-run-columns" aria-label="Letzte Aktivität">
           <div className="videon-home-run-col">
-            <h3 className="videon-home-run-col__title">Medien</h3>
+            <SectionChrome title="Medien" quiet as="h3" />
             {loading ? (
-              <Text role="body">Lädt …</Text>
+              <LoadingText>Lädt …</LoadingText>
             ) : media.length === 0 ? (
               <EmptyState className="videon-home-empty">
                 <Text role="body">Noch keine Assets.</Text>
@@ -147,26 +155,24 @@ export function HomeMagazine() {
                 </Link>
               </EmptyState>
             ) : (
-              <ul className="videon-home-activity-list">
-                {media.map((item) => (
-                  <li key={item.id}>
-                    <Link href={paths.routes.mediaFor(item.id, platformProjectId!)}>
-                      <Text role="headline" as="span">
-                        {item.originalFilename}
-                      </Text>
-                      <Text role="meta" as="span">
-                        {item.lifecycleState}
-                      </Text>
-                    </Link>
-                  </li>
+              <RankedList>
+                {media.map((item, index) => (
+                  <RankedRow
+                    key={item.id}
+                    index={index + 1}
+                    label={item.originalFilename}
+                    secondary={item.lifecycleState}
+                    href={paths.routes.mediaFor(item.id, platformProjectId!)}
+                    linkComponent={Link}
+                  />
                 ))}
-              </ul>
+              </RankedList>
             )}
           </div>
           <div className="videon-home-run-col">
-            <h3 className="videon-home-run-col__title">Analysen</h3>
+            <SectionChrome title="Analysen" quiet as="h3" />
             {loading ? (
-              <Text role="body">Lädt …</Text>
+              <LoadingText>Lädt …</LoadingText>
             ) : analyses.length === 0 ? (
               <EmptyState className="videon-home-empty">
                 <Text role="body">Noch keine Vision-Runs.</Text>
@@ -175,24 +181,22 @@ export function HomeMagazine() {
                 </Link>
               </EmptyState>
             ) : (
-              <ul className="videon-home-activity-list">
-                {analyses.map((item) => (
-                  <li key={item.id}>
-                    <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId!)}>
-                      <Text role="headline" as="span">
-                        {item.mediaFilename}
-                      </Text>
-                      <Text role="meta" as="span">
-                        {item.status}
-                      </Text>
-                    </Link>
-                  </li>
+              <RankedList>
+                {analyses.map((item, index) => (
+                  <RankedRow
+                    key={item.id}
+                    index={index + 1}
+                    label={item.mediaFilename}
+                    secondary={item.status}
+                    href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId!)}
+                    linkComponent={Link}
+                  />
                 ))}
-              </ul>
+              </RankedList>
             )}
           </div>
           <div className="videon-home-run-col">
-            <h3 className="videon-home-run-col__title">Cuts</h3>
+            <SectionChrome title="Cuts" quiet as="h3" />
             <EmptyState className="videon-home-empty">
               <Text role="body">Editor pro Medium in der Mediathek.</Text>
               <Link href={cutsHref}>

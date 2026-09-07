@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button, EmptyState, Text } from '@msqdx/ui'
+import {
+  Alert,
+  Button,
+  EmptyState,
+  HubIndexCard,
+  LoadingText,
+  RankedList,
+  RankedRow,
+  Text,
+} from '@msqdx/ui'
+import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { paths } from '@/lib/paths'
 
 type CutItem = {
@@ -13,6 +23,7 @@ type CutItem = {
 }
 
 export function CutsList({ platformProjectId }: { platformProjectId: string }) {
+  const { layout, setLayout } = useHubIndexLayout()
   const [items, setItems] = useState<CutItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,8 +47,20 @@ export function CutsList({ platformProjectId }: { platformProjectId: string }) {
     void load()
   }, [load])
 
-  if (loading) return <Text role="body">Cuts werden geladen …</Text>
-  if (error) return <Text role="body">{error}</Text>
+  if (loading) {
+    return (
+      <EmptyState>
+        <LoadingText>Cuts werden geladen …</LoadingText>
+      </EmptyState>
+    )
+  }
+  if (error) {
+    return (
+      <EmptyState>
+        <Alert tone="error">{error}</Alert>
+      </EmptyState>
+    )
+  }
   if (!items.length) {
     return (
       <EmptyState>
@@ -51,24 +74,42 @@ export function CutsList({ platformProjectId }: { platformProjectId: string }) {
   }
 
   return (
-    <ul className="videon-media-list">
-      {items.map((item) => (
-        <li key={item.id} className="videon-media-row">
-          <div>
-            <Link href={paths.routes.cutFor(item.id, platformProjectId)}>
-              <Text role="headline" as="h3">
-                {item.name}
-              </Text>
-            </Link>
-            <Text role="meta" as="p">
-              {item.status}
-            </Text>
-          </div>
-          <Link href={paths.routes.cutFor(item.id, platformProjectId)}>
-            <Button variant="ghost">Öffnen</Button>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <div className="videon-hub-index">
+      <div className="videon-hub-index__toolbar">
+        <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
+      </div>
+      {layout === 'cards' ? (
+        <ul className="ds-hub-index-grid" aria-label="Cuts">
+          {items.map((item) => (
+            <li key={item.id}>
+              <HubIndexCard
+                href={paths.routes.cutFor(item.id, platformProjectId)}
+                title={item.name}
+                meta={
+                  <>
+                    <span>{item.status}</span>
+                    <span aria-hidden>·</span>
+                    <span>{new Date(item.updatedAt).toLocaleString('de-DE')}</span>
+                  </>
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <RankedList>
+          {items.map((item, index) => (
+            <RankedRow
+              key={item.id}
+              index={index + 1}
+              label={item.name}
+              secondary={item.status}
+              href={paths.routes.cutFor(item.id, platformProjectId)}
+              linkComponent={Link}
+            />
+          ))}
+        </RankedList>
+      )}
+    </div>
   )
 }

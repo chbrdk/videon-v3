@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
       // `$` = exact only — otherwise `@msqdx/ui` steals `@msqdx/ui/styles.css`.
       '@msqdx/ui$': path.resolve(__dirname, './lib/msqdx-ui.ts'),
       '@msqdx/ui-shell$': path.resolve(__dirname, './lib/msqdx-ui-shell.ts'),
+      '@msqdx/ui-client$': path.resolve(__dirname, './lib/msqdx-ui-client.ts'),
       '@msqdx/ui/styles.css': path.resolve(__dirname, '../../../msqdx-ui/packages/ui/src/styles.css'),
       '@msqdx/ui-tokens$': path.resolve(
         __dirname,

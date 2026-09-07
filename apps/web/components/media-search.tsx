@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Button, Field, Text } from '@msqdx/ui'
+import { Alert, Button, Field, Input, Text } from '@msqdx/ui'
 import { paths } from '@/lib/paths'
 
 type SearchHit = {
@@ -54,7 +54,7 @@ export function MediaSearch({
     <div className="videon-search">
       <form className="videon-search__form" onSubmit={onSearch}>
         <Field label="Medien durchsuchen" size="md">
-          <input
+          <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Szene, Stimmung, Dateiname …"
@@ -69,12 +69,13 @@ export function MediaSearch({
       ) : onAddToCut ? (
         <Text role="meta">Öffne einen Cut-Editor, um Treffer direkt einzufügen.</Text>
       ) : null}
-      {error ? <Text role="body">{error}</Text> : null}
+      {error ? <Alert tone="error">{error}</Alert> : null}
       {items.length > 0 ? (
-        <ul className="videon-home-activity-list">
-          {items.map((item) => (
-            <li key={`${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`}>
-              <div className="videon-search-hit">
+        <ul className="videon-search-results" aria-label="Suchtreffer">
+          {items.map((item) => {
+            const hitKey = `${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`
+            return (
+              <li key={hitKey} className="videon-search-hit">
                 <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
                   <Text role="headline" as="span">
                     {item.mediaFilename}
@@ -88,18 +89,18 @@ export function MediaSearch({
                   <Button
                     type="button"
                     variant="ghost"
-                    disabled={addingId === `${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`}
+                    disabled={addingId === hitKey}
                     onClick={() => {
-                      setAddingId(`${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`)
+                      setAddingId(hitKey)
                       void Promise.resolve(onAddToCut(item)).finally(() => setAddingId(null))
                     }}
                   >
                     Zum Cut
                   </Button>
                 ) : null}
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       ) : null}
     </div>

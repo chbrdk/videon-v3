@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { TimelineClip, Waveform } from '@msqdx/ui'
 import type { CutTimelineItem } from '@/lib/cut-timeline'
 import { timelineLeftPx, timelineWidthPx } from '@/lib/timeline-layout'
 
@@ -13,8 +13,24 @@ type TimelineAudioTrackProps = {
   playbackUrlByMediaId: Record<string, string>
   sourceDurationMsByMediaId: Record<string, number>
   clips: Array<{ scene: { mediaAssetId: string; startMs: number; endMs: number } }>
-  color?: string
   label?: string
+}
+
+function samplePeaks(peaks: number[], targetBars: number): number[] {
+  if (peaks.length === 0) return [0.15]
+  const bars = Math.max(4, Math.min(targetBars, peaks.length))
+  if (peaks.length <= bars) return [...peaks]
+  const out: number[] = []
+  for (let i = 0; i < bars; i += 1) {
+    const start = Math.floor((i / bars) * peaks.length)
+    const end = Math.max(start + 1, Math.floor(((i + 1) / bars) * peaks.length))
+    let max = 0
+    for (let j = start; j < end; j += 1) {
+      max = Math.max(max, Math.abs(peaks[j] ?? 0))
+    }
+    out.push(max)
+  }
+  return out
 }
 
 export function TimelineAudioTrack({
@@ -26,63 +42,46 @@ export function TimelineAudioTrack({
   playbackUrlByMediaId,
   sourceDurationMsByMediaId,
   clips,
-  color = '#2d6a9f',
   label = 'Audio-Spur A1',
 }: TimelineAudioTrackProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const contentWidthPx = Math.max(timelineLeftPx(totalDurationMs, msPerPixel), 1)
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || totalDurationMs <= 0) return
-    const context = canvas.getContext('2d')
-    if (!context) return
-    const width = canvas.clientWidth
-    const height = canvas.clientHeight
-    if (width <= 0 || height <= 0) return
-    canvas.width = width * window.devicePixelRatio
-    canvas.height = height * window.devicePixelRatio
-    context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
-    context.clearRect(0, 0, width, height)
-    context.fillStyle = color
+  return (
+    <div className="videon-cut-timeline__audio-lane" aria-label={label}>
+      {timeline.map((item) => {
+        const clip = clips[item.index]
+        if (!clip) return null
+        const url = playbackUrlByMediaId[clip.scene.mediaAssetId]
+        const peaks = peaksByMediaId[clip.scene.mediaAssetId] ?? (url ? peaksByUrl[url] : null)
+        if (!peaks?.length) return null
 
-    for (const item of timeline) {
-      const clip = clips[item.index]
-      if (!clip) continue
-      const url = playbackUrlByMediaId[clip.scene.mediaAssetId]
-      const peaks = peaksByMediaId[clip.scene.mediaAssetId] ?? (url ? peaksByUrl[url] : null)
-      if (!peaks?.length) continue
+        const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
+        const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
+        const sourceDuration = Math.max(
+          sourceDurationMsByMediaId[clip.scene.mediaAssetId] ?? clip.scene.endMs,
+          1,
+        )
+        const startIndex = Math.floor((clip.scene.startMs / sourceDuration) * peaks.length)
+        const endIndex = Math.max(
+          startIndex + 1,
+          Math.floor((clip.scene.endMs / sourceDuration) * peaks.length),
+        )
+        const slice = peaks.slice(startIndex, endIndex)
+        const targetBars = Math.max(4, Math.min(120, Math.round(widthPx / 2)))
+        const sampled = samplePeaks(slice, targetBars)
 
-      const left = timelineLeftPx(item.cutStartMs, msPerPixel)
-      const clipWidth = timelineWidthPx(item.durationMs, msPerPixel)
-      const sourceDuration = Math.max(
-        sourceDurationMsByMediaId[clip.scene.mediaAssetId] ?? clip.scene.endMs,
-        1,
-      )
-      const startIndex = Math.floor((clip.scene.startMs / sourceDuration) * peaks.length)
-      const endIndex = Math.max(startIndex + 1, Math.floor((clip.scene.endMs / sourceDuration) * peaks.length))
-      const slice = peaks.slice(startIndex, endIndex)
-      const peakCount = Math.max(slice.length, 4)
-
-      const mid = height / 2
-      for (let index = 0; index < peakCount; index += 1) {
-        const peak = slice[Math.min(index, slice.length - 1)] ?? 0
-        const x = left + (index / peakCount) * clipWidth
-        const barWidth = Math.max(clipWidth / peakCount, 1)
-        const barHeight = Math.max(peak * (height - 4), 1)
-        context.fillRect(x, mid - barHeight / 2, barWidth, barHeight)
-      }
-    }
-  }, [
-    clips,
-    color,
-    msPerPixel,
-    peaksByMediaId,
-    peaksByUrl,
-    playbackUrlByMediaId,
-    sourceDurationMsByMediaId,
-    timeline,
-    totalDurationMs,
-  ])
-
-  return <canvas ref={canvasRef} className="videon-cut-timeline__audio-canvas" aria-label={label} />
+        return (
+          <TimelineClip
+            key={`${item.scene.id}-audio`}
+            leftPct={(leftPx / contentWidthPx) * 100}
+            widthPct={(widthPx / contentWidthPx) * 100}
+            tone="audio"
+            className="videon-cut-timeline__clip videon-cut-timeline__clip--audio"
+          >
+            <Waveform peaks={sampled} height={28} aria-label={`${label} Clip ${item.index + 1}`} />
+          </TimelineClip>
+        )
+      })}
+    </div>
+  )
 }

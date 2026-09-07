@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Text } from '@msqdx/ui'
+import { Button, Text, ToolButton } from '@msqdx/ui'
+import { useToast } from '@msqdx/ui-client'
 import { useActiveCollection } from '@/components/collection-context'
 import { EditorMonitor } from '@/components/editor-monitor'
-import { EditorSideDrawer, toggleSidePanel, type EditorSidePanel } from '@/components/editor-side-drawer'
+import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
+import { EditorStatusStrip, analysisStatusLevel } from '@/components/editor-status-strip'
 import { MediaSearch } from '@/components/media-search'
 import { SourceMediaTimeline } from '@/components/source-media-timeline'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
@@ -72,6 +74,7 @@ export function MediaEditorView({
   mediaAssetId: string
 }) {
   const router = useRouter()
+  const toast = useToast()
   const { setPlatformProjectId } = useActiveCollection()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [media, setMedia] = useState<MediaDetail | null>(null)
@@ -94,9 +97,23 @@ export function MediaEditorView({
   const [markOutMs, setMarkOutMs] = useState<number | null>(null)
   const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>('scenes')
+  const [inspectOpen, setInspectOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+
+  const notifyOk = useCallback(
+    (message: string) => {
+      toast.push({ message, tone: 'ok' })
+    },
+    [toast],
+  )
+  const notifyError = useCallback(
+    (message: string) => {
+      setError(message)
+      toast.push({ message, tone: 'error' })
+    },
+    [toast],
+  )
   const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
   const markedRange = useMemo(
     () =>
@@ -238,12 +255,11 @@ export function MediaEditorView({
 
   const addRangeToActiveCut = async (startMs: number, endMs: number, targetMediaId = mediaAssetId) => {
     if (!activeCut || activeCut.platformProjectId !== platformProjectId) {
-      setError('Öffne zuerst einen Cut im Cut-Editor, um Clips einzufügen.')
+      notifyError('Öffne zuerst einen Cut im Cut-Editor, um Clips einzufügen.')
       return
     }
     setBusy('cut')
     setError(null)
-    setNotice(null)
     try {
       const response = await fetch(paths.routes.apiCutDetail(activeCut.cutId, platformProjectId), {
         method: 'PATCH',
@@ -257,9 +273,9 @@ export function MediaEditorView({
       })
       const body = (await response.json()) as { error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Clip konnte nicht eingefügt werden')
-      setNotice(`Zum Cut „${activeCut.name}“ hinzugefügt (${formatClock(startMs)} – ${formatClock(endMs)})`)
+      notifyOk(`Zum Cut „${activeCut.name}“ hinzugefügt (${formatClock(startMs)} – ${formatClock(endMs)})`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Clip konnte nicht eingefügt werden')
+      notifyError(err instanceof Error ? err.message : 'Clip konnte nicht eingefügt werden')
     } finally {
       setBusy(null)
     }
@@ -279,15 +295,9 @@ export function MediaEditorView({
   })
 
   useEffect(() => {
-    if (!notice) return
-    const timer = window.setTimeout(() => setNotice(null), 4000)
-    return () => window.clearTimeout(timer)
-  }, [notice])
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setSidePanel(null)
+        setInspectOpen(false)
         setShowShortcuts(false)
         return
       }
@@ -320,7 +330,7 @@ export function MediaEditorView({
       if (!response.ok) throw new Error(body.error?.message || 'Analyse konnte nicht gestartet werden')
       await loadDetail()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analyse konnte nicht gestartet werden')
+      notifyError(err instanceof Error ? err.message : 'Analyse konnte nicht gestartet werden')
     } finally {
       setBusy(null)
     }
@@ -329,7 +339,6 @@ export function MediaEditorView({
   const rerunBrandCheck = async () => {
     setBusy('brand')
     setError(null)
-    setNotice(null)
     try {
       const response = await fetch(paths.routes.apiMediaBrandCheck(mediaAssetId, platformProjectId), {
         method: 'POST',
@@ -340,14 +349,14 @@ export function MediaEditorView({
         error?: { message?: string }
       }
       if (!response.ok) throw new Error(body.error?.message || 'Brand-Check konnte nicht gestartet werden')
-      setNotice(
+      notifyOk(
         body.queued
           ? `Brand-Check gestartet (${body.sceneCount ?? 0} Szenen)`
           : 'Brand-Check nicht queued — Queue nicht konfiguriert',
       )
       await loadDetail()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Brand-Check konnte nicht gestartet werden')
+      notifyError(err instanceof Error ? err.message : 'Brand-Check konnte nicht gestartet werden')
     } finally {
       setBusy(null)
     }
@@ -398,7 +407,7 @@ export function MediaEditorView({
       if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht erstellt werden')
       if (body.cut?.id) router.push(paths.routes.cutFor(body.cut.id, platformProjectId))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cut konnte nicht erstellt werden')
+      notifyError(err instanceof Error ? err.message : 'Cut konnte nicht erstellt werden')
     } finally {
       setBusy(null)
     }
@@ -417,7 +426,7 @@ export function MediaEditorView({
       router.push(paths.routes.libraryFor(platformProjectId))
       router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
+      notifyError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen')
     } finally {
       setBusy(null)
     }
@@ -449,16 +458,13 @@ export function MediaEditorView({
     brandStageBusy ||
     analysis?.status === 'failed' ||
     media.lifecycleState === 'processing'
-  const sidePanelTitle =
-    sidePanel === 'scenes'
-      ? 'Szenen'
-      : sidePanel === 'transcript'
-        ? 'Transkript'
-        : sidePanel === 'search'
-          ? 'Suche & Cut'
-          : sidePanel === 'pipeline'
-            ? 'Analyse-Pipeline'
-            : ''
+  const sidePanelTitle = 'Inspect'
+  const inspectTabs = [
+    { id: 'scenes' as const, label: scenes.length ? `Szenen (${scenes.length})` : 'Szenen' },
+    { id: 'transcript' as const, label: 'TX' },
+    { id: 'search' as const, label: 'Suche' },
+    { id: 'pipeline' as const, label: 'Pipeline' },
+  ]
 
   return (
     <div className="videon-nle videon-nle--player-first">
@@ -470,47 +476,8 @@ export function MediaEditorView({
             {media.width && media.height ? ` · ${media.width}×${media.height}` : ''}
           </p>
         </div>
-        <div className="videon-nle__panel-tabs" role="tablist" aria-label="Editor-Panels">
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${sidePanel === 'scenes' ? ' is-active' : ''}`}
-            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'scenes'))}
-          >
-            Szenen{scenes.length ? ` (${scenes.length})` : ''}
-          </button>
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${sidePanel === 'transcript' ? ' is-active' : ''}`}
-            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'transcript'))}
-          >
-            TX
-          </button>
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${sidePanel === 'search' ? ' is-active' : ''}`}
-            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'search'))}
-          >
-            Suche
-          </button>
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${sidePanel === 'pipeline' ? ' is-active' : ''}${analysisAttention ? ' is-attention' : ''}`}
-            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'pipeline'))}
-          >
-            Pipeline
-          </button>
-          <button
-            type="button"
-            className={`videon-nle__tool-btn${showShortcuts ? ' is-active' : ''}`}
-            onClick={() => setShowShortcuts((current) => !current)}
-            title="Tastaturkürzel (?)"
-            aria-label="Tastaturkürzel"
-          >
-            ?
-          </button>
-        </div>
         <div className="videon-nle__toolbar-groups">
-          <Button type="button" variant="ghost" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
+          <Button type="button" variant="primary" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
             {busy === 'cut' ? 'Speichert …' : markedRange ? 'In/Out als Cut' : 'Szene als Cut'}
           </Button>
           {markedRange && activeCut ? (
@@ -523,47 +490,60 @@ export function MediaEditorView({
               In/Out zum Cut
             </Button>
           ) : null}
-          <label className="videon-nle__stem-method">
-            <span className="videon-nle__stem-method-label">Stems</span>
-            <select
-              className="videon-nle__stem-method-select"
-              value={stemMethod}
-              disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
-              onChange={(event) =>
-                setStemMethod(event.target.value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
-              }
-              title="Voice/Music-Trennung für die nächste Analyse"
-            >
-              <option value="ffmpeg_mid_side">Schnell (Mid/Side)</option>
-              <option value="demucs">Neural (Demucs)</option>
-            </select>
-          </label>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => void rerunAnalysis()}
-            disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+          <ToolButton
+            label="Inspect"
+            active={inspectOpen}
+            className={analysisAttention ? 'is-attention' : undefined}
+            onClick={() => {
+              setInspectOpen((open) => !open)
+              if (!sidePanel) setSidePanel('scenes')
+            }}
           >
-            {busy === 'analysis' ? 'Startet …' : 'Analyse'}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => void rerunBrandCheck()}
-            disabled={
-              Boolean(busy) ||
-              brandStageBusy ||
-              media.lifecycleState === 'uploading' ||
-              analysis?.status !== 'succeeded' ||
-              scenes.length === 0
-            }
-            title="Brandion-Check ohne Vollanalyse erneut ausführen"
-          >
-            {busy === 'brand' || brandStageBusy ? 'Brand …' : 'Brand-Check'}
-          </Button>
+            Inspect
+          </ToolButton>
+          <ToolButton label="Tastaturkürzel" active={showShortcuts} onClick={() => setShowShortcuts((c) => !c)}>
+            ?
+          </ToolButton>
           <details className="videon-nle__toolbar-menu">
             <summary className="videon-nle__tool-btn">Mehr</summary>
             <div className="videon-nle__toolbar-menu-body">
+              <label className="videon-nle__stem-method">
+                <span className="videon-nle__stem-method-label">Stems</span>
+                <select
+                  className="videon-nle__stem-method-select"
+                  value={stemMethod}
+                  disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+                  onChange={(event) =>
+                    setStemMethod(event.target.value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
+                  }
+                  title="Voice/Music-Trennung für die nächste Analyse"
+                >
+                  <option value="ffmpeg_mid_side">Schnell (Mid/Side)</option>
+                  <option value="demucs">Neural (Demucs)</option>
+                </select>
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void rerunAnalysis()}
+                disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+              >
+                {busy === 'analysis' ? 'Startet …' : 'Analyse'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void rerunBrandCheck()}
+                disabled={
+                  Boolean(busy) ||
+                  brandStageBusy ||
+                  media.lifecycleState === 'uploading' ||
+                  analysis?.status !== 'succeeded' ||
+                  scenes.length === 0
+                }
+              >
+                {busy === 'brand' || brandStageBusy ? 'Brand …' : 'Brand-Check'}
+              </Button>
               <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
                 Aktualisieren
               </Button>
@@ -580,26 +560,17 @@ export function MediaEditorView({
         </div>
       </header>
 
-      {error ? <p className="videon-nle__error">{error}</p> : null}
-      {notice ? <p className="videon-nle__notice">{notice}</p> : null}
-
-      {analysisAttention ? (
-        <div className="videon-nle__pipeline-strip">
-          <PipelineStatusTrack
-            analysis={analysis}
-            stages={stages}
-            mediaLifecycleState={media.lifecycleState}
-            showLifecycle
-            variant="compact"
-          />
-          <button
-            type="button"
-            className="videon-nle__tool-btn"
-            onClick={() => setSidePanel((current) => toggleSidePanel(current, 'pipeline'))}
-          >
-            Details
-          </button>
-        </div>
+      {analysis || analysisAttention ? (
+        <EditorStatusStrip
+          level={analysisStatusLevel(analysis?.status)}
+          label={analysis?.status === 'succeeded' ? 'Analyse bereit' : analysisBusy ? 'Analyse läuft' : analysis?.status === 'failed' ? 'Analyse fehlgeschlagen' : 'Pipeline'}
+          detail={media.lifecycleState}
+          actionLabel="Details"
+          onAction={() => {
+            setSidePanel('pipeline')
+            setInspectOpen(true)
+          }}
+        />
       ) : null}
 
       <div className="videon-nle__workspace">
@@ -664,7 +635,17 @@ export function MediaEditorView({
         </section>
       </div>
 
-      <EditorSideDrawer open={sidePanel !== null} title={sidePanelTitle} onClose={() => setSidePanel(null)}>
+      <EditorSideDrawer
+        open={inspectOpen}
+        title={sidePanelTitle}
+        onClose={() => setInspectOpen(false)}
+        tabs={inspectTabs}
+        activeTab={sidePanel}
+        onTabChange={(id) => {
+          setSidePanel(id)
+          setInspectOpen(true)
+        }}
+      >
         {sidePanel === 'scenes' ? (
           <>
             {scenes.length === 0 ? (

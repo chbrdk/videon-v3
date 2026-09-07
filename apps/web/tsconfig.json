@@ -24,6 +24,21 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@msqdx/ui": [
+        "./lib/msqdx-ui.ts"
+      ],
+      "@msqdx/ui-shell": [
+        "./lib/msqdx-ui-shell.ts"
+      ],
+      "@msqdx/ui-client": [
+        "./lib/msqdx-ui-client.ts"
+      ],
+      "@msqdx/ui/styles.css": [
+        "../../../msqdx-ui/packages/ui/src/styles.css"
+      ],
+      "@msqdx/ui-tokens": [
+        "../../../msqdx-ui/packages/ui-tokens/src/index.ts"
       ]
     },
     "incremental": true

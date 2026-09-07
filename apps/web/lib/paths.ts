@@ -12,6 +12,7 @@ export const paths = {
   mainGutterRem: 2.5,
   railDockEdge: 'left' as const,
   railDockStorageKey: 'videon.v3.railDock',
+  hubIndexLayoutKey: 'videon.v3.hubIndexLayout',
   brandCornerRadiusPx: 24,
   ecosystemStagingPlexon: 'https://plexon-v3.projects-a.plygrnd.tech',
   ecosystemStagingAudion: 'https://audion-v3.projects-a.plygrnd.tech',

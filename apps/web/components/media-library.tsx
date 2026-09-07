@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Button, EmptyState, Text } from '@msqdx/ui'
+import {
+  Button,
+  EmptyState,
+  HubIndexCard,
+  LoadingText,
+  RankedList,
+  RankedRow,
+  Text,
+} from '@msqdx/ui'
+import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { paths } from '@/lib/paths'
 
 type MediaItem = {
@@ -22,6 +31,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function MediaLibrary({ platformProjectId }: { platformProjectId: string }) {
+  const { layout, setLayout } = useHubIndexLayout()
   const [items, setItems] = useState<MediaItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -54,7 +64,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
   if (loading) {
     return (
       <EmptyState>
-        <Text role="body">Medien werden geladen …</Text>
+        <LoadingText>Medien werden geladen …</LoadingText>
       </EmptyState>
     )
   }
@@ -84,39 +94,53 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
   }
 
   return (
-    <div className="videon-media-list-wrap">
-      <div className="videon-media-list-wrap__actions">
-        <Link href={paths.routes.uploadFor(platformProjectId)}>
-          <Button variant="primary">Video hochladen</Button>
-        </Link>
-        <Button type="button" variant="ghost" onClick={() => void load()}>
-          Aktualisieren
-        </Button>
+    <div className="videon-hub-index">
+      <div className="videon-hub-index__toolbar">
+        <div className="videon-hub__actions">
+          <Link href={paths.routes.uploadFor(platformProjectId)}>
+            <Button variant="primary">Video hochladen</Button>
+          </Link>
+          <Button type="button" variant="ghost" onClick={() => void load()}>
+            Aktualisieren
+          </Button>
+        </div>
+        <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
       </div>
-      <ul className="videon-media-list" aria-label="Medien dieser Collection">
-        {items.map((item) => (
-          <li key={item.id} className="videon-media-row">
-            <div>
-              <Link href={paths.routes.mediaFor(item.id, platformProjectId)}>
-                <Text role="headline" as="h3">
-                  {item.originalFilename}
-                </Text>
-              </Link>
-              <Text role="meta" as="p">
-                {item.mimeType} · {formatBytes(item.bytes)} · {item.lifecycleState}
-              </Text>
-            </div>
-            <div className="videon-media-row__aside">
-              <Text role="meta" as="p">
-                {new Date(item.createdAt).toLocaleString('de-DE')}
-              </Text>
-              <Link href={paths.routes.mediaFor(item.id, platformProjectId)}>
-                <Button variant="ghost">Öffnen</Button>
-              </Link>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {layout === 'cards' ? (
+        <ul className="ds-hub-index-grid" aria-label="Medien dieser Collection">
+          {items.map((item) => (
+            <li key={item.id}>
+              <HubIndexCard
+                href={paths.routes.mediaFor(item.id, platformProjectId)}
+                title={item.originalFilename}
+                meta={
+                  <>
+                    <span>
+                      {item.mimeType} · {formatBytes(item.bytes)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <span>{item.lifecycleState}</span>
+                  </>
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <RankedList>
+          {items.map((item, index) => (
+            <RankedRow
+              key={item.id}
+              index={index + 1}
+              label={item.originalFilename}
+              value={item.lifecycleState}
+              secondary={`${formatBytes(item.bytes)} · ${new Date(item.createdAt).toLocaleString('de-DE')}`}
+              href={paths.routes.mediaFor(item.id, platformProjectId)}
+              linkComponent={Link}
+            />
+          ))}
+        </RankedList>
+      )}
     </div>
   )
 }

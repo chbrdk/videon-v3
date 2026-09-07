@@ -1,6 +1,15 @@
 'use client'
 
-import { Text } from '@msqdx/ui'
+import {
+  Chip,
+  Meter,
+  MeterList,
+  StatusDot,
+  StepStrip,
+  StepStripItem,
+  Text,
+  type StatusLevel,
+} from '@msqdx/ui'
 import {
   analysisStatusLabel,
   computePipelineProgress,
@@ -22,20 +31,12 @@ type PipelineStatusTrackProps = {
   showLifecycle?: boolean
 }
 
-function statusTone(status: string): string {
-  if (status === 'succeeded' || status === 'ready') return 'is-done'
-  if (status === 'running' || status === 'processing') return 'is-active'
-  if (status === 'failed') return 'is-failed'
-  if (status === 'queued' || status === 'uploaded') return 'is-waiting'
-  if (status === 'cancelled' || status === 'archived') return 'is-muted'
-  return 'is-pending'
-}
-
-function stageProgressPercent(stage: PipelineStageSnapshot): number | null {
-  const total = stage.progressTotal ?? 0
-  const done = stage.progressCompleted ?? 0
-  if (total <= 1) return null
-  return Math.round(Math.min(100, Math.max(0, (done / total) * 100)))
+function statusLevel(status: string): StatusLevel {
+  if (status === 'failed') return 'critical'
+  if (status === 'running' || status === 'processing' || status === 'queued' || status === 'uploaded') {
+    return 'warn'
+  }
+  return 'ok'
 }
 
 export function PipelineStatusTrack({
@@ -48,35 +49,28 @@ export function PipelineStatusTrack({
   const merged = mergeStagesWithPipeline(stages)
   const overallProgress = computePipelineProgress(stages)
   const headline = pipelineStatusHeadline({ analysis, stages, mediaLifecycleState })
+  const activeIndex = merged.findIndex((stage) => stage.status === 'running')
 
   if (variant === 'compact') {
     return (
       <div className="videon-pipeline videon-pipeline--compact">
         <div className="videon-pipeline__summary">
-          <span className={`videon-pipeline__badge ${statusTone(analysis?.status ?? 'none')}`}>
+          <StatusDot level={statusLevel(analysis?.status ?? 'none')} />
+          <Chip static size="sm">
             {analysisStatusLabel(analysis?.status)}
-          </span>
+          </Chip>
           {showLifecycle && mediaLifecycleState ? (
-            <span className={`videon-pipeline__badge ${statusTone(mediaLifecycleState)}`}>
+            <Chip static size="sm">
               {mediaLifecycleLabel(mediaLifecycleState)}
-            </span>
+            </Chip>
           ) : null}
-          <Text role="meta" as="span" className="videon-pipeline__headline">
+          <Text role="meta" as="span">
             {headline}
           </Text>
         </div>
-        <div className="videon-pipeline__overall" aria-hidden>
-          <div className="videon-pipeline__overall-bar" style={{ width: `${overallProgress}%` }} />
-        </div>
-        <ol className="videon-pipeline__dots" aria-label="Pipeline-Fortschritt">
-          {merged.map((stage) => (
-            <li
-              key={stage.stageKey}
-              className={`videon-pipeline__dot ${statusTone(stage.status)}`}
-              title={`${pipelineStageLabel(stage.stageKey)}: ${stageStatusLabel(stage.status)}`}
-            />
-          ))}
-        </ol>
+        <MeterList aria-label="Pipeline-Fortschritt">
+          <Meter label="Gesamt" value={overallProgress} valueLabel={`${overallProgress}%`} disabled />
+        </MeterList>
       </div>
     )
   }
@@ -85,65 +79,54 @@ export function PipelineStatusTrack({
     <div className="videon-pipeline videon-pipeline--detailed">
       <div className="videon-pipeline__summary">
         <div className="videon-pipeline__summary-row">
-          <span className={`videon-pipeline__badge ${statusTone(analysis?.status ?? 'none')}`}>
+          <StatusDot level={statusLevel(analysis?.status ?? 'none')} />
+          <Chip static size="sm">
             {analysisStatusLabel(analysis?.status)}
-          </span>
+          </Chip>
           {showLifecycle && mediaLifecycleState ? (
-            <span className={`videon-pipeline__badge ${statusTone(mediaLifecycleState)}`}>
+            <Chip static size="sm">
               Medien: {mediaLifecycleLabel(mediaLifecycleState)}
-            </span>
+            </Chip>
           ) : null}
-          <Text role="meta" as="span" className="videon-pipeline__percent">
-            {overallProgress}%
-          </Text>
         </div>
-        <Text role="body" as="p" className="videon-pipeline__headline">
+        <Text role="body" as="p">
           {headline}
         </Text>
-        <div className="videon-pipeline__overall" aria-hidden>
-          <div className="videon-pipeline__overall-bar" style={{ width: `${overallProgress}%` }} />
-        </div>
+        <MeterList aria-label="Pipeline-Fortschritt">
+          <Meter label="Gesamt" value={overallProgress} valueLabel={`${overallProgress}%`} disabled />
+        </MeterList>
       </div>
 
-      <ol className="videon-pipeline__steps">
-        {merged.map((stage, index) => {
-          const stepProgress = stageProgressPercent(stage)
-          return (
-            <li
-              key={stage.stageKey}
-              className={`videon-pipeline__step ${statusTone(stage.status)}`}
-            >
-              <div className="videon-pipeline__step-marker" aria-hidden>
-                <span>{index + 1}</span>
-              </div>
-              <div className="videon-pipeline__step-body">
-                <div className="videon-pipeline__step-row">
-                  <Text role="title" as="span" className="videon-pipeline__step-label">
-                    {pipelineStageLabel(stage.stageKey)}
-                  </Text>
-                  <span className={`videon-pipeline__step-status ${statusTone(stage.status)}`}>
-                    {stageStatusLabel(stage.status)}
-                    {stepProgress !== null ? ` · ${stage.progressCompleted ?? 0}/${stage.progressTotal}` : ''}
-                  </span>
-                </div>
-                <Text role="meta" as="span" className="videon-pipeline__step-hint">
-                  {pipelineStageHint(stage.stageKey)}
-                </Text>
-                {stepProgress !== null && stage.status === 'running' ? (
-                  <div className="videon-pipeline__step-progress" aria-hidden>
-                    <div className="videon-pipeline__step-progress-bar" style={{ width: `${stepProgress}%` }} />
-                  </div>
-                ) : null}
-                {stage.status === 'failed' && stage.errorMessage ? (
-                  <Text role="body" as="p" className="videon-pipeline__step-error">
-                    {stage.errorMessage}
-                  </Text>
-                ) : null}
-              </div>
-            </li>
-          )
-        })}
-      </ol>
+      <StepStrip
+        aria-label="Pipeline-Stufen"
+        scrollToIndex={activeIndex >= 0 ? activeIndex : null}
+        hint={pipelineStageHint(merged[activeIndex]?.stageKey ?? merged[0]?.stageKey ?? 'probe')}
+      >
+        {merged.map((stage, index) => (
+          <StepStripItem
+            key={stage.stageKey}
+            index={index}
+            label={pipelineStageLabel(stage.stageKey)}
+            active={stage.status === 'running'}
+            selected={stage.status === 'succeeded'}
+          >
+            <Text role="label" as="span">
+              {pipelineStageLabel(stage.stageKey)}
+            </Text>
+            <Text role="meta" as="span">
+              {stageStatusLabel(stage.status)}
+              {stage.progressTotal != null && stage.progressTotal > 1
+                ? ` · ${stage.progressCompleted ?? 0}/${stage.progressTotal}`
+                : ''}
+            </Text>
+            {stage.status === 'failed' && stage.errorMessage ? (
+              <Text role="body" as="span">
+                {stage.errorMessage}
+              </Text>
+            ) : null}
+          </StepStripItem>
+        ))}
+      </StepStrip>
     </div>
   )
 }

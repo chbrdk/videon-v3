@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Button } from '@msqdx/ui'
+import { HubPageHeader } from '@/components/hub-page-header'
 import { MediaUploadForm } from '@/components/media-upload-form'
 import { WorkspaceRouteGate } from '@/components/workspace-route-gate'
 import { paths } from '@/lib/paths'
@@ -11,15 +12,15 @@ export function UploadWorkspace({ platformProjectId }: { platformProjectId?: str
     <WorkspaceRouteGate platformProjectId={platformProjectId} buildHref={paths.routes.uploadFor}>
       {(collectionId) => (
         <article className="videon-hub">
-          <header className="videon-hub__header-row">
-            <div>
-              <p className="videon-spread__eyebrow">Upload</p>
-              <h1 className="videon-spread__headline">Video hochladen</h1>
-            </div>
-            <Link href={paths.routes.libraryFor(collectionId)}>
-              <Button variant="ghost">Zur Mediathek</Button>
-            </Link>
-          </header>
+          <HubPageHeader
+            eyebrow="Upload"
+            title="Video hochladen"
+            actions={
+              <Link href={paths.routes.libraryFor(collectionId)}>
+                <Button variant="ghost">Zur Mediathek</Button>
+              </Link>
+            }
+          />
           <MediaUploadForm platformProjectId={collectionId} />
         </article>
       )}
