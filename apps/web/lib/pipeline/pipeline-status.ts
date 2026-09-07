@@ -84,6 +84,7 @@ export function pipelineStageHint(stageKey: string): string {
 
 export function analysisStatusLabel(status: string | null | undefined): string {
   if (!status) return ANALYSIS_STATUS_LABELS.none
+  if (status === 'completed') return ANALYSIS_STATUS_LABELS.succeeded
   return ANALYSIS_STATUS_LABELS[status] ?? status
 }
 
@@ -93,6 +94,29 @@ export function stageStatusLabel(status: PipelineStageStatus): string {
 
 export function mediaLifecycleLabel(state: string): string {
   return MEDIA_LIFECYCLE_LABELS[state] ?? state
+}
+
+/** Maps lifecycle → `@msqdx/ui` Badge tone (not Filter Chip). */
+export function mediaLifecycleTone(
+  state: string | null | undefined,
+): 'neutral' | 'accent' | 'success' | 'warning' | 'danger' {
+  if (state === 'ready') return 'success'
+  if (state === 'failed') return 'danger'
+  if (state === 'uploading') return 'accent'
+  if (state === 'processing' || state === 'uploaded') return 'warning'
+  return 'neutral'
+}
+
+/** Maps analysis status → Badge tone. Missing analysis is neutral — never green. */
+export function analysisStatusTone(
+  status: string | null | undefined,
+): 'neutral' | 'accent' | 'success' | 'warning' | 'danger' {
+  if (!status) return 'neutral'
+  if (status === 'failed') return 'danger'
+  if (status === 'succeeded' || status === 'completed') return 'success'
+  if (status === 'running' || status === 'queued' || status === 'processing') return 'warning'
+  if (status === 'cancelled') return 'neutral'
+  return 'neutral'
 }
 
 export function mergeStagesWithPipeline(stages: readonly PipelineStageSnapshot[]): PipelineStageSnapshot[] {

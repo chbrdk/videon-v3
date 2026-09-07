@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
+  Badge,
   Button,
   Card,
   CardActions,
@@ -12,13 +13,17 @@ import {
   LoadingText,
   RankedList,
   RankedRow,
-  StatusDot,
   Text,
-  type StatusLevel,
 } from '@msqdx/ui'
 import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { formatClock } from '@/lib/editor-time'
 import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
+import {
+  analysisStatusLabel,
+  analysisStatusTone,
+  mediaLifecycleLabel,
+  mediaLifecycleTone,
+} from '@/lib/pipeline/pipeline-status'
 import { paths } from '@/lib/paths'
 import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
 
@@ -41,21 +46,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
-function analysisLevel(status: string | null | undefined): StatusLevel {
-  if (!status) return 'ok'
-  if (status === 'failed') return 'critical'
-  if (status === 'running' || status === 'queued' || status === 'processing') return 'warn'
-  return 'ok'
-}
-
-function analysisLabel(status: string | null | undefined): string {
-  if (!status) return 'Keine Analyse'
-  if (status === 'succeeded' || status === 'completed') return 'Analysiert'
-  if (status === 'failed') return 'Analyse fehlgeschlagen'
-  if (status === 'running' || status === 'queued' || status === 'processing') return 'Analyse läuft'
-  return status
 }
 
 function matchesLifecycle(item: MediaItem, filter: LifecycleFilter): boolean {
@@ -254,17 +244,16 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                   title={item.originalFilename}
                   meta={
                     <>
-                      <StatusDot level={analysisLevel(item.latestAnalysisStatus)} />
-                      <Chip static size="sm">
-                        {item.lifecycleState}
-                      </Chip>
-                      <Chip static size="sm">
-                        {analysisLabel(item.latestAnalysisStatus)}
-                      </Chip>
+                      <Badge tone={mediaLifecycleTone(item.lifecycleState)}>
+                        {mediaLifecycleLabel(item.lifecycleState)}
+                      </Badge>
+                      <Badge tone={analysisStatusTone(item.latestAnalysisStatus)}>
+                        {analysisStatusLabel(item.latestAnalysisStatus)}
+                      </Badge>
                       {duration ? (
-                        <Chip static size="sm">
+                        <Text role="meta" as="span">
                           {duration}
-                        </Chip>
+                        </Text>
                       ) : null}
                       <Text role="meta" as="span">
                         {item.mimeType} · {formatBytes(item.bytes)}
@@ -305,8 +294,17 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                 key={item.id}
                 index={index + 1}
                 label={item.originalFilename}
-                value={item.lifecycleState}
-                secondary={`${duration} · ${analysisLabel(item.latestAnalysisStatus)} · ${formatBytes(item.bytes)}`}
+                value={
+                  <span className="ds-chip-row" style={{ gap: '0.35rem' }}>
+                    <Badge tone={mediaLifecycleTone(item.lifecycleState)}>
+                      {mediaLifecycleLabel(item.lifecycleState)}
+                    </Badge>
+                    <Badge tone={analysisStatusTone(item.latestAnalysisStatus)}>
+                      {analysisStatusLabel(item.latestAnalysisStatus)}
+                    </Badge>
+                  </span>
+                }
+                secondary={`${duration} · ${formatBytes(item.bytes)}`}
                 href={paths.routes.mediaFor(item.id, platformProjectId)}
                 linkComponent={Link}
               />

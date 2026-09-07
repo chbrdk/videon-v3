@@ -13,6 +13,8 @@ export type {
 } from '../../../../msqdx-ui/packages/ui/src/components/Button'
 export { Chip } from '../../../../msqdx-ui/packages/ui/src/components/Chip'
 export type { ChipProps, ChipSize } from '../../../../msqdx-ui/packages/ui/src/components/Chip'
+export { Badge } from '../../../../msqdx-ui/packages/ui/src/components/Badge'
+export type { BadgeProps, BadgeTone } from '../../../../msqdx-ui/packages/ui/src/components/Badge'
 export { EmptyState, LoadingText } from '../../../../msqdx-ui/packages/ui/src/components/LoadingText'
 export { EntityCard } from '../../../../msqdx-ui/packages/ui/src/components/EntityCard'
 export type { EntityCardProps } from '../../../../msqdx-ui/packages/ui/src/components/EntityCard'
