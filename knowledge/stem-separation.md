@@ -39,6 +39,8 @@ Demucs runs in `asyncio.to_thread` so `/health` stays up during long CPU jobs. T
 
 Multipart to the worker MUST use undici `FormData` + `File` with undici `fetch`. Mixing the global `FormData` into `undici.fetch` drops the `file` part → FastAPI `422 field required` → local ffmpeg fallback.
 
+Analysis MUST upload the **extracted audio track** to `/v1/separate` (not the full video container) — see `run-analysis.ts` audio stage.
+
 Worker knobs (env):
 
 | Env | Default | Notes |

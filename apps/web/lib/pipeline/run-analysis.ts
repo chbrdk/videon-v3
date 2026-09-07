@@ -170,7 +170,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
       }
 
       const stemResult = await separateAndStoreAudioStems({
-        sourcePath: tempPath,
+        sourcePath: audioPath,
         workspaceId: media.workspaceId,
         mediaAssetId: media.id,
         analysisRunId,
