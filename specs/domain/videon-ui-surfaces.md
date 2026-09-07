@@ -26,7 +26,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 ## Mediathek browse (Wave A)
 
 1. WHEN the media list loads THEN each item MUST expose `durationMs` and `latestAnalysisStatus` for card/list chrome.
-2. WHEN the card layout is active THEN cards SHOULD show a preview thumb (client capture), lifecycle chip, analysis chip, and duration when known.
+2. WHEN the card layout is active THEN cards MUST use `EntityCard` (catalog density), not `HubIndexCard` magazine headlines — preview thumb dominant, filename as compact title, lifecycle/analysis chips, and duration when known.
 3. WHEN filters are shown THEN they MUST use `FilterRow` + `Chip` for lifecycle and analysis facets.
 4. WHERE quick actions appear THEN they MUST link to open / analyses / cuts without nesting interactive controls inside the card anchor.
 | `/upload` | Ingest | `Field` + native file input + `Button` |

@@ -6,8 +6,8 @@ import {
   Button,
   Chip,
   EmptyState,
+  EntityCard,
   FilterRow,
-  HubIndexCard,
   LoadingText,
   RankedList,
   RankedRow,
@@ -232,63 +232,73 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
           </Button>
         </EmptyState>
       ) : layout === 'cards' ? (
-        <ul className="ds-hub-index-grid" aria-label="Medien dieser Collection">
+        <ul className="videon-media-browse__grid" aria-label="Medien dieser Collection">
           {filtered.map((item) => {
             const ready = item.lifecycleState === 'ready' || item.lifecycleState === 'processing'
             const duration =
               item.durationMs != null && item.durationMs > 0 ? formatClock(item.durationMs) : null
+            const mediaHref = paths.routes.mediaFor(item.id, platformProjectId)
             return (
               <li key={item.id} className="videon-media-card">
-                <HubIndexCard
-                  href={paths.routes.mediaFor(item.id, platformProjectId)}
-                  title={item.originalFilename}
-                  media={
+                <EntityCard
+                  className="videon-media-card__entity"
+                  meta={
+                    <span className="videon-media-card__status">
+                      <StatusDot level={analysisLevel(item.latestAnalysisStatus)} />
+                      <span>{item.lifecycleState}</span>
+                    </span>
+                  }
+                  badge={
+                    <Chip static size="sm">
+                      {analysisLabel(item.latestAnalysisStatus)}
+                    </Chip>
+                  }
+                  title={
+                    <Link href={mediaHref} className="videon-media-card__title-link">
+                      {item.originalFilename}
+                    </Link>
+                  }
+                  toolbar={
+                    <div className="videon-media-card__actions">
+                      <Link href={mediaHref}>
+                        <Button variant="ghost" size="sm">
+                          Öffnen
+                        </Button>
+                      </Link>
+                      <Link href={paths.routes.analysesFor(platformProjectId)}>
+                        <Button variant="ghost" size="sm">
+                          Analysen
+                        </Button>
+                      </Link>
+                      <Link href={paths.routes.cutsFor(platformProjectId)}>
+                        <Button variant="ghost" size="sm">
+                          Cuts
+                        </Button>
+                      </Link>
+                    </div>
+                  }
+                  footer={
+                    <>
+                      {duration ? (
+                        <Chip static size="sm">
+                          {duration}
+                        </Chip>
+                      ) : null}
+                      <Text role="meta" as="span">
+                        {item.mimeType} · {formatBytes(item.bytes)}
+                      </Text>
+                    </>
+                  }
+                >
+                  <Link href={mediaHref} className="videon-media-card__thumb-link" tabIndex={-1}>
                     <MediaCardThumb
                       mediaAssetId={item.id}
                       platformProjectId={platformProjectId}
                       durationMs={item.durationMs}
                       ready={ready}
                     />
-                  }
-                  meta={
-                    <>
-                      <span className="videon-media-card__status">
-                        <StatusDot level={analysisLevel(item.latestAnalysisStatus)} />
-                        <Chip static size="sm">
-                          {item.lifecycleState}
-                        </Chip>
-                        <Chip static size="sm">
-                          {analysisLabel(item.latestAnalysisStatus)}
-                        </Chip>
-                        {duration ? (
-                          <Chip static size="sm">
-                            {duration}
-                          </Chip>
-                        ) : null}
-                      </span>
-                      <span>
-                        {item.mimeType} · {formatBytes(item.bytes)}
-                      </span>
-                    </>
-                  }
-                />
-                <div className="videon-media-card__actions">
-                  <Link href={paths.routes.mediaFor(item.id, platformProjectId)}>
-                    <Button variant="ghost" size="sm">
-                      Öffnen
-                    </Button>
                   </Link>
-                  <Link href={paths.routes.analysesFor(platformProjectId)}>
-                    <Button variant="ghost" size="sm">
-                      Analysen
-                    </Button>
-                  </Link>
-                  <Link href={paths.routes.cutsFor(platformProjectId)}>
-                    <Button variant="ghost" size="sm">
-                      Cuts
-                    </Button>
-                  </Link>
-                </div>
+                </EntityCard>
               </li>
             )
           })}
