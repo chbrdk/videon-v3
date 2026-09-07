@@ -13,7 +13,7 @@
 | Public FQDN | `https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech` (health only; app uses private URL) |
 | Service URL (staging) | `https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech` (FQDN — UUID-Hostname resolved on Coolify-Netz nicht) |
 
-Created via Coolify REST `POST /applications/private-github-app` (same token as MCP). Build is large (CPU Torch + htdemucs) — first deploy can take a long time. Keep always-on (no scale-to-zero).
+Created via Coolify REST `POST /applications/private-github-app` (same token as MCP). Build is large (CPU Torch + Demucs) — first deploy can take a long time. Keep always-on (no scale-to-zero).
 
 ## Wire main app
 
@@ -29,11 +29,11 @@ Already set via `PATCH …/envs/bulk`. Redeploy main after changes.
 
 ```
 curl -s https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech/health
-# {"ok":true,"modelLoaded":true,"model":"htdemucs",...}
+# {"ok":true,"modelLoaded":true,"model":"htdemucs","ffmpegFallback":false,...}
 ```
 
 Then re-run media analysis with Stem method **Voice/Music (Demucs)**.  
-„Letzter Stem-Lauf“ should show `demucs_htdemucs_ft_residual` (not soft / ffmpeg fallback).
+„Letzter Stem-Lauf“ should show `demucs_htdemucs_residual` (not soft / ffmpeg fallback).
 
-Worker quality envs: `STEM_MODEL=htdemucs_ft`, `STEM_SHIFTS=1`, `STEM_SOFTMASK=0`.  
-First deploy after switching to `htdemucs_ft` downloads the fine-tuned bag (large / slow).
+Worker staging envs: `STEM_MODEL=htdemucs`, `STEM_SHIFTS=1`, `STEM_SOFTMASK=0`, `STEM_FFMPEG_FALLBACK=0`.  
+Set `STEM_MODEL=htdemucs_ft` when quality matters more than CPU latency; set `STEM_FFMPEG_FALLBACK=1` only to re-enable silent approximation on Demucs failure.

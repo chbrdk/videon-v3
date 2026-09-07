@@ -27,11 +27,11 @@ Model is loaded **once at process start** and kept in memory (`uvicorn --workers
 
 | Method | Quality | Where |
 |--------|---------|--------|
-| `demucs_htdemucs_ft_residual` | **Default:** fine-tuned Demucs bag + residual music | Stem worker |
-| `demucs_htdemucs_residual` | Faster base model (`STEM_MODEL=htdemucs`) | Optional |
+| `demucs_htdemucs_residual` | **Staging default:** faster Demucs + residual music | Stem worker |
+| `demucs_htdemucs_ft_residual` | Fine-tuned bag (`STEM_MODEL=htdemucs_ft`) | Optional quality lane |
 | `demucs_*_soft` | Wiener softmask (`STEM_SOFTMASK=1`) — often re-bleeds into A1 | Optional |
-| `ffmpeg_center_band` | Approximation | Worker or local fallback script |
-| `*_fallback` | Demucs failed → ffmpeg | Worker / script |
+| `ffmpeg_center_band` | Approximation (explicit method only) | Worker when requested |
+| `*_fallback` | Demucs failed → ffmpeg | **Off** while `STEM_FFMPEG_FALLBACK=0` |
 
 Audio I/O in the worker uses **ffmpeg + stdlib `wave`** (not `torchaudio.load` / TorchCodec). Newer torchaudio builds require TorchCodec and would otherwise force silent `_fallback`.
 
@@ -45,13 +45,14 @@ Worker knobs (env):
 
 | Env | Default | Notes |
 |-----|---------|--------|
-| `STEM_MODEL` | `htdemucs_ft` | Best quality bag; `htdemucs` = faster |
-| `STEM_SHIFTS` | `1` | Extra shifts on top of ft bag (costly) |
+| `STEM_MODEL` | `htdemucs` | Faster CPU default; `htdemucs_ft` = quality |
+| `STEM_SHIFTS` | `1` | Extra shifts (costly) |
 | `STEM_OVERLAP` | `0.5` | Chunk overlap |
-| `STEM_SOFTMASK` | `0` | Keep off for clean voice |
+| `STEM_SOFTMASK` | `0` | Keep off for clean A1 |
+| `STEM_FFMPEG_FALLBACK` | `0` | Temporary: demucs errors fail hard (no fake Voice) |
 
 ## UI
 
 - Default: **Voice/Music (Demucs)** → requires stem worker URL in staging.
 - Re-run analysis after stem worker quality changes so stems are rewritten.
-- „Letzter Stem-Lauf“ should show `demucs_htdemucs_ft_residual` (not soft / ffmpeg fallback).
+- „Letzter Stem-Lauf“ should show `demucs_htdemucs_residual` (not soft / ffmpeg fallback) while staging uses `STEM_MODEL=htdemucs`.

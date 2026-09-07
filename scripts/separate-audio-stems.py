@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import shutil
 import struct
 import subprocess
@@ -235,6 +236,9 @@ def main() -> int:
         try:
             method = separate_with_demucs(stereo, voice_out, music_out)
         except Exception as error:  # noqa: BLE001
+            allow_fallback = os.environ.get("STEM_FFMPEG_FALLBACK", "0").strip() in ("1", "true", "True")
+            if not allow_fallback:
+                raise
             sys.stderr.write(f"demucs failed, falling back to mid/side: {error}\n")
             method = f"{separate_with_ffmpeg(stereo, voice_out, music_out)}_fallback"
     else:

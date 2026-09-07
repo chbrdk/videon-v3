@@ -21,14 +21,16 @@ from fastapi.responses import Response
 PORT = int(os.environ.get("PORT", "8091"))
 DEVICE = os.environ.get("TORCH_DEVICE", "cpu")
 BUCKETS = 240
-# Time shifts improve isolation; htdemucs_ft already bags 4 fine-tunes — default 1.
+# Time shifts improve isolation; keep 1 unless debugging bleed.
 SHIFTS = max(0, int(os.environ.get("STEM_SHIFTS", "1")))
 OVERLAP = float(os.environ.get("STEM_OVERLAP", "0.5"))
 # Softmask re-partitions the MIX into voice/music and often re-bleeds music into A1.
 # Default OFF: keep raw Demucs vocals; music = mix − vocals (clean A1, complementary A2).
 SOFTMASK = os.environ.get("STEM_SOFTMASK", "0").strip() in ("1", "true", "True")
-# Staging default: fine-tuned bag. Override with STEM_MODEL=htdemucs for faster/cheaper.
-_MODEL_NAME = os.environ.get("STEM_MODEL", "htdemucs_ft").strip() or "htdemucs_ft"
+# Staging default: faster base model. Override with STEM_MODEL=htdemucs_ft for quality.
+_MODEL_NAME = os.environ.get("STEM_MODEL", "htdemucs").strip() or "htdemucs"
+# Temporary: demucs failure must surface — do not mask as ffmpeg Voice.
+FFMPEG_FALLBACK = os.environ.get("STEM_FFMPEG_FALLBACK", "0").strip() in ("1", "true", "True")
 
 app = FastAPI(title="VIDEON stem worker", version="1.3.0")
 
@@ -62,6 +64,7 @@ def health() -> dict:
         "shifts": SHIFTS,
         "overlap": OVERLAP,
         "softmask": SOFTMASK,
+        "ffmpegFallback": FFMPEG_FALLBACK,
     }
 
 
@@ -277,7 +280,7 @@ def _run_separation_job(source_bytes: bytes, suffix: str, method: str) -> tuple[
             else:
                 recorded = _separate_ffmpeg(source, voice_out, music_out)
         except Exception as error:  # noqa: BLE001
-            if method == "demucs":
+            if method == "demucs" and FFMPEG_FALLBACK:
                 print(f"[stem-worker] demucs failed, using ffmpeg fallback: {error!r}", flush=True)
                 try:
                     recorded = f"{_separate_ffmpeg(source, voice_out, music_out)}_fallback"
