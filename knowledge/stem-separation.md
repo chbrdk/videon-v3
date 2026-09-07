@@ -33,6 +33,8 @@ Model is loaded **once at process start** and kept in memory (`uvicorn --workers
 | `ffmpeg_center_band` | Approximation | Worker or local fallback script |
 | `*_fallback` | Demucs failed → ffmpeg | Worker / script |
 
+Audio I/O in the worker uses **ffmpeg + stdlib `wave`** (not `torchaudio.load` / TorchCodec). Newer torchaudio builds require TorchCodec and would otherwise force silent `_fallback`.
+
 Worker knobs (env):
 
 | Env | Default | Notes |

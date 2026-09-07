@@ -12,7 +12,7 @@ from pathlib import Path
 
 import torch
 from demucs.apply import apply_model
-from demucs.audio import convert_audio, save_audio
+from demucs.audio import convert_audio
 from demucs.pretrained import get_model
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -100,38 +100,66 @@ def _duration_ms(path: Path) -> int:
 
 
 def _read_audio(path: Path, samplerate: int, channels: int):
-    import torchaudio
-
+    """Decode via ffmpeg + stdlib wave — avoid torchaudio loaders (need TorchCodec)."""
+    decoded = path.with_suffix(".stem-read.wav")
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(path),
+            "-ac",
+            str(channels),
+            "-ar",
+            str(samplerate),
+            "-sample_fmt",
+            "s16",
+            str(decoded),
+        ],
+        check=True,
+    )
     try:
-        wav, sr = torchaudio.load(str(path))
-        wav = convert_audio(wav, sr, samplerate, channels)
+        with wave.open(str(decoded), "rb") as handle:
+            if handle.getsampwidth() != 2:
+                raise RuntimeError(f"unexpected sampwidth {handle.getsampwidth()}")
+            nch = handle.getnchannels()
+            sr = handle.getframerate()
+            frames = handle.getnframes()
+            raw = handle.readframes(frames)
+        count = len(raw) // 2
+        samples = struct.unpack(f"<{count}h", raw)
+        if nch <= 0:
+            raise RuntimeError("decoded wav has zero channels")
+        # shape [channels, time] float32 in [-1, 1]
+        cols = [[samples[i] / 32768.0 for i in range(ch, count, nch)] for ch in range(nch)]
+        wav = torch.tensor(cols, dtype=torch.float32)
+        if wav.shape[0] == 1 and channels > 1:
+            wav = wav.repeat(channels, 1)
+        elif wav.shape[0] > channels:
+            wav = wav[:channels]
+        if sr != samplerate or wav.shape[0] != channels:
+            wav = convert_audio(wav, sr, samplerate, channels)
         return wav, samplerate
-    except Exception:
-        stereo = path.with_suffix(".stem-read.wav")
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                str(path),
-                "-ac",
-                str(channels),
-                "-ar",
-                str(samplerate),
-                str(stereo),
-            ],
-            check=True,
-        )
-        wav, sr = torchaudio.load(str(stereo))
-        stereo.unlink(missing_ok=True)
-        wav = convert_audio(wav, sr, samplerate, channels)
-        return wav, samplerate
+    finally:
+        decoded.unlink(missing_ok=True)
 
 
-def _softmask_partition(mix: torch.Tensor, vocals: torch.Tensor, accompaniment: torch.Tensor):
+def _write_wav(path: Path, wav: torch.Tensor, samplerate: int) -> None:
+    """Write float tensor [C, T] as PCM16 WAV without torchaudio/torchcodec."""
+    audio = wav.detach().cpu().clamp(-1, 1)
+    if audio.dim() == 1:
+        audio = audio.unsqueeze(0)
+    channels, frames = int(audio.shape[0]), int(audio.shape[1])
+    interleaved = (audio.transpose(0, 1).reshape(-1) * 32767.0).short().numpy()
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(channels)
+        handle.setsampwidth(2)
+        handle.setframerate(samplerate)
+        handle.writeframes(struct.pack(f"<{interleaved.size}h", *interleaved.tolist()))
+
     """Wiener-style mask on the mixture → complementary stems (sum ≈ mix)."""
     eps = 1e-8
     v_pow = vocals.pow(2)
@@ -184,8 +212,8 @@ def _separate_demucs(source: Path, voice_out: Path, music_out: Path) -> str:
         accompaniment = mix - vocals
         method = f"{method_base}_residual"
 
-    save_audio(vocals.cpu(), str(voice_out), model.samplerate)
-    save_audio(accompaniment.cpu(), str(music_out), model.samplerate)
+    _write_wav(voice_out, vocals, model.samplerate)
+    _write_wav(music_out, accompaniment, model.samplerate)
     return method
 
 
