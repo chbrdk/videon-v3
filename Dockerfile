@@ -83,29 +83,15 @@ ENV VIDEON_REPO_ROOT=/workspace/videon-v3
 EXPOSE 3010
 
 # Coolify Dockerfile healthchecks shell out to curl/wget.
-# Audio pipeline: ffmpeg + faster-whisper + Demucs (CPU torch) for real Voice/Music stems.
+# Demucs lives in the always-on stem worker (`services/stem-worker`), not in this web image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     ffmpeg \
     python3 \
     python3-pip \
-    python3-venv \
-    && pip3 install --break-system-packages --no-cache-dir \
-      faster-whisper \
-    && pip3 install --break-system-packages --no-cache-dir \
-      --index-url https://download.pytorch.org/whl/cpu \
-      torch torchaudio \
-    && pip3 install --break-system-packages --no-cache-dir \
-      "demucs>=4.0.1,<5" \
-    # Warm htdemucs weights into the image so first stem job is not a cold download.
-    && python3 -c "from demucs.pretrained import get_model; get_model('htdemucs')" \
-    && rm -rf /var/lib/apt/lists/* /root/.cache/pip
-
-ENV VIDEON_STEM_DEMUCS_ENABLED=true
-# Keep torch on CPU even if a CUDA wheel sneaks in via transitive deps.
-ENV CUDA_VISIBLE_DEVICES=""
-ENV TORCH_DEVICE=cpu
+    && pip3 install --break-system-packages --no-cache-dir faster-whisper \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/videon-v3/package.json ./package.json
 COPY --from=builder /workspace/videon-v3/package-lock.json ./package-lock.json

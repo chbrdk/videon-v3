@@ -1,34 +1,37 @@
 # Stem separation (Voice / Music)
 
 **Status:** Living — 2026-09-07  
-**Implements:** `scripts/separate-audio-stems.py` · `lib/pipeline/audio-stems.ts` · runtime `Dockerfile`
+**Implements:** `services/stem-worker/` · `scripts/separate-audio-stems.py` · `lib/pipeline/audio-stems.ts`  
+**Spec:** `specs/domain/stem-service.md`
 
 ## Product expectation
 
 A1 = **Voice**, A2 = **Music**. Hearing the full mix on A1 is a bug for product language.
 
+## Always-on stem worker
+
+Demucs must **not** cold-load per analysis job.
+
+| Item | Value |
+|------|--------|
+| Coolify app | `videon-v3:stem-worker` (always running, never scale-to-zero) |
+| Dockerfile | `services/stem-worker/Dockerfile` |
+| Port | `8091` |
+| Health | `GET /health` → `modelLoaded: true` |
+| Separate | `POST /v1/separate` |
+| Env on web app | `VIDEON_STEM_SERVICE_URL=http://<stem-worker-internal>:8091` |
+
+Model `htdemucs` is loaded **once at process start** and kept in memory (`uvicorn --workers 1`).
+
 ## Methods
 
-| Method (stored on `media_audio_stems.method`) | Quality | Notes |
-|-----------------------------------------------|---------|-------|
-| `demucs_htdemucs` | Real vocals / no_vocals | **Default in staging image** (CPU torch + Demucs) |
-| `ffmpeg_center_band` | Approximation | Speech-band mid → voice; bass + air + side → music |
-| `ffmpeg_mid_side` / `*_fallback` | Legacy / fallback | Used only if Demucs fails or is missing |
-| `mono_passthrough` | N/A | Source has one channel; music stem is silence |
+| Method | Quality | Where |
+|--------|---------|--------|
+| `demucs_htdemucs` | Real vocals / accompaniment | Stem worker (warm) |
+| `ffmpeg_center_band` | Approximation | Worker or local fallback script |
+| `*_fallback` | Demucs failed → ffmpeg | Worker / script |
 
 ## UI
 
-- Media Editor overflow: **Voice/Music (Demucs)** vs **Näherung (Center-Band)**.
-- Default pick is Demucs. After changing method, **re-run analysis** so stems are rewritten.
-
-## Ops / image
-
-Runtime Dockerfile installs:
-
-1. `torch` + `torchaudio` from the **CPU** PyTorch index  
-2. `demucs`  
-3. Preloads `htdemucs` weights at build time  
-
-`VIDEON_STEM_DEMUCS_ENABLED=true` is set in the image for ops clarity (gating is still “is demucs importable?”).
-
-Expect a larger image and longer Coolify builds. Stem jobs are CPU-bound and can take many minutes on long clips.
+- Default: **Voice/Music (Demucs)** → requires stem worker URL in staging.
+- Re-run analysis after stem worker is live so stems are rewritten.

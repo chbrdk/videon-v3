@@ -65,6 +65,8 @@ export const paths = {
   envTranscriptionOpenRouterModel: 'VIDEON_TRANSCRIPTION_OPENROUTER_MODEL',
   envWhisperModel: 'VIDEON_WHISPER_MODEL',
   envWhisperLanguage: 'VIDEON_WHISPER_LANGUAGE',
+  /** Always-on stem worker base URL (no trailing slash), e.g. http://videon-stem-worker:8091 */
+  envStemServiceUrl: 'VIDEON_STEM_SERVICE_URL',
   routes: {
     home: '/',
     library: '/library',

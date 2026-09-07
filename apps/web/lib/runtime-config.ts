@@ -151,3 +151,9 @@ export function transcriptionConfig(): {
     language: env(paths.envWhisperLanguage) || 'de',
   }
 }
+
+/** Persistent Demucs stem worker. Empty → local script fallback. */
+export function stemServiceUrl(): string | null {
+  const url = env(paths.envStemServiceUrl).replace(/\/$/, '')
+  return url || null
+}

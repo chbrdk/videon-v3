@@ -1,14 +1,15 @@
-import { execFile } from 'node:child_process'
-import { unlink } from 'node:fs/promises'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 import { randomUUID } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { upsertMediaAudioStem } from '@/lib/db/media-stems'
 import { STEM_DEMUCS_CAPABILITY } from '@/lib/pipeline/constants'
 import { resolveRepoScript } from '@/lib/repo-root'
 import { mediaStemStorageKey } from '@/lib/storage/object-store'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
+import { stemServiceUrl } from '@/lib/runtime-config'
 
 const execFileAsync = promisify(execFile)
 
@@ -16,8 +17,8 @@ export type StemMethod = 'ffmpeg_mid_side' | 'demucs'
 
 type StemScriptResult = {
   method: string
-  voicePath: string
-  musicPath: string
+  voicePath?: string
+  musicPath?: string
   durationMs: number
   voicePeaks: number[]
   musicPeaks: number[]
@@ -26,6 +27,121 @@ type StemScriptResult = {
 export function resolveStemMethod(requestedCapabilities: string[] | null | undefined): StemMethod {
   if (requestedCapabilities?.includes(STEM_DEMUCS_CAPABILITY)) return 'demucs'
   return 'ffmpeg_mid_side'
+}
+
+function parseMultipartBoundary(contentType: string | null): string | null {
+  if (!contentType) return null
+  const match = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType)
+  return (match?.[1] || match?.[2] || '').trim() || null
+}
+
+function parseStemMultipart(
+  body: Buffer,
+  boundary: string,
+): { meta: StemScriptResult; voice: Buffer; music: Buffer } {
+  const delim = Buffer.from(`--${boundary}`)
+  const parts: Buffer[] = []
+  let start = body.indexOf(delim)
+  while (start !== -1) {
+    const next = body.indexOf(delim, start + delim.length)
+    if (next === -1) break
+    const slice = body.subarray(start + delim.length, next)
+    // strip leading CRLF and trailing CRLF
+    let part = slice
+    if (part[0] === 0x0d && part[1] === 0x0a) part = part.subarray(2)
+    if (part[part.length - 2] === 0x0d && part[part.length - 1] === 0x0a) {
+      part = part.subarray(0, part.length - 2)
+    }
+    if (part.length > 0 && !part.equals(Buffer.from('--'))) parts.push(part)
+    start = next
+  }
+
+  let meta: StemScriptResult | null = null
+  let voice: Buffer | null = null
+  let music: Buffer | null = null
+  for (const part of parts) {
+    const headerEnd = part.indexOf('\r\n\r\n')
+    if (headerEnd < 0) continue
+    const header = part.subarray(0, headerEnd).toString('utf8')
+    const content = part.subarray(headerEnd + 4)
+    if (/name="meta"/i.test(header)) {
+      meta = JSON.parse(content.toString('utf8')) as StemScriptResult
+    } else if (/name="voice"/i.test(header)) {
+      voice = content
+    } else if (/name="music"/i.test(header)) {
+      music = content
+    }
+  }
+  if (!meta || !voice || !music) {
+    throw new Error('Stem service returned an incomplete multipart payload')
+  }
+  return { meta, voice, music }
+}
+
+async function separateViaStemService(input: {
+  sourcePath: string
+  method: StemMethod
+  voicePath: string
+  musicPath: string
+}): Promise<StemScriptResult> {
+  const base = stemServiceUrl()
+  if (!base) throw new Error('VIDEON_STEM_SERVICE_URL is not configured')
+
+  const sourceBytes = await readFile(input.sourcePath)
+  const form = new FormData()
+  form.append('method', input.method)
+  form.append('file', new Blob([new Uint8Array(sourceBytes)]), 'source.bin')
+
+  const response = await fetch(`${base}/v1/separate`, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(input.method === 'demucs' ? 35 * 60 * 1000 : 10 * 60 * 1000),
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Stem service HTTP ${response.status}: ${text.slice(0, 240)}`)
+  }
+  const boundary = parseMultipartBoundary(response.headers.get('content-type'))
+  if (!boundary) throw new Error('Stem service response missing multipart boundary')
+  const buffer = Buffer.from(await response.arrayBuffer())
+  const parsed = parseStemMultipart(buffer, boundary)
+  await writeFile(input.voicePath, parsed.voice)
+  await writeFile(input.musicPath, parsed.music)
+  return {
+    method: parsed.meta.method,
+    durationMs: parsed.meta.durationMs,
+    voicePeaks: parsed.meta.voicePeaks ?? [],
+    musicPeaks: parsed.meta.musicPeaks ?? [],
+    voicePath: input.voicePath,
+    musicPath: input.musicPath,
+  }
+}
+
+async function separateViaLocalScript(input: {
+  sourcePath: string
+  method: StemMethod
+  voicePath: string
+  musicPath: string
+}): Promise<StemScriptResult> {
+  const scriptPath = await resolveRepoScript('scripts/separate-audio-stems.py')
+  const { stdout } = await execFileAsync(
+    'python3',
+    [
+      scriptPath,
+      input.sourcePath,
+      input.voicePath,
+      input.musicPath,
+      '--buckets',
+      '240',
+      '--method',
+      input.method,
+    ],
+    {
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: input.method === 'demucs' ? 35 * 60 * 1000 : 10 * 60 * 1000,
+    },
+  )
+  return JSON.parse(stdout) as StemScriptResult
 }
 
 export async function separateAndStoreAudioStems(input: {
@@ -40,25 +156,29 @@ export async function separateAndStoreAudioStems(input: {
   const musicPath = join(tmpdir(), `videon-stem-music-${randomUUID()}.wav`)
   const method = input.method ?? 'ffmpeg_mid_side'
   try {
-    const scriptPath = await resolveRepoScript('scripts/separate-audio-stems.py')
-    const { stdout } = await execFileAsync(
-      'python3',
-      [
-        scriptPath,
-        input.sourcePath,
-        voicePath,
-        musicPath,
-        '--buckets',
-        '240',
-        '--method',
-        method,
-      ],
-      {
-        maxBuffer: 8 * 1024 * 1024,
-        timeout: method === 'demucs' ? 35 * 60 * 1000 : 10 * 60 * 1000,
-      },
-    )
-    const parsed = JSON.parse(stdout) as StemScriptResult
+    const preferService = Boolean(stemServiceUrl())
+    const parsed = preferService
+      ? await separateViaStemService({
+          sourcePath: input.sourcePath,
+          method,
+          voicePath,
+          musicPath,
+        }).catch(async (error) => {
+          console.warn('[VIDEON-v3] Stem service failed, falling back to local script', error)
+          return separateViaLocalScript({
+            sourcePath: input.sourcePath,
+            method,
+            voicePath,
+            musicPath,
+          })
+        })
+      : await separateViaLocalScript({
+          sourcePath: input.sourcePath,
+          method,
+          voicePath,
+          musicPath,
+        })
+
     const recordedMethod = typeof parsed.method === 'string' ? parsed.method : method
     const durationMs = Number.isFinite(parsed.durationMs) ? Math.max(0, Math.floor(parsed.durationMs)) : null
 
