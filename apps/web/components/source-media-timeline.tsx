@@ -59,6 +59,8 @@ type SourceMediaTimelineProps = {
   onTrackMutesChange?: (mutes: ProgramTrackMutes) => void
   /** When true, V1 starts muted (original bus split out to stems). */
   hasStemAudio?: boolean
+  /** Stored stem method label for track chrome (e.g. demucs_htdemucs). */
+  stemMethodLabel?: string | null
 }
 
 function paintSourcePeaks(
@@ -116,6 +118,7 @@ export function SourceMediaTimeline({
   onSeek,
   onTrackMutesChange,
   hasStemAudio = false,
+  stemMethodLabel = null,
 }: SourceMediaTimelineProps) {
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -258,17 +261,23 @@ export function SourceMediaTimeline({
             />
             <TimelineTrackHeader
               id="a1"
-              label="A1"
+              label={hasStemAudio ? 'A1 Voice' : 'A1'}
               variant="audio"
               hidden={tracks.a1.hidden}
               muted={tracks.a1.muted}
               onToggleHidden={() => toggleTrack('a1', 'hidden')}
               onToggleMuted={() => toggleTrack('a1', 'muted')}
-              muteHint={hasStemAudio ? 'Voice-Stem stumm' : 'Tonspur stumm'}
+              muteHint={
+                hasStemAudio
+                  ? stemMethodLabel && !stemMethodLabel.includes('demucs')
+                    ? 'Voice-Näherung (Sprachnband) stumm'
+                    : 'Voice-Stem stumm'
+                  : 'Tonspur stumm'
+              }
             />
             <TimelineTrackHeader
               id="a2"
-              label="A2"
+              label={hasStemAudio ? 'A2 Music' : 'A2'}
               variant="audio"
               hidden={tracks.a2.hidden}
               muted={tracks.a2.muted}

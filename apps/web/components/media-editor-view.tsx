@@ -92,7 +92,8 @@ export function MediaEditorView({
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
-  const [stemMethod, setStemMethod] = useState<'ffmpeg_mid_side' | 'demucs'>('ffmpeg_mid_side')
+  const [stemMethod, setStemMethod] = useState<'ffmpeg_mid_side' | 'demucs'>('demucs')
+  const [stemMethodUsed, setStemMethodUsed] = useState<string | null>(null)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -170,6 +171,9 @@ export function MediaEditorView({
     setMusicPeaks(body.stems?.musicPeaks ?? [])
     setHasVoiceStem(Boolean(body.stems?.voice ?? body.stems?.voicePeaks?.length))
     setHasMusicStem(Boolean(body.stems?.music ?? body.stems?.musicPeaks?.length))
+    setStemMethodUsed(body.stems?.method ?? null)
+    if (body.stems?.method?.includes('demucs')) setStemMethod('demucs')
+    else if (body.stems?.method) setStemMethod('ffmpeg_mid_side')
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -560,11 +564,25 @@ export function MediaEditorView({
                         setStemMethod(value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
                       }
                       options={[
-                        { value: 'ffmpeg_mid_side', label: 'Schnell (Mid/Side)' },
-                        { value: 'demucs', label: 'Neural (Demucs)' },
+                        {
+                          value: 'demucs',
+                          label: 'Voice/Music (Demucs)',
+                        },
+                        {
+                          value: 'ffmpeg_mid_side',
+                          label: 'Näherung (Center-Band)',
+                        },
                       ]}
                     />
                   </Field>
+                  {stemMethodUsed ? (
+                    <Text role="meta" as="p">
+                      Letzter Stem-Lauf: {stemMethodUsed}
+                      {stemMethodUsed.includes('ffmpeg') || stemMethodUsed.includes('fallback')
+                        ? ' — A1 ist Sprachband-Näherung, kein reines Vocal.'
+                        : ''}
+                    </Text>
+                  ) : null}
                   <EditorOverflowItem
                     close={close}
                     disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
@@ -731,6 +749,7 @@ export function MediaEditorView({
           onSeek={seekTo}
           onTrackMutesChange={setTrackMutes}
           hasStemAudio={hasStemAudio}
+          stemMethodLabel={stemMethodUsed}
         />
       </footer>
 

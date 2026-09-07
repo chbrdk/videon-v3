@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Split source audio into voice and music stems.
 
-Default: ffmpeg mid/side (CPU-safe, always available).
+Default path: ffmpeg center-band approximation (CPU-safe, always available).
+  - voice ≈ mid speech band (not raw L+R mid — that still carries centered music)
+  - music ≈ mid bass + mid air + side
 Optional: Demucs two-stem vocals/no_vocals when --method demucs and demucs is installed.
 """
 
@@ -144,6 +146,16 @@ def separate_with_demucs(stereo: Path, voice_out: Path, music_out: Path) -> str:
 
 
 def separate_with_ffmpeg(stereo: Path, voice_out: Path, music_out: Path) -> str:
+    """Approximate vocals vs accompaniment without Demucs.
+
+    Classic mid/side alone is wrong for product labels: mid (L+R) still contains
+    centered music/bass, so the \"voice\" stem sounds like a full mix. Instead:
+
+    - voice ≈ mid speech band (highpass + lowpass)
+    - music ≈ mid bass + mid air + side (stereo difference)
+
+    This is still an approximation — true isolation needs Demucs.
+    """
     channels = probe_channels(stereo)
     if channels < 2:
         run_ffmpeg(["-i", str(stereo), "-ac", "1", str(voice_out)])
@@ -160,25 +172,29 @@ def separate_with_ffmpeg(stereo: Path, voice_out: Path, music_out: Path) -> str:
         )
         return "mono_passthrough"
 
+    # Single filtergraph → both stems (avoids double-decoding drift).
     run_ffmpeg(
         [
             "-i",
             str(stereo),
-            "-af",
-            "pan=mono|c0=0.5*c0+0.5*c1",
+            "-filter_complex",
+            (
+                "[0:a]pan=mono|c0=0.5*c0+0.5*c1,asplit=3[mid_v][mid_b][mid_a];"
+                "[0:a]pan=mono|c0=0.5*c0+-0.5*c1[side];"
+                "[mid_v]highpass=f=160,lowpass=f=4800[voice];"
+                "[mid_b]lowpass=f=160[bass];"
+                "[mid_a]highpass=f=4800[air];"
+                "[bass][side][air]amix=inputs=3:normalize=0:dropout_transition=0[music]"
+            ),
+            "-map",
+            "[voice]",
             str(voice_out),
-        ]
-    )
-    run_ffmpeg(
-        [
-            "-i",
-            str(stereo),
-            "-af",
-            "pan=mono|c0=0.5*c0+-0.5*c1",
+            "-map",
+            "[music]",
             str(music_out),
         ]
     )
-    return "ffmpeg_mid_side"
+    return "ffmpeg_center_band"
 
 
 def main() -> int:
