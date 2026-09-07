@@ -134,8 +134,8 @@ def _read_audio(path: Path, samplerate: int, channels: int):
         if nch <= 0:
             raise RuntimeError("decoded wav has zero channels")
         # shape [channels, time] float32 in [-1, 1]
-        cols = [[samples[i] / 32768.0 for i in range(ch, count, nch)] for ch in range(nch)]
-        wav = torch.tensor(cols, dtype=torch.float32)
+        flat = torch.tensor(samples, dtype=torch.float32)
+        wav = flat.view(-1, nch).transpose(0, 1).contiguous() / 32768.0
         if wav.shape[0] == 1 and channels > 1:
             wav = wav.repeat(channels, 1)
         elif wav.shape[0] > channels:
@@ -152,13 +152,13 @@ def _write_wav(path: Path, wav: torch.Tensor, samplerate: int) -> None:
     audio = wav.detach().cpu().clamp(-1, 1)
     if audio.dim() == 1:
         audio = audio.unsqueeze(0)
-    channels, frames = int(audio.shape[0]), int(audio.shape[1])
-    interleaved = (audio.transpose(0, 1).reshape(-1) * 32767.0).short().numpy()
+    channels = int(audio.shape[0])
+    pcm = (audio.transpose(0, 1).reshape(-1) * 32767.0).clamp(-32768, 32767).to(torch.int16)
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(channels)
         handle.setsampwidth(2)
         handle.setframerate(samplerate)
-        handle.writeframes(struct.pack(f"<{interleaved.size}h", *interleaved.tolist()))
+        handle.writeframes(pcm.numpy().tobytes())
 
     """Wiener-style mask on the mixture → complementary stems (sum ≈ mix)."""
     eps = 1e-8
