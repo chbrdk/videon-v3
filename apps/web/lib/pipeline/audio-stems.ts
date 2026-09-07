@@ -107,34 +107,36 @@ async function separateViaStemService(input: {
     connectTimeout: 60_000,
   })
 
-  let response: Response
+  // Do not close the Agent until the response body is fully consumed.
+  // fetch() resolves on headers; closing early tears down the socket and
+  // leaves response.arrayBuffer() hung until AbortSignal.timeout (~40m).
   try {
-    response = (await undiciFetch(`${base}/v1/separate`, {
+    const response = (await undiciFetch(`${base}/v1/separate`, {
       method: 'POST',
       body: form,
       dispatcher: agent,
       signal: AbortSignal.timeout(timeoutMs),
     })) as unknown as Response
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(`Stem service HTTP ${response.status}: ${text.slice(0, 240)}`)
+    }
+    const boundary = parseMultipartBoundary(response.headers.get('content-type'))
+    if (!boundary) throw new Error('Stem service response missing multipart boundary')
+    const buffer = Buffer.from(await response.arrayBuffer())
+    const parsed = parseStemMultipart(buffer, boundary)
+    await writeFile(input.voicePath, parsed.voice)
+    await writeFile(input.musicPath, parsed.music)
+    return {
+      method: parsed.meta.method,
+      durationMs: parsed.meta.durationMs,
+      voicePeaks: parsed.meta.voicePeaks ?? [],
+      musicPeaks: parsed.meta.musicPeaks ?? [],
+      voicePath: input.voicePath,
+      musicPath: input.musicPath,
+    }
   } finally {
     await agent.close().catch(() => {})
-  }
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(`Stem service HTTP ${response.status}: ${text.slice(0, 240)}`)
-  }
-  const boundary = parseMultipartBoundary(response.headers.get('content-type'))
-  if (!boundary) throw new Error('Stem service response missing multipart boundary')
-  const buffer = Buffer.from(await response.arrayBuffer())
-  const parsed = parseStemMultipart(buffer, boundary)
-  await writeFile(input.voicePath, parsed.voice)
-  await writeFile(input.musicPath, parsed.music)
-  return {
-    method: parsed.meta.method,
-    durationMs: parsed.meta.durationMs,
-    voicePeaks: parsed.meta.voicePeaks ?? [],
-    musicPeaks: parsed.meta.musicPeaks ?? [],
-    voicePath: input.voicePath,
-    musicPath: input.musicPath,
   }
 }
 
