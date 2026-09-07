@@ -25,7 +25,8 @@
     "react-driftkit": "^0.7.3",
     "react-markdown": "^10.1.0",
     "rehype-sanitize": "^6.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "undici": "^7.29.0"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

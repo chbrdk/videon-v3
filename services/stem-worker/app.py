@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import struct
@@ -160,6 +161,8 @@ def _write_wav(path: Path, wav: torch.Tensor, samplerate: int) -> None:
         handle.setframerate(samplerate)
         handle.writeframes(pcm.numpy().tobytes())
 
+
+def _softmask_partition(mix: torch.Tensor, vocals: torch.Tensor, accompaniment: torch.Tensor):
     """Wiener-style mask on the mixture → complementary stems (sum ≈ mix)."""
     eps = 1e-8
     v_pow = vocals.pow(2)
@@ -240,11 +243,9 @@ def _separate_ffmpeg(source: Path, voice_out: Path, music_out: Path) -> str:
     return str(payload.get("method") or "ffmpeg_center_band")
 
 
-def _multipart_response(meta: dict, voice: Path, music: Path) -> Response:
+def _multipart_response(meta: dict, voice_bytes: bytes, music_bytes: bytes) -> Response:
     boundary = "videonstemboundary"
     meta_bytes = json.dumps(meta).encode("utf-8")
-    voice_bytes = voice.read_bytes()
-    music_bytes = music.read_bytes()
     body = b"".join(
         [
             f"--{boundary}\r\nContent-Disposition: form-data; name=\"meta\"\r\nContent-Type: application/json\r\n\r\n".encode(),
@@ -262,19 +263,12 @@ def _multipart_response(meta: dict, voice: Path, music: Path) -> Response:
     return Response(content=body, media_type=f"multipart/form-data; boundary={boundary}")
 
 
-@app.post("/v1/separate")
-async def separate(
-    file: UploadFile = File(...),
-    method: str = Form("demucs"),
-):
-    if method not in ("demucs", "ffmpeg_mid_side"):
-        raise HTTPException(400, "method must be demucs or ffmpeg_mid_side")
-
+def _run_separation_job(source_bytes: bytes, suffix: str, method: str) -> tuple[str, bytes, bytes, int, list[float], list[float]]:
+    """CPU-bound job — always run via asyncio.to_thread so /health stays responsive."""
     with tempfile.TemporaryDirectory(prefix="videon-stem-job-") as tmp:
         tmp_path = Path(tmp)
-        suffix = Path(file.filename or "audio.wav").suffix or ".wav"
         source = (tmp_path / "source").with_suffix(suffix)
-        source.write_bytes(await file.read())
+        source.write_bytes(source_bytes)
         voice_out = tmp_path / "voice.wav"
         music_out = tmp_path / "music.wav"
         try:
@@ -288,14 +282,43 @@ async def separate(
                 try:
                     recorded = f"{_separate_ffmpeg(source, voice_out, music_out)}_fallback"
                 except Exception as nested:  # noqa: BLE001
-                    raise HTTPException(500, f"stem failed: {error}; fallback: {nested}") from nested
+                    raise RuntimeError(f"stem failed: {error}; fallback: {nested}") from nested
             else:
-                raise HTTPException(500, f"stem failed: {error}") from error
+                raise
+        return (
+            recorded,
+            voice_out.read_bytes(),
+            music_out.read_bytes(),
+            _duration_ms(voice_out),
+            _wav_peaks_from_path(voice_out),
+            _wav_peaks_from_path(music_out),
+        )
 
-        meta = {
-            "method": recorded,
-            "durationMs": _duration_ms(voice_out),
-            "voicePeaks": _wav_peaks_from_path(voice_out),
-            "musicPeaks": _wav_peaks_from_path(music_out),
-        }
-        return _multipart_response(meta, voice_out, music_out)
+
+@app.post("/v1/separate")
+async def separate(
+    file: UploadFile = File(...),
+    method: str = Form("demucs"),
+):
+    if method not in ("demucs", "ffmpeg_mid_side"):
+        raise HTTPException(400, "method must be demucs or ffmpeg_mid_side")
+
+    suffix = Path(file.filename or "audio.wav").suffix or ".wav"
+    source_bytes = await file.read()
+    try:
+        recorded, voice_bytes, music_bytes, duration_ms, voice_peaks, music_peaks = await asyncio.to_thread(
+            _run_separation_job,
+            source_bytes,
+            suffix,
+            method,
+        )
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(500, f"stem failed: {error}") from error
+
+    meta = {
+        "method": recorded,
+        "durationMs": duration_ms,
+        "voicePeaks": voice_peaks,
+        "musicPeaks": music_peaks,
+    }
+    return _multipart_response(meta, voice_bytes, music_bytes)

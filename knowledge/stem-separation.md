@@ -35,6 +35,8 @@ Model is loaded **once at process start** and kept in memory (`uvicorn --workers
 
 Audio I/O in the worker uses **ffmpeg + stdlib `wave`** (not `torchaudio.load` / TorchCodec). Newer torchaudio builds require TorchCodec and would otherwise force silent `_fallback`.
 
+Demucs runs in `asyncio.to_thread` so `/health` stays up during long CPU jobs. The web client must raise Undici `headersTimeout`/`bodyTimeout` above the default ~300s (see `lib/pipeline/audio-stems.ts`) or Demucs appears as `ffmpeg_center_band_fallback` after a headers timeout.
+
 Worker knobs (env):
 
 | Env | Default | Notes |

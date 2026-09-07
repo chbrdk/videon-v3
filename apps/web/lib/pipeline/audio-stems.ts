@@ -92,11 +92,28 @@ async function separateViaStemService(input: {
   form.append('method', input.method)
   form.append('file', new Blob([new Uint8Array(sourceBytes)]), 'source.bin')
 
-  const response = await fetch(`${base}/v1/separate`, {
-    method: 'POST',
-    body: form,
-    signal: AbortSignal.timeout(input.method === 'demucs' ? 35 * 60 * 1000 : 10 * 60 * 1000),
+  // Undici's default headersTimeout (~300s) aborts long Demucs jobs before the
+  // first response byte. AbortSignal alone does not override that.
+  const timeoutMs = input.method === 'demucs' ? 40 * 60 * 1000 : 10 * 60 * 1000
+  const { Agent, fetch: undiciFetch } = await import('undici')
+  const agent = new Agent({
+    headersTimeout: timeoutMs,
+    bodyTimeout: timeoutMs,
+    connectTimeout: 60_000,
   })
+
+  let response: Response
+  try {
+    response = (await undiciFetch(`${base}/v1/separate`, {
+      method: 'POST',
+      // Node FormData vs undici BodyInit typings diverge across @types versions.
+      body: form as never,
+      dispatcher: agent,
+      signal: AbortSignal.timeout(timeoutMs),
+    })) as unknown as Response
+  } finally {
+    await agent.close().catch(() => {})
+  }
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     throw new Error(`Stem service HTTP ${response.status}: ${text.slice(0, 240)}`)
