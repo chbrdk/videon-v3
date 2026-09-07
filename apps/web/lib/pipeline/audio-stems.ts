@@ -90,10 +90,11 @@ async function separateViaStemService(input: {
   const sourceBytes = await readFile(input.sourcePath)
   // Undici's default headersTimeout (~300s) aborts long Demucs jobs before the
   // first response byte. AbortSignal alone does not override that.
-  // Use undici FormData/File with undici fetch — mixing global FormData into
+  // Use undici FormData with node:buffer File — mixing global FormData into
   // undici.fetch drops the file part (FastAPI 422: body.file missing).
   const timeoutMs = input.method === 'demucs' ? 40 * 60 * 1000 : 10 * 60 * 1000
-  const { Agent, File, FormData: UndiciFormData, fetch: undiciFetch } = await import('undici')
+  const { Agent, FormData: UndiciFormData, fetch: undiciFetch } = await import('undici')
+  const { File } = await import('node:buffer')
   const form = new UndiciFormData()
   form.append('method', input.method)
   form.append(
