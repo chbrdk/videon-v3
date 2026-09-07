@@ -88,14 +88,18 @@ async function separateViaStemService(input: {
   if (!base) throw new Error('VIDEON_STEM_SERVICE_URL is not configured')
 
   const sourceBytes = await readFile(input.sourcePath)
-  const form = new FormData()
-  form.append('method', input.method)
-  form.append('file', new Blob([new Uint8Array(sourceBytes)]), 'source.bin')
-
   // Undici's default headersTimeout (~300s) aborts long Demucs jobs before the
   // first response byte. AbortSignal alone does not override that.
+  // Use undici FormData/File with undici fetch — mixing global FormData into
+  // undici.fetch drops the file part (FastAPI 422: body.file missing).
   const timeoutMs = input.method === 'demucs' ? 40 * 60 * 1000 : 10 * 60 * 1000
-  const { Agent, fetch: undiciFetch } = await import('undici')
+  const { Agent, File, FormData: UndiciFormData, fetch: undiciFetch } = await import('undici')
+  const form = new UndiciFormData()
+  form.append('method', input.method)
+  form.append(
+    'file',
+    new File([new Uint8Array(sourceBytes)], 'source.bin', { type: 'application/octet-stream' }),
+  )
   const agent = new Agent({
     headersTimeout: timeoutMs,
     bodyTimeout: timeoutMs,
@@ -106,8 +110,7 @@ async function separateViaStemService(input: {
   try {
     response = (await undiciFetch(`${base}/v1/separate`, {
       method: 'POST',
-      // Node FormData vs undici BodyInit typings diverge across @types versions.
-      body: form as never,
+      body: form,
       dispatcher: agent,
       signal: AbortSignal.timeout(timeoutMs),
     })) as unknown as Response
@@ -181,6 +184,14 @@ export async function separateAndStoreAudioStems(input: {
           voicePath,
           musicPath,
         }).catch(async (error) => {
+          // Local script has no Demucs in the web image — fallback always becomes
+          // ffmpeg_*_fallback. Prefer failing the stem stage over a fake "Voice" track
+          // when the dedicated stem worker is configured but rejects the request.
+          const message = error instanceof Error ? error.message : String(error)
+          if (/Stem service HTTP 4\d\d/.test(message)) {
+            console.error('[VIDEON-v3] Stem service client error (no local demucs fallback)', error)
+            throw error
+          }
           console.warn('[VIDEON-v3] Stem service failed, falling back to local script', error)
           return separateViaLocalScript({
             sourcePath: input.sourcePath,

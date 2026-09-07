@@ -37,6 +37,8 @@ Audio I/O in the worker uses **ffmpeg + stdlib `wave`** (not `torchaudio.load` /
 
 Demucs runs in `asyncio.to_thread` so `/health` stays up during long CPU jobs. The web client must raise Undici `headersTimeout`/`bodyTimeout` above the default ~300s (see `lib/pipeline/audio-stems.ts`) or Demucs appears as `ffmpeg_center_band_fallback` after a headers timeout.
 
+Multipart to the worker MUST use undici `FormData` + `File` with undici `fetch`. Mixing the global `FormData` into `undici.fetch` drops the `file` part → FastAPI `422 field required` → local ffmpeg fallback.
+
 Worker knobs (env):
 
 | Env | Default | Notes |
