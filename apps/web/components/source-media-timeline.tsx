@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text } from '@msqdx/ui'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
+import {
+  DEFAULT_SOURCE_TRACK_STATE,
+  TimelineTrackHeader,
+  type TimelineTrackId,
+  type TimelineTrackState,
+} from '@/components/timeline-track-header'
 import { formatClock } from '@/lib/editor-time'
 import {
   buildTimelineTicks,
@@ -16,11 +22,14 @@ import {
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 
-type SourceScene = {
+export type SourceSceneInsight = {
   sceneKey: string
   startMs: number
   endMs: number
   summary: string
+  objects?: string[]
+  people?: string[]
+  brandStatus?: string | null
 }
 
 type SourceTranscriptSegment = {
@@ -33,7 +42,8 @@ type SourceMediaTimelineProps = {
   durationMs: number
   playheadMs: number
   playbackUrl?: string | null
-  scenes: SourceScene[]
+  mediaLabel?: string
+  scenes: SourceSceneInsight[]
   transcriptSegments?: SourceTranscriptSegment[]
   peaks: number[]
   voicePeaks?: number[]
@@ -43,6 +53,8 @@ type SourceMediaTimelineProps = {
   markOutMs?: number | null
   disabled?: boolean
   onSeek: (ms: number) => void
+  /** V1 mute → program monitor audio. */
+  onVideoMutedChange?: (muted: boolean) => void
 }
 
 function paintSourcePeaks(
@@ -74,10 +86,20 @@ function paintSourcePeaks(
   }
 }
 
+function sceneInsightMeta(scene: SourceSceneInsight): string {
+  const bits = [
+    ...(scene.objects ?? []).slice(0, 2),
+    ...(scene.people ?? []).slice(0, 1),
+  ]
+  if (scene.brandStatus) bits.push(`Brand:${scene.brandStatus}`)
+  return bits.join(' · ')
+}
+
 export function SourceMediaTimeline({
   durationMs,
   playheadMs,
   playbackUrl = null,
+  mediaLabel = 'Quelle',
   scenes,
   transcriptSegments = [],
   peaks,
@@ -88,12 +110,14 @@ export function SourceMediaTimeline({
   markOutMs = null,
   disabled = false,
   onSeek,
+  onVideoMutedChange,
 }: SourceMediaTimelineProps) {
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const voiceCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const musicCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [zoomIndex, setZoomIndex] = useState(defaultTimelineZoomIndex)
+  const [tracks, setTracks] = useState(DEFAULT_SOURCE_TRACK_STATE)
 
   const zoomLevel = TIMELINE_ZOOM_LEVELS[zoomIndex] ?? 1
   const msPerPixel = timelineMsPerPixel(zoomLevel)
@@ -101,6 +125,19 @@ export function SourceMediaTimeline({
   const ticks = useMemo(() => buildTimelineTicks(durationMs, zoomLevel), [durationMs, zoomLevel])
   const resolvedVoicePeaks = voicePeaks?.length ? voicePeaks : peaks
   const resolvedMusicPeaks = musicPeaks ?? []
+
+  const toggleTrack = useCallback((id: TimelineTrackId, field: keyof TimelineTrackState) => {
+    setTracks((current) => {
+      const next = {
+        ...current,
+        [id]: { ...current[id], [field]: !current[id][field] },
+      }
+      if (id === 'v1' && field === 'muted') {
+        onVideoMutedChange?.(next.v1.muted)
+      }
+      return next
+    })
+  }, [onVideoMutedChange])
 
   const seekFromPointer = useCallback(
     (clientX: number) => {
@@ -122,12 +159,14 @@ export function SourceMediaTimeline({
   )
 
   useEffect(() => {
+    if (tracks.a1.hidden) return
     paintSourcePeaks(voiceCanvasRef.current, resolvedVoicePeaks, durationMs, msPerPixel, '#2d6a9f')
-  }, [durationMs, msPerPixel, resolvedVoicePeaks])
+  }, [durationMs, msPerPixel, resolvedVoicePeaks, tracks.a1.hidden])
 
   useEffect(() => {
+    if (tracks.a2.hidden) return
     paintSourcePeaks(musicCanvasRef.current, resolvedMusicPeaks, durationMs, msPerPixel, '#8a6a2d')
-  }, [durationMs, msPerPixel, resolvedMusicPeaks])
+  }, [durationMs, msPerPixel, resolvedMusicPeaks, tracks.a2.hidden])
 
   const onTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (disabled) return
@@ -146,6 +185,13 @@ export function SourceMediaTimeline({
     window.addEventListener('pointerup', onUp)
     seekFromPointer(event.clientX)
   }
+
+  const filmstripThumbs = useMemo(() => {
+    if (durationMs <= 0) return []
+    const count = Math.min(12, Math.max(3, Math.floor(contentWidthPx / 96)))
+    const step = durationMs / count
+    return Array.from({ length: count }, (_, index) => Math.floor(index * step + step / 2))
+  }, [contentWidthPx, durationMs])
 
   return (
     <div className="videon-cut-timeline videon-cut-timeline--source">
@@ -179,12 +225,55 @@ export function SourceMediaTimeline({
 
       <div className="videon-cut-timeline__viewport" ref={viewportRef}>
         <div className="videon-cut-timeline__layout">
-          <div className="videon-cut-timeline__headers" aria-hidden="true">
+          <div className="videon-cut-timeline__headers">
             <div className="videon-cut-timeline__header-spacer" />
-            <div className="videon-cut-timeline__header-label">V1</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1 Voice</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A2 Music</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div>
+            <TimelineTrackHeader
+              id="v1"
+              label="V1"
+              hidden={tracks.v1.hidden}
+              muted={tracks.v1.muted}
+              onToggleHidden={() => toggleTrack('v1', 'hidden')}
+              onToggleMuted={() => toggleTrack('v1', 'muted')}
+              muteHint="Program-Ton stumm"
+            />
+            <TimelineTrackHeader
+              id="si"
+              label="SI"
+              variant="insight"
+              hidden={tracks.si.hidden}
+              muted={tracks.si.muted}
+              onToggleHidden={() => toggleTrack('si', 'hidden')}
+              onToggleMuted={() => toggleTrack('si', 'muted')}
+              muteHint="Szene-Insight deaktivieren"
+            />
+            <TimelineTrackHeader
+              id="a1"
+              label="A1"
+              variant="audio"
+              hidden={tracks.a1.hidden}
+              muted={tracks.a1.muted}
+              onToggleHidden={() => toggleTrack('a1', 'hidden')}
+              onToggleMuted={() => toggleTrack('a1', 'muted')}
+            />
+            <TimelineTrackHeader
+              id="a2"
+              label="A2"
+              variant="audio"
+              hidden={tracks.a2.hidden}
+              muted={tracks.a2.muted}
+              onToggleHidden={() => toggleTrack('a2', 'hidden')}
+              onToggleMuted={() => toggleTrack('a2', 'muted')}
+            />
+            <TimelineTrackHeader
+              id="tx"
+              label="TX"
+              variant="transcript"
+              hidden={tracks.tx.hidden}
+              muted={tracks.tx.muted}
+              onToggleHidden={() => toggleTrack('tx', 'hidden')}
+              onToggleMuted={() => toggleTrack('tx', 'muted')}
+              muteHint="Transkript deaktivieren"
+            />
           </div>
           <div className="videon-cut-timeline__lanes-wrap">
             <div className="videon-cut-timeline__lanes" style={{ width: `${contentWidthPx}px` }} ref={lanesRef}>
@@ -211,88 +300,129 @@ export function SourceMediaTimeline({
               </div>
 
               <div
-                className="videon-cut-timeline__track videon-cut-timeline__track--video"
+                className={`videon-cut-timeline__track videon-cut-timeline__track--video${tracks.v1.hidden ? ' is-collapsed' : ''}${tracks.v1.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
               >
-                {markInMs !== null && markOutMs !== null && markOutMs > markInMs ? (
-                  <div
-                    className="videon-editor__range-marker"
-                    style={{
-                      left: `${timelineLeftPx(markInMs, msPerPixel)}px`,
-                      width: `${timelineWidthPx(markOutMs - markInMs, msPerPixel)}px`,
-                    }}
-                  />
-                ) : null}
-                {markInMs !== null ? (
-                  <div
-                    className="videon-cut-timeline__mark videon-cut-timeline__mark--in"
-                    style={{ left: `${timelineLeftPx(markInMs, msPerPixel)}px` }}
-                    title={`In ${formatClock(markInMs)}`}
-                  />
-                ) : null}
-                {markOutMs !== null ? (
-                  <div
-                    className="videon-cut-timeline__mark videon-cut-timeline__mark--out"
-                    style={{ left: `${timelineLeftPx(markOutMs, msPerPixel)}px` }}
-                    title={`Out ${formatClock(markOutMs)}`}
-                  />
-                ) : null}
-                {scenes.map((scene) => {
-                  const thumbMs = scene.startMs + Math.floor((scene.endMs - scene.startMs) / 2)
-                  return (
-                    <button
-                      key={scene.sceneKey}
-                      type="button"
-                      className={`videon-cut-timeline__clip videon-cut-timeline__clip--scene${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
+                {!tracks.v1.hidden ? (
+                  <>
+                    {markInMs !== null && markOutMs !== null && markOutMs > markInMs ? (
+                      <div
+                        className="videon-editor__range-marker"
+                        style={{
+                          left: `${timelineLeftPx(markInMs, msPerPixel)}px`,
+                          width: `${timelineWidthPx(markOutMs - markInMs, msPerPixel)}px`,
+                        }}
+                      />
+                    ) : null}
+                    {markInMs !== null ? (
+                      <div
+                        className="videon-cut-timeline__mark videon-cut-timeline__mark--in"
+                        style={{ left: `${timelineLeftPx(markInMs, msPerPixel)}px` }}
+                        title={`In ${formatClock(markInMs)}`}
+                      />
+                    ) : null}
+                    {markOutMs !== null ? (
+                      <div
+                        className="videon-cut-timeline__mark videon-cut-timeline__mark--out"
+                        style={{ left: `${timelineLeftPx(markOutMs, msPerPixel)}px` }}
+                        title={`Out ${formatClock(markOutMs)}`}
+                      />
+                    ) : null}
+                    <div
+                      className="videon-cut-timeline__clip videon-cut-timeline__clip--source"
                       style={{
-                        left: `${timelineLeftPx(scene.startMs, msPerPixel)}px`,
-                        width: `${timelineWidthPx(scene.endMs - scene.startMs, msPerPixel)}px`,
+                        left: '0px',
+                        width: `${timelineWidthPx(Math.max(durationMs, 1), msPerPixel)}px`,
                       }}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onSeek(scene.startMs)
-                      }}
-                      title={scene.summary}
+                      title={mediaLabel}
                     >
-                      <TimelineClipThumbnail playbackUrl={playbackUrl} sourceMs={thumbMs} />
-                      <span className="videon-cut-timeline__clip-label">{scene.summary}</span>
-                    </button>
-                  )
-                })}
+                      <div className="videon-cut-timeline__filmstrip">
+                        {filmstripThumbs.map((ms) => (
+                          <TimelineClipThumbnail key={ms} playbackUrl={playbackUrl} sourceMs={ms} />
+                        ))}
+                      </div>
+                      <span className="videon-cut-timeline__clip-label">{mediaLabel}</span>
+                    </div>
+                  </>
+                ) : null}
               </div>
 
-              <div className="videon-cut-timeline__track videon-cut-timeline__track--audio">
-                <canvas
-                  ref={voiceCanvasRef}
-                  className="videon-cut-timeline__audio-canvas"
-                  aria-label="Audio-Spur A1 Voice"
-                />
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--insight${tracks.si.hidden ? ' is-collapsed' : ''}${tracks.si.muted ? ' is-muted' : ''}`}
+                onPointerDown={onTrackPointerDown}
+              >
+                {!tracks.si.hidden
+                  ? scenes.map((scene) => {
+                      const meta = sceneInsightMeta(scene)
+                      return (
+                        <button
+                          key={scene.sceneKey}
+                          type="button"
+                          className={`videon-cut-timeline__clip videon-cut-timeline__clip--insight${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
+                          style={{
+                            left: `${timelineLeftPx(scene.startMs, msPerPixel)}px`,
+                            width: `${timelineWidthPx(scene.endMs - scene.startMs, msPerPixel)}px`,
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onSeek(scene.startMs)
+                          }}
+                          title={[scene.summary, meta].filter(Boolean).join('\n')}
+                          disabled={tracks.si.muted}
+                        >
+                          <span className="videon-cut-timeline__clip-label">{scene.summary}</span>
+                          {meta ? <span className="videon-cut-timeline__clip-meta">{meta}</span> : null}
+                        </button>
+                      )
+                    })
+                  : null}
               </div>
 
-              <div className="videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music">
-                <canvas
-                  ref={musicCanvasRef}
-                  className="videon-cut-timeline__audio-canvas"
-                  aria-label="Audio-Spur A2 Music"
-                />
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio${tracks.a1.hidden ? ' is-collapsed' : ''}${tracks.a1.muted ? ' is-muted' : ''}`}
+              >
+                {!tracks.a1.hidden ? (
+                  <canvas
+                    ref={voiceCanvasRef}
+                    className="videon-cut-timeline__audio-canvas"
+                    aria-label="Audio-Spur A1 Voice"
+                  />
+                ) : null}
               </div>
 
-              <div className="videon-cut-timeline__track videon-cut-timeline__track--transcript">
-                {transcriptSegments.map((segment, index) => (
-                  <button
-                    key={`${segment.startMs}-${index}`}
-                    type="button"
-                    className={`videon-cut-timeline__transcript-segment${activeTxIndex === index ? ' is-active' : ''}`}
-                    style={{
-                      left: `${timelineLeftPx(segment.startMs, msPerPixel)}px`,
-                      width: `${timelineWidthPx(segment.endMs - segment.startMs, msPerPixel)}px`,
-                    }}
-                    title={segment.text}
-                    onClick={() => onSeek(segment.startMs)}
-                  >
-                    {segment.text}
-                  </button>
-                ))}
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music${tracks.a2.hidden ? ' is-collapsed' : ''}${tracks.a2.muted ? ' is-muted' : ''}`}
+              >
+                {!tracks.a2.hidden ? (
+                  <canvas
+                    ref={musicCanvasRef}
+                    className="videon-cut-timeline__audio-canvas"
+                    aria-label="Audio-Spur A2 Music"
+                  />
+                ) : null}
+              </div>
+
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--transcript${tracks.tx.hidden ? ' is-collapsed' : ''}${tracks.tx.muted ? ' is-muted' : ''}`}
+              >
+                {!tracks.tx.hidden
+                  ? transcriptSegments.map((segment, index) => (
+                      <button
+                        key={`${segment.startMs}-${index}`}
+                        type="button"
+                        className={`videon-cut-timeline__transcript-segment${activeTxIndex === index ? ' is-active' : ''}`}
+                        style={{
+                          left: `${timelineLeftPx(segment.startMs, msPerPixel)}px`,
+                          width: `${timelineWidthPx(segment.endMs - segment.startMs, msPerPixel)}px`,
+                        }}
+                        title={segment.text}
+                        onClick={() => onSeek(segment.startMs)}
+                        disabled={tracks.tx.muted}
+                      >
+                        {segment.text}
+                      </button>
+                    ))
+                  : null}
               </div>
 
               <div

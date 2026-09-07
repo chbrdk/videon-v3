@@ -201,6 +201,10 @@ export function MediaEditorView({
     }
   }, [scenes, playbackUrl])
 
+  const handleVideoMutedChange = useCallback((muted: boolean) => {
+    if (videoRef.current) videoRef.current.muted = muted
+  }, [])
+
   const seekTo = (ms: number) => {
     const video = videoRef.current
     if (!video) return
@@ -739,11 +743,16 @@ export function MediaEditorView({
           durationMs={timelineDuration}
           playheadMs={currentMs}
           playbackUrl={playbackUrl}
+          mediaLabel={media.originalFilename}
           scenes={scenes.map((scene) => ({
             sceneKey: scene.sceneKey,
             startMs: scene.startMs,
             endMs: scene.endMs,
             summary: scene.insight.summary,
+            objects: scene.insight.objects?.map((object) => object.label) ?? [],
+            people: scene.insight.people?.map((person) => person.role) ?? [],
+            brandStatus:
+              brandChecks.find((check) => check.sceneKey === scene.sceneKey)?.status ?? null,
           }))}
           transcriptSegments={transcript?.segments ?? []}
           peaks={waveformPeaks}
@@ -754,6 +763,7 @@ export function MediaEditorView({
           markOutMs={markOutMs}
           disabled={!playbackUrl || Boolean(busy)}
           onSeek={seekTo}
+          onVideoMutedChange={handleVideoMutedChange}
         />
       </footer>
 

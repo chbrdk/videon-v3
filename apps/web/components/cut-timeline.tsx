@@ -5,6 +5,11 @@ import { Text } from '@msqdx/ui'
 import { TimelineAudioTrack } from '@/components/timeline-audio-track'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
+  DEFAULT_CUT_TRACK_STATE,
+  TimelineTrackHeader,
+  type TimelineTrackState,
+} from '@/components/timeline-track-header'
+import {
   MIN_CUT_CLIP_MS,
   buildCutTimeline,
   type CutTimelineItem,
@@ -98,6 +103,7 @@ export function CutTimeline({
     rollBoundaryMs?: number
   } | null>(null)
   const [dropHintMs, setDropHintMs] = useState<number | null>(null)
+  const [tracks, setTracks] = useState(DEFAULT_CUT_TRACK_STATE)
   const trimRef = useRef<{
     sceneId: string
     edge: 'start' | 'end'
@@ -113,6 +119,13 @@ export function CutTimeline({
   const msPerPixel = timelineMsPerPixel(zoomLevel)
   const contentWidthPx = timelineContentWidthPx(totalDurationMs, zoomLevel)
   const ticks = useMemo(() => buildTimelineTicks(totalDurationMs, zoomLevel), [totalDurationMs, zoomLevel])
+
+  const toggleTrack = useCallback((id: keyof typeof DEFAULT_CUT_TRACK_STATE, field: keyof TimelineTrackState) => {
+    setTracks((current) => ({
+      ...current,
+      [id]: { ...current[id], [field]: !current[id][field] },
+    }))
+  }, [])
 
   const timeline = useMemo(() => {
     const scenes = clips.map((clip) => ({
@@ -323,12 +336,45 @@ export function CutTimeline({
 
       <div className="videon-cut-timeline__viewport" ref={viewportRef}>
         <div className="videon-cut-timeline__layout">
-          <div className="videon-cut-timeline__headers" aria-hidden="true">
+          <div className="videon-cut-timeline__headers">
             <div className="videon-cut-timeline__header-spacer" />
-            <div className="videon-cut-timeline__header-label">V1</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A1 Voice</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--audio">A2 Music</div>
-            <div className="videon-cut-timeline__header-label videon-cut-timeline__header-label--transcript">TX</div>
+            <TimelineTrackHeader
+              id="v1"
+              label="V1"
+              hidden={tracks.v1.hidden}
+              muted={tracks.v1.muted}
+              onToggleHidden={() => toggleTrack('v1', 'hidden')}
+              onToggleMuted={() => toggleTrack('v1', 'muted')}
+              muteHint="Video-Spur deaktivieren"
+            />
+            <TimelineTrackHeader
+              id="a1"
+              label="A1"
+              variant="audio"
+              hidden={tracks.a1.hidden}
+              muted={tracks.a1.muted}
+              onToggleHidden={() => toggleTrack('a1', 'hidden')}
+              onToggleMuted={() => toggleTrack('a1', 'muted')}
+            />
+            <TimelineTrackHeader
+              id="a2"
+              label="A2"
+              variant="audio"
+              hidden={tracks.a2.hidden}
+              muted={tracks.a2.muted}
+              onToggleHidden={() => toggleTrack('a2', 'hidden')}
+              onToggleMuted={() => toggleTrack('a2', 'muted')}
+            />
+            <TimelineTrackHeader
+              id="tx"
+              label="TX"
+              variant="transcript"
+              hidden={tracks.tx.hidden}
+              muted={tracks.tx.muted}
+              onToggleHidden={() => toggleTrack('tx', 'hidden')}
+              onToggleMuted={() => toggleTrack('tx', 'muted')}
+              muteHint="Transkript deaktivieren"
+            />
           </div>
           <div className="videon-cut-timeline__lanes-wrap">
             <div className="videon-cut-timeline__lanes" style={{ width: `${contentWidthPx}px` }} ref={lanesRef}>
@@ -355,7 +401,7 @@ export function CutTimeline({
 
               <div
                 ref={videoTrackRef}
-                className="videon-cut-timeline__track videon-cut-timeline__track--video"
+                className={`videon-cut-timeline__track videon-cut-timeline__track--video${tracks.v1.hidden ? ' is-collapsed' : ''}${tracks.v1.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
                 onDragOver={onTrackDragOver}
                 onDragLeave={() => setDropHintMs(null)}
@@ -366,7 +412,8 @@ export function CutTimeline({
                 aria-valuemax={totalDurationMs}
                 aria-valuenow={cutPlayheadMs}
               >
-                {timeline.map((item) => {
+                {!tracks.v1.hidden
+                  ? timeline.map((item) => {
                   const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
                   const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
                   const isActive = item.index === activeIndex
@@ -378,8 +425,8 @@ export function CutTimeline({
                     <div
                       key={item.scene.id}
                       className={`videon-cut-timeline__clip${isActive ? ' is-active' : ''}${dragSceneId === item.scene.id ? ' is-dragging' : ''}`}
-                      style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                      draggable={!disabled}
+                      style={{ left: `${leftPx}px`, width: `${widthPx}px`, pointerEvents: tracks.v1.muted ? 'none' : undefined }}
+                      draggable={!disabled && !tracks.v1.muted}
                       onDragStart={(event) => onClipDragStart(event, item.scene.id)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={() => onClipDrop(item.scene.id)}
@@ -426,44 +473,56 @@ export function CutTimeline({
                       <span className="videon-cut-timeline__clip-label">{label}</span>
                     </div>
                   )
-                })}
-                {dropHintLeftPx !== null ? (
+                })
+                  : null}
+                {!tracks.v1.hidden && dropHintLeftPx !== null ? (
                   <div className="videon-cut-timeline__drop-hint" style={{ left: `${dropHintLeftPx}px` }} />
                 ) : null}
               </div>
 
-              <div className="videon-cut-timeline__track videon-cut-timeline__track--audio">
-                <TimelineAudioTrack
-                  timeline={timeline}
-                  totalDurationMs={totalDurationMs}
-                  msPerPixel={msPerPixel}
-                  peaksByUrl={peaksByUrl}
-                  peaksByMediaId={voicePeaksByMediaId}
-                  playbackUrlByMediaId={playbackUrlByMediaId}
-                  sourceDurationMsByMediaId={sourceDurationMsByMediaId}
-                  clips={clips}
-                  color="#2d6a9f"
-                  label="Audio-Spur A1 Voice"
-                />
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio${tracks.a1.hidden ? ' is-collapsed' : ''}${tracks.a1.muted ? ' is-muted' : ''}`}
+              >
+                {!tracks.a1.hidden ? (
+                  <TimelineAudioTrack
+                    timeline={timeline}
+                    totalDurationMs={totalDurationMs}
+                    msPerPixel={msPerPixel}
+                    peaksByUrl={peaksByUrl}
+                    peaksByMediaId={voicePeaksByMediaId}
+                    playbackUrlByMediaId={playbackUrlByMediaId}
+                    sourceDurationMsByMediaId={sourceDurationMsByMediaId}
+                    clips={clips}
+                    color="#2d6a9f"
+                    label="Audio-Spur A1 Voice"
+                  />
+                ) : null}
               </div>
 
-              <div className="videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music">
-                <TimelineAudioTrack
-                  timeline={timeline}
-                  totalDurationMs={totalDurationMs}
-                  msPerPixel={msPerPixel}
-                  peaksByUrl={{}}
-                  peaksByMediaId={musicPeaksByMediaId}
-                  playbackUrlByMediaId={playbackUrlByMediaId}
-                  sourceDurationMsByMediaId={sourceDurationMsByMediaId}
-                  clips={clips}
-                  color="#8a6a2d"
-                  label="Audio-Spur A2 Music"
-                />
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music${tracks.a2.hidden ? ' is-collapsed' : ''}${tracks.a2.muted ? ' is-muted' : ''}`}
+              >
+                {!tracks.a2.hidden ? (
+                  <TimelineAudioTrack
+                    timeline={timeline}
+                    totalDurationMs={totalDurationMs}
+                    msPerPixel={msPerPixel}
+                    peaksByUrl={{}}
+                    peaksByMediaId={musicPeaksByMediaId}
+                    playbackUrlByMediaId={playbackUrlByMediaId}
+                    sourceDurationMsByMediaId={sourceDurationMsByMediaId}
+                    clips={clips}
+                    color="#8a6a2d"
+                    label="Audio-Spur A2 Music"
+                  />
+                ) : null}
               </div>
 
-              <div className="videon-cut-timeline__track videon-cut-timeline__track--transcript">
-                {transcriptSegments.map((segment, index) => {
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--transcript${tracks.tx.hidden ? ' is-collapsed' : ''}${tracks.tx.muted ? ' is-muted' : ''}`}
+              >
+                {!tracks.tx.hidden
+                  ? transcriptSegments.map((segment, index) => {
                   const leftPx = timelineLeftPx(segment.cutStartMs, msPerPixel)
                   const widthPx = timelineWidthPx(segment.cutEndMs - segment.cutStartMs, msPerPixel, 4)
                   return (
@@ -474,11 +533,13 @@ export function CutTimeline({
                       style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
                       title={segment.text}
                       onClick={() => onSeek(segment.cutStartMs)}
+                      disabled={tracks.tx.muted}
                     >
                       {segment.text}
                     </button>
                   )
-                })}
+                })
+                  : null}
               </div>
 
               <div
