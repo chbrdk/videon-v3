@@ -356,7 +356,8 @@ main {
 
 .videon-nle--player-first {
   min-height: min(86vh, 64rem);
-  grid-template-rows: auto minmax(18rem, 1fr) minmax(12rem, 32vh);
+  /* Timeline row is content-sized — never clip tracks behind a vertical scroll. */
+  grid-template-rows: auto minmax(14rem, 1fr) auto;
 }
 
 .videon-nle__top {
@@ -954,9 +955,13 @@ main {
 .videon-nle__timeline-dock {
   border-top: 1px solid var(--nle-border-strong);
   background: var(--nle-panel);
-  min-height: 10rem;
-  max-height: 34vh;
-  overflow: auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
+.videon-nle__timeline-dock .videon-cut-timeline {
+  min-height: 0;
 }
 
 .videon-nle__shortcuts {
@@ -1418,9 +1423,11 @@ main {
 }
 
 .videon-cut-timeline__viewport {
-  overflow: auto;
+  /* Horizontal scrub/zoom only — all tracks stay fully visible vertically. */
+  overflow-x: auto;
+  overflow-y: visible;
   background: var(--nle-track, color-mix(in srgb, var(--bg0) 88%, var(--fg)));
-  min-height: 10rem;
+  min-height: 0;
 }
 
 .videon-cut-timeline__layout {
