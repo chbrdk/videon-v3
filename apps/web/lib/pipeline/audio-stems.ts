@@ -185,9 +185,13 @@ export async function separateAndStoreAudioStems(input: {
           voicePath,
           musicPath,
         }).catch(async (error) => {
-          // Local script has no Demucs in the web image — fallback always becomes
-          // ffmpeg_*_fallback. Prefer failing the stem stage over a fake "Voice" track
-          // when the dedicated stem worker is configured but rejects the request.
+          // Web image has no Demucs. Local fallback always becomes ffmpeg_*_fallback and
+          // looks like a successful Voice split — never do that when the stem worker is
+          // the intended path (especially for demucs).
+          if (method === 'demucs') {
+            console.error('[VIDEON-v3] Stem service failed (no demucs local fallback)', error)
+            throw error
+          }
           const message = error instanceof Error ? error.message : String(error)
           if (/Stem service HTTP 4\d\d/.test(message)) {
             console.error('[VIDEON-v3] Stem service client error (no local demucs fallback)', error)
