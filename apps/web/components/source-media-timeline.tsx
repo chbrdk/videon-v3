@@ -6,6 +6,7 @@ import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
   DEFAULT_SOURCE_TRACK_STATE,
   TimelineTrackHeader,
+  programAudioMuted,
   type TimelineTrackId,
   type TimelineTrackState,
 } from '@/components/timeline-track-header'
@@ -54,7 +55,7 @@ type SourceMediaTimelineProps = {
   markOutMs?: number | null
   disabled?: boolean
   onSeek: (ms: number) => void
-  /** V1 mute → program monitor audio. */
+  /** V1 or A1 mute → program monitor `<video muted>`. */
   onVideoMutedChange?: (muted: boolean) => void
 }
 
@@ -128,17 +129,15 @@ export function SourceMediaTimeline({
   const resolvedMusicPeaks = musicPeaks ?? []
 
   const toggleTrack = useCallback((id: TimelineTrackId, field: keyof TimelineTrackState) => {
-    setTracks((current) => {
-      const next = {
-        ...current,
-        [id]: { ...current[id], [field]: !current[id][field] },
-      }
-      if (id === 'v1' && field === 'muted') {
-        onVideoMutedChange?.(next.v1.muted)
-      }
-      return next
-    })
-  }, [onVideoMutedChange])
+    setTracks((current) => ({
+      ...current,
+      [id]: { ...current[id], [field]: !current[id][field] },
+    }))
+  }, [])
+
+  useEffect(() => {
+    onVideoMutedChange?.(programAudioMuted(tracks))
+  }, [tracks, onVideoMutedChange])
 
   const seekFromPointer = useCallback(
     (clientX: number) => {
@@ -251,6 +250,7 @@ export function SourceMediaTimeline({
               muted={tracks.a1.muted}
               onToggleHidden={() => toggleTrack('a1', 'hidden')}
               onToggleMuted={() => toggleTrack('a1', 'muted')}
+              muteHint="Tonspur stumm"
             />
             <TimelineTrackHeader
               id="a2"

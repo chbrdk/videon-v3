@@ -55,6 +55,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 1. WHEN the NLE shell renders THEN it MUST use exactly three grid rows (top chrome · program · timeline). Drawer/shortcuts MUST NOT participate in the grid (overlay layer).
 2. WHEN the timeline dock renders THEN it MUST size to its track stack (`auto`) and MUST NOT clip with a vertical scrollbar; horizontal overflow for zoom/scrub is allowed.
 3. WHEN scene/transcript clips render on a source timeline THEN visible labels MUST be truncated; full text stays in `title` / Inspect.
+4. WHEN V1 or A1 mute is toggled THEN the program `<video>` MUST set `muted` accordingly (`programAudioMuted`); mute MUST NOT be visual-only.
 
 ## Timeline DS shell (Wave C)
 

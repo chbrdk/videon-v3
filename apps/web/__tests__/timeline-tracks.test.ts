@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CUT_TRACK_STATE,
   DEFAULT_SOURCE_TRACK_STATE,
+  programAudioMuted,
 } from '@/components/timeline-track-header'
 
 describe('timeline track defaults', () => {
@@ -15,5 +16,12 @@ describe('timeline track defaults', () => {
 
   it('cut timeline has no scene-insight track by default', () => {
     expect(Object.keys(DEFAULT_CUT_TRACK_STATE).sort()).toEqual(['a1', 'a2', 'tx', 'v1'])
+  })
+
+  it('mutes program audio when V1 or A1 is muted', () => {
+    expect(programAudioMuted({ v1: { muted: false }, a1: { muted: false } })).toBe(false)
+    expect(programAudioMuted({ v1: { muted: true }, a1: { muted: false } })).toBe(true)
+    expect(programAudioMuted({ v1: { muted: false }, a1: { muted: true } })).toBe(true)
+    expect(programAudioMuted({ v1: { muted: true }, a1: { muted: true } })).toBe(true)
   })
 })

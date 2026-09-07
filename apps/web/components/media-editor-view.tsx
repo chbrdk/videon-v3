@@ -100,6 +100,7 @@ export function MediaEditorView({
   const [markOutMs, setMarkOutMs] = useState<number | null>(null)
   const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [programMuted, setProgramMuted] = useState(false)
   const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>('scenes')
   const [inspectOpen, setInspectOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -221,8 +222,13 @@ export function MediaEditorView({
   }, [scenes, playbackUrl])
 
   const handleVideoMutedChange = useCallback((muted: boolean) => {
-    if (videoRef.current) videoRef.current.muted = muted
+    setProgramMuted(muted)
   }, [])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (video) video.muted = programMuted
+  }, [programMuted, playbackUrl])
 
   const seekTo = (ms: number) => {
     const video = videoRef.current
@@ -633,7 +639,14 @@ export function MediaEditorView({
             }
           >
             {playbackUrl ? (
-              <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
+              <video
+                ref={videoRef}
+                className="videon-nle__video"
+                src={playbackUrl}
+                muted={programMuted}
+                playsInline
+                preload="metadata"
+              />
             ) : (
               <div className="videon-nle__video-placeholder">
                 <Text role="body">Wiedergabe noch nicht verfügbar</Text>

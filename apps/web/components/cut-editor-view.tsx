@@ -106,6 +106,7 @@ export function CutEditorView({
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
+  const [programMuted, setProgramMuted] = useState(false)
   const [trimMode, setTrimMode] = useState<TrimMode>('trim')
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
   const [peaksByUrl, setPeaksByUrl] = useState<Record<string, number[]>>({})
@@ -349,6 +350,11 @@ export function CutEditorView({
     if (mediaId && currentMediaIdRef.current === mediaId && playbackUrl) return
     void loadPlayback(clip).catch((err) => notifyError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
   }, [clips, activeIndex, loadPlayback, playbackUrl])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (video) video.muted = programMuted
+  }, [programMuted, playbackUrl])
 
   useEffect(() => {
     const video = videoRef.current
@@ -811,7 +817,14 @@ export function CutEditorView({
             }
           >
             {playbackUrl ? (
-              <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
+              <video
+                ref={videoRef}
+                className="videon-nle__video"
+                src={playbackUrl}
+                muted={programMuted}
+                playsInline
+                preload="metadata"
+              />
             ) : (
               <div className="videon-nle__video-placeholder">
                 <Text role="body">Keine Wiedergabe für diesen Clip</Text>
@@ -859,6 +872,7 @@ export function CutEditorView({
             void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
           }
           onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
+          onProgramMutedChange={setProgramMuted}
         />
       </footer>
 

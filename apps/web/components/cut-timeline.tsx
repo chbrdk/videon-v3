@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Text, TimelineClip, TimelineRuler, ToolButton } from '@msqdx/ui'
 import { TimelineAudioTrack } from '@/components/timeline-audio-track'
@@ -8,6 +8,7 @@ import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
   DEFAULT_CUT_TRACK_STATE,
   TimelineTrackHeader,
+  programAudioMuted,
   type TimelineTrackState,
 } from '@/components/timeline-track-header'
 import {
@@ -69,6 +70,8 @@ type CutTimelineProps = {
   onTrim: (sceneId: string, startMs: number, endMs: number) => void
   onRollTrim?: (leftSceneId: string, boundaryMs: number) => void
   onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null }) => void
+  /** V1 or A1 mute → program monitor audio. */
+  onProgramMutedChange?: (muted: boolean) => void
 }
 
 
@@ -91,6 +94,7 @@ export function CutTimeline({
   onTrim,
   onRollTrim,
   onDropMedia,
+  onProgramMutedChange,
 }: CutTimelineProps) {
   const videoTrackRef = useRef<HTMLDivElement | null>(null)
   const lanesRef = useRef<HTMLDivElement | null>(null)
@@ -128,6 +132,10 @@ export function CutTimeline({
       [id]: { ...current[id], [field]: !current[id][field] },
     }))
   }, [])
+
+  useEffect(() => {
+    onProgramMutedChange?.(programAudioMuted(tracks))
+  }, [tracks, onProgramMutedChange])
 
   const timeline = useMemo(() => {
     const scenes = clips.map((clip) => ({
@@ -343,7 +351,7 @@ export function CutTimeline({
               muted={tracks.v1.muted}
               onToggleHidden={() => toggleTrack('v1', 'hidden')}
               onToggleMuted={() => toggleTrack('v1', 'muted')}
-              muteHint="Video-Spur deaktivieren"
+              muteHint="Program-Ton stumm"
             />
             <TimelineTrackHeader
               id="a1"
@@ -353,6 +361,7 @@ export function CutTimeline({
               muted={tracks.a1.muted}
               onToggleHidden={() => toggleTrack('a1', 'hidden')}
               onToggleMuted={() => toggleTrack('a1', 'muted')}
+              muteHint="Tonspur stumm"
             />
             <TimelineTrackHeader
               id="a2"
