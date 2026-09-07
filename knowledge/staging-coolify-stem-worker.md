@@ -3,34 +3,32 @@
 **Project:** VIDEON  
 **Companion:** `specs/domain/stem-service.md`
 
-## Create application
+| Item | Value |
+|------|--------|
+| App | `videon-v3:stem-worker` |
+| UUID | `nodc0dxwwwnpjc2uvk0snrff` |
+| Server | projects-01 |
+| Dockerfile | `/services/stem-worker/Dockerfile` |
+| Port | **8091** |
+| Public FQDN | `https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech` (health only; app uses private URL) |
+| Private URL | `http://nodc0dxwwwnpjc2uvk0snrff:8091` |
 
-1. New Application in project **VIDEON** / same server as `videon-v3:main-app`.
-2. Name: `videon-v3:stem-worker`
-3. Repo: `chbrdk/videon-v3` · branch `main`
-4. **Dockerfile location:** `services/stem-worker/Dockerfile`
-5. Port: **8091**
-6. **Do not** enable scale-to-zero / sleep.
-7. Health check path: `/health` (optional HTTP check)
-
-Build is large (CPU Torch + htdemucs weights) — first deploy can take a long time.
+Created via Coolify REST `POST /applications/private-github-app` (same token as MCP). Build is large (CPU Torch + htdemucs) — first deploy can take a long time. Keep always-on (no scale-to-zero).
 
 ## Wire main app
 
-On `videon-v3:main-app` set:
+On `videon-v3:main-app` (`mi0j3pyjrel80jodebwvhgvi`):
 
 ```
-VIDEON_STEM_SERVICE_URL=http://<stem-worker-container-or-coolify-network-alias>:8091
+VIDEON_STEM_SERVICE_URL=http://nodc0dxwwwnpjc2uvk0snrff:8091
 ```
 
-Coolify same-project apps usually reach each other via the generated service hostname shown in the UI (or the container name). Prefer the private network URL, not a public FQDN.
-
-Redeploy **main-app** after setting the env so analysis jobs pick up the client.
+Already set via `PATCH …/envs/bulk`. Redeploy main after changes.
 
 ## Verify
 
 ```
-curl -s http://<stem-worker>:8091/health
+curl -s https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech/health
 # {"ok":true,"modelLoaded":true,"model":"htdemucs",...}
 ```
 
