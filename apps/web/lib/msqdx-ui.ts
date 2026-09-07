@@ -11,6 +11,8 @@ export type {
   ButtonShape,
   ButtonClassNameOptions,
 } from '../../../../msqdx-ui/packages/ui/src/components/Button'
+export { Checkbox } from '../../../../msqdx-ui/packages/ui/src/components/Checkbox'
+export type { CheckboxProps } from '../../../../msqdx-ui/packages/ui/src/components/Checkbox'
 export { Chip } from '../../../../msqdx-ui/packages/ui/src/components/Chip'
 export type { ChipProps, ChipSize } from '../../../../msqdx-ui/packages/ui/src/components/Chip'
 export { Badge } from '../../../../msqdx-ui/packages/ui/src/components/Badge'

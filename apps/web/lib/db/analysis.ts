@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto'
 export const ANALYSIS_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'cancelled'] as const
 export type AnalysisStatus = (typeof ANALYSIS_STATUSES)[number]
 
-export const STAGE_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'cancelled'] as const
+export const STAGE_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'cancelled', 'skipped'] as const
 export type StageStatus = (typeof STAGE_STATUSES)[number]
 
 export type AnalysisRun = {
@@ -246,10 +246,15 @@ export async function createRerunAnalysisForMedia(input: {
   mediaAssetId: string
   requestedByPlexonUserId: string
   checksumSha256: string
+  /** Already normalized capability list (preferred). */
+  requestedCapabilities?: string[]
+  /** @deprecated Merged onto upload defaults — prefer requestedCapabilities. */
   extraCapabilities?: string[]
 }): Promise<AnalysisRun> {
   const fingerprint = analysisInputFingerprint(input.checksumSha256)
   const idempotencyKey = `rerun:${input.mediaAssetId}:${randomUUID()}`
+  const capabilities =
+    input.requestedCapabilities ?? resolveRequestedCapabilities(input.extraCapabilities ?? [])
 
   await databasePool().query(
     `update analysis_runs
@@ -276,7 +281,7 @@ export async function createRerunAnalysisForMedia(input: {
       input.requestedByPlexonUserId,
       PIPELINE_VERSION,
       SCENE_INSIGHT_SCHEMA_VERSION,
-      JSON.stringify(resolveRequestedCapabilities(input.extraCapabilities ?? [])),
+      JSON.stringify(capabilities),
       fingerprint,
       idempotencyKey,
     ],
@@ -452,7 +457,7 @@ export async function upsertStageRun(input: {
        progress_completed, progress_total, error_code, error_message, started_at, finished_at
      ) values ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9,
                case when $5 = 'running' then now() else null end,
-               case when $5 in ('succeeded', 'failed', 'cancelled') then now() else null end)
+               case when $5 in ('succeeded', 'failed', 'cancelled', 'skipped') then now() else null end)
      on conflict (analysis_run_id, stage_key, input_fingerprint)
      do update set
        status = excluded.status,
@@ -462,7 +467,7 @@ export async function upsertStageRun(input: {
        error_message = excluded.error_message,
        attempt = analysis_stage_runs.attempt + case when analysis_stage_runs.status <> excluded.status then 1 else 0 end,
        started_at = coalesce(analysis_stage_runs.started_at, excluded.started_at),
-       finished_at = case when excluded.status in ('succeeded', 'failed', 'cancelled') then now() else analysis_stage_runs.finished_at end,
+       finished_at = case when excluded.status in ('succeeded', 'failed', 'cancelled', 'skipped') then now() else analysis_stage_runs.finished_at end,
        updated_at = now()
      returning id, analysis_run_id, stage_key, input_fingerprint, status, attempt,
                progress_completed, progress_total, error_code, error_message, created_at, updated_at`,

@@ -42,8 +42,9 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 2. WHEN the side drawer is open THEN its width MUST be user-resizable (drag handle on the leading edge) and SHOULD persist in `sessionStorage` (`videon.editor.drawerWidthPx`).
 3. WHEN analysis or export status is visible THEN the editor MUST show `EditorStatusStrip` (StatusDot + Text), not a second toolbar row of ad-hoc notices.
 4. WHEN a non-fatal action succeeds or fails THEN feedback MUST go through `Toast` (`ToastProvider` in app providers). Fatal empty-state errors MAY remain inline.
-5. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, stems, brand) MUST live under a “Mehr” disclosure.
+5. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, brand) MUST live under a “Mehr” disclosure.
 6. WHEN the pipeline panel is shown in the drawer THEN `PipelineStatusTrack` MUST use `StepStrip orientation="vertical"` — not a horizontal scroller of stage cards.
+7. WHEN the operator chooses „Analyse“ THEN the editor MUST open an `@msqdx/ui` `Dialog` with `Checkbox` options for the four analysis user bundles (Szenen & Vision, Transkript, Stems Demucs, Zusammenfassung), all checked by default — see `analysis-capabilities.md`. Start MUST NOT fire until the dialog is confirmed.
 
 ## Scenes inspect (Wave D)
 

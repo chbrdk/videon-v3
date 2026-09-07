@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Field, Text, ToolButton } from '@msqdx/ui'
-import { Select, useToast } from '@msqdx/ui-client'
+import { Button, Text, ToolButton } from '@msqdx/ui'
+import { useToast } from '@msqdx/ui-client'
+import { AnalysisOptionsDialog } from '@/components/analysis-options-dialog'
 import { useActiveCollection } from '@/components/collection-context'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
@@ -93,8 +94,8 @@ export function MediaEditorView({
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
-  const [stemMethod, setStemMethod] = useState<'ffmpeg_mid_side' | 'demucs'>('demucs')
   const [stemMethodUsed, setStemMethodUsed] = useState<string | null>(null)
+  const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -173,8 +174,6 @@ export function MediaEditorView({
     setHasVoiceStem(Boolean(body.stems?.voice ?? body.stems?.voicePeaks?.length))
     setHasMusicStem(Boolean(body.stems?.music ?? body.stems?.musicPeaks?.length))
     setStemMethodUsed(body.stems?.method ?? null)
-    if (body.stems?.method?.includes('demucs')) setStemMethod('demucs')
-    else if (body.stems?.method) setStemMethod('ffmpeg_mid_side')
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -360,7 +359,7 @@ export function MediaEditorView({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const rerunAnalysis = async () => {
+  const rerunAnalysis = async (capabilities: string[]) => {
     setBusy('analysis')
     setError(null)
     try {
@@ -368,11 +367,12 @@ export function MediaEditorView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stemMethod,
+          capabilities,
         }),
       })
       const body = (await response.json()) as { error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Analyse konnte nicht gestartet werden')
+      setAnalysisDialogOpen(false)
       await loadDetail()
     } catch (err) {
       notifyError(err instanceof Error ? err.message : 'Analyse konnte nicht gestartet werden')
@@ -561,27 +561,6 @@ export function MediaEditorView({
             <EditorOverflowMenu>
               {({ close }) => (
                 <>
-                  <Field label="Stems" size="sm">
-                    <Select
-                      aria-label="Stem-Methode"
-                      size="sm"
-                      value={stemMethod}
-                      disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
-                      onChange={(value) =>
-                        setStemMethod(value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
-                      }
-                      options={[
-                        {
-                          value: 'demucs',
-                          label: 'Voice/Music (Demucs)',
-                        },
-                        {
-                          value: 'ffmpeg_mid_side',
-                          label: 'Näherung (Center-Band)',
-                        },
-                      ]}
-                    />
-                  </Field>
                   {stemMethodUsed ? (
                     <Text role="meta" as="p">
                       Letzter Stem-Lauf: {stemMethodUsed}
@@ -607,7 +586,7 @@ export function MediaEditorView({
                   <EditorOverflowItem
                     close={close}
                     disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
-                    onClick={() => void rerunAnalysis()}
+                    onClick={() => setAnalysisDialogOpen(true)}
                   >
                     {busy === 'analysis' ? 'Startet …' : 'Analyse'}
                   </EditorOverflowItem>
@@ -935,6 +914,12 @@ export function MediaEditorView({
           </ul>
         </div>
       ) : null}
+      <AnalysisOptionsDialog
+        open={analysisDialogOpen}
+        busy={busy === 'analysis'}
+        onClose={() => setAnalysisDialogOpen(false)}
+        onConfirm={(capabilities) => void rerunAnalysis(capabilities)}
+      />
       </div>
     </div>
   )

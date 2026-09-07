@@ -53,6 +53,7 @@ Worker knobs (env):
 
 ## UI
 
-- Default: **Voice/Music (Demucs)** → requires stem worker URL in staging.
+- Manual analysis dialog: **Stems (Demucs)** checkbox (default on) → capability `stems.demucs` → requires stem worker URL in staging.
+- Upload auto-analysis does **not** include `stems.demucs` (no Demucs until the operator opts in via re-run).
 - Re-run analysis after stem worker quality changes so stems are rewritten.
 - „Letzter Stem-Lauf“ should show `demucs_htdemucs_residual` (not soft / ffmpeg fallback) while staging uses `STEM_MODEL=htdemucs`.

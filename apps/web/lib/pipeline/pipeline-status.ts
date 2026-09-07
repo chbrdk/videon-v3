@@ -7,6 +7,7 @@ export type PipelineStageStatus =
   | 'failed'
   | 'cancelled'
   | 'pending'
+  | 'skipped'
 
 export type PipelineStageSnapshot = {
   stageKey: string
@@ -63,6 +64,7 @@ const STAGE_STATUS_LABELS: Record<PipelineStageStatus, string> = {
   succeeded: 'Fertig',
   failed: 'Fehler',
   cancelled: 'Abgebrochen',
+  skipped: 'Übersprungen',
 }
 
 const MEDIA_LIFECYCLE_LABELS: Record<string, string> = {
@@ -129,7 +131,7 @@ export function mergeStagesWithPipeline(stages: readonly PipelineStageSnapshot[]
 }
 
 function stageProgressFraction(stage: PipelineStageSnapshot): number {
-  if (stage.status === 'succeeded') return 1
+  if (stage.status === 'succeeded' || stage.status === 'skipped') return 1
   if (stage.status === 'failed' || stage.status === 'cancelled') return 0
   if (stage.status === 'pending' || stage.status === 'queued') return 0
   const total = stage.progressTotal ?? 0

@@ -112,7 +112,7 @@ export function PipelineStatusTrack({
             index={index}
             label={pipelineStageLabel(stage.stageKey)}
             active={stage.status === 'running'}
-            selected={stage.status === 'succeeded'}
+            selected={stage.status === 'succeeded' || stage.status === 'skipped'}
           >
             <Text role="label" as="span">
               {pipelineStageLabel(stage.stageKey)}

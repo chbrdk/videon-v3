@@ -1,6 +1,7 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import { STEM_DEMUCS_CAPABILITY } from '@/lib/pipeline/constants'
+import { EmptyAnalysisCapabilitiesError, STEM_DEMUCS_CAPABILITY } from '@/lib/pipeline/constants'
+import { resolveCapabilitiesFromAnalysisBody } from '@/lib/pipeline/analysis-request'
 import { scheduleMediaAnalysisRerun } from '@/lib/pipeline/enqueue'
 import { resolveMediaInWorkspace } from '@/lib/media-access'
 import { requireSessionUserId } from '@/lib/session-user'
@@ -23,9 +24,9 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(request, 400, 'invalid_payload', 'platformProjectId is required')
   }
 
-  let body: { stemMethod?: string } = {}
+  let body: { capabilities?: string[]; stemMethod?: string } = {}
   try {
-    body = (await request.json()) as { stemMethod?: string }
+    body = (await request.json()) as { capabilities?: string[]; stemMethod?: string }
   } catch {
     body = {}
   }
@@ -51,7 +52,15 @@ export async function POST(request: Request, context: RouteContext) {
     return apiError(request, 403, 'collection_access_denied', 'Archived media cannot be analyzed')
   }
 
-  const wantsDemucs = body.stemMethod === 'demucs'
+  let requestedCapabilities: string[]
+  try {
+    requestedCapabilities = resolveCapabilitiesFromAnalysisBody(body)
+  } catch (error) {
+    if (error instanceof EmptyAnalysisCapabilitiesError) {
+      return apiError(request, 400, 'invalid_payload', error.message)
+    }
+    throw error
+  }
 
   try {
     const scheduled = await scheduleMediaAnalysisRerun({
@@ -59,11 +68,12 @@ export async function POST(request: Request, context: RouteContext) {
       workspaceId: resolved.workspace.id,
       requestedByPlexonUserId: userId,
       checksumSha256: resolved.media.checksumSha256,
-      extraCapabilities: wantsDemucs ? [STEM_DEMUCS_CAPABILITY] : [],
+      requestedCapabilities,
     })
     return apiJson(request, {
       analysis: scheduled,
-      stemMethod: wantsDemucs ? 'demucs' : 'ffmpeg_mid_side',
+      capabilities: requestedCapabilities,
+      stemMethod: requestedCapabilities.includes(STEM_DEMUCS_CAPABILITY) ? 'demucs' : null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Analysis could not be scheduled'
