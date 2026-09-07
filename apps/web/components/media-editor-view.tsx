@@ -860,6 +860,7 @@ export function MediaEditorView({
             mediaLifecycleState={media.lifecycleState}
             showLifecycle
             variant="detailed"
+            stepOrientation="vertical"
           />
         ) : null}
       </EditorSideDrawer>

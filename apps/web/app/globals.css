@@ -786,11 +786,40 @@ main {
   bottom: 0;
   z-index: 41;
   width: min(24rem, 92vw);
+  max-width: 92vw;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   border-left: 1px solid var(--nle-border);
   background: var(--nle-panel);
   box-shadow: -10px 0 28px rgba(0, 0, 0, 0.38);
+}
+
+.videon-nle__drawer-resize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 0.45rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  cursor: ew-resize;
+  background: transparent;
+  touch-action: none;
+}
+
+.videon-nle__drawer-resize:hover,
+.videon-nle__drawer-resize:focus-visible {
+  background: color-mix(in srgb, var(--accent, #6af) 45%, transparent);
+}
+
+.videon-nle__drawer-panel {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .videon-nle__drawer-header {

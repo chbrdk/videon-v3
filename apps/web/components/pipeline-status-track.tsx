@@ -29,6 +29,8 @@ type PipelineStatusTrackProps = {
   mediaLifecycleState?: string
   variant?: 'detailed' | 'compact'
   showLifecycle?: boolean
+  /** Drawer / inspect: stack stages vertically (default horizontal for wide lists). */
+  stepOrientation?: 'horizontal' | 'vertical'
 }
 
 function statusLevel(status: string): StatusLevel {
@@ -45,6 +47,7 @@ export function PipelineStatusTrack({
   mediaLifecycleState,
   variant = 'detailed',
   showLifecycle = false,
+  stepOrientation = 'horizontal',
 }: PipelineStatusTrackProps) {
   const merged = mergeStagesWithPipeline(stages)
   const overallProgress = computePipelineProgress(stages)
@@ -99,6 +102,7 @@ export function PipelineStatusTrack({
 
       <StepStrip
         aria-label="Pipeline-Stufen"
+        orientation={stepOrientation}
         scrollToIndex={activeIndex >= 0 ? activeIndex : null}
         hint={pipelineStageHint(merged[activeIndex]?.stageKey ?? merged[0]?.stageKey ?? 'probe')}
       >
