@@ -36,6 +36,10 @@ import { type TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { prefetchWaveformPeaks } from '@/lib/use-waveform'
+import {
+  useProgramAudioMixer,
+  type ProgramTrackMutes,
+} from '@/lib/use-program-audio-mixer'
 
 type Clip = {
   scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
@@ -106,12 +110,19 @@ export function CutEditorView({
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
-  const [programMuted, setProgramMuted] = useState(false)
+  const [trackMutes, setTrackMutes] = useState<ProgramTrackMutes>({
+    v1: false,
+    a1: false,
+    a2: false,
+  })
   const [trimMode, setTrimMode] = useState<TrimMode>('trim')
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
   const [peaksByUrl, setPeaksByUrl] = useState<Record<string, number[]>>({})
   const [voicePeaksByMediaId, setVoicePeaksByMediaId] = useState<Record<string, number[]>>({})
   const [musicPeaksByMediaId, setMusicPeaksByMediaId] = useState<Record<string, number[]>>({})
+  const [stemPresenceByMediaId, setStemPresenceByMediaId] = useState<
+    Record<string, { voice: boolean; music: boolean }>
+  >({})
 
   const timeline = useMemo(
     () =>
@@ -167,7 +178,16 @@ export function CutEditorView({
       cut?: CutDetail
       clips?: Clip[]
       transcripts?: Record<string, TranscriptSegment[]>
-      stems?: Record<string, { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null }>
+      stems?: Record<
+        string,
+        {
+          voicePeaks?: number[]
+          musicPeaks?: number[]
+          method?: string | null
+          voice?: boolean
+          music?: boolean
+        }
+      >
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
@@ -183,12 +203,18 @@ export function CutEditorView({
     setTranscriptsByMediaId(body.transcripts ?? {})
     const nextVoice: Record<string, number[]> = {}
     const nextMusic: Record<string, number[]> = {}
+    const nextPresence: Record<string, { voice: boolean; music: boolean }> = {}
     for (const [mediaId, stem] of Object.entries(body.stems ?? {})) {
       if (stem.voicePeaks?.length) nextVoice[mediaId] = stem.voicePeaks
       if (stem.musicPeaks?.length) nextMusic[mediaId] = stem.musicPeaks
+      nextPresence[mediaId] = {
+        voice: Boolean(stem.voice ?? stem.voicePeaks?.length),
+        music: Boolean(stem.music ?? stem.musicPeaks?.length),
+      }
     }
     setVoicePeaksByMediaId(nextVoice)
     setMusicPeaksByMediaId(nextMusic)
+    setStemPresenceByMediaId(nextPresence)
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
   }, [cutId, platformProjectId])
 
@@ -351,10 +377,25 @@ export function CutEditorView({
     void loadPlayback(clip).catch((err) => notifyError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
   }, [clips, activeIndex, loadPlayback, playbackUrl])
 
-  useEffect(() => {
-    const video = videoRef.current
-    if (video) video.muted = programMuted
-  }, [programMuted, playbackUrl])
+  const activeMediaId = activeClip?.media?.id ?? activeClip?.scene.mediaAssetId ?? null
+  const activeStemPresence = activeMediaId ? stemPresenceByMediaId[activeMediaId] : undefined
+  const voiceStemUrl =
+    activeMediaId && activeStemPresence?.voice
+      ? paths.routes.apiMediaStemStream(activeMediaId, 'voice', platformProjectId)
+      : null
+  const musicStemUrl =
+    activeMediaId && activeStemPresence?.music
+      ? paths.routes.apiMediaStemStream(activeMediaId, 'music', platformProjectId)
+      : null
+  const hasStemAudio = Boolean(voiceStemUrl || musicStemUrl)
+
+  useProgramAudioMixer({
+    videoRef,
+    voiceUrl: voiceStemUrl,
+    musicUrl: musicStemUrl,
+    mutes: trackMutes,
+    enabled: Boolean(playbackUrl),
+  })
 
   useEffect(() => {
     const video = videoRef.current
@@ -821,7 +862,6 @@ export function CutEditorView({
                 ref={videoRef}
                 className="videon-nle__video"
                 src={playbackUrl}
-                muted={programMuted}
                 playsInline
                 preload="metadata"
               />
@@ -872,7 +912,8 @@ export function CutEditorView({
             void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
           }
           onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
-          onProgramMutedChange={setProgramMuted}
+          onTrackMutesChange={setTrackMutes}
+          hasStemAudio={hasStemAudio}
         />
       </footer>
 

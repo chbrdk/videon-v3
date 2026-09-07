@@ -6,10 +6,10 @@ import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
   DEFAULT_SOURCE_TRACK_STATE,
   TimelineTrackHeader,
-  programAudioMuted,
   type TimelineTrackId,
   type TimelineTrackState,
 } from '@/components/timeline-track-header'
+import type { ProgramTrackMutes } from '@/lib/use-program-audio-mixer'
 import { formatClock } from '@/lib/editor-time'
 import { timelineClipLabel } from '@/lib/timeline-clip-label'
 import {
@@ -55,8 +55,10 @@ type SourceMediaTimelineProps = {
   markOutMs?: number | null
   disabled?: boolean
   onSeek: (ms: number) => void
-  /** V1 or A1 mute → program monitor `<video muted>`. */
-  onVideoMutedChange?: (muted: boolean) => void
+  /** Per-track mute for the program audio mixer (V1 bus / A1 voice / A2 music). */
+  onTrackMutesChange?: (mutes: ProgramTrackMutes) => void
+  /** When true, V1 starts muted (original bus split out to stems). */
+  hasStemAudio?: boolean
 }
 
 function paintSourcePeaks(
@@ -112,7 +114,8 @@ export function SourceMediaTimeline({
   markOutMs = null,
   disabled = false,
   onSeek,
-  onVideoMutedChange,
+  onTrackMutesChange,
+  hasStemAudio = false,
 }: SourceMediaTimelineProps) {
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -136,8 +139,19 @@ export function SourceMediaTimeline({
   }, [])
 
   useEffect(() => {
-    onVideoMutedChange?.(programAudioMuted(tracks))
-  }, [tracks, onVideoMutedChange])
+    if (!hasStemAudio) return
+    setTracks((current) =>
+      current.v1.muted ? current : { ...current, v1: { ...current.v1, muted: true } },
+    )
+  }, [hasStemAudio])
+
+  useEffect(() => {
+    onTrackMutesChange?.({
+      v1: tracks.v1.muted,
+      a1: tracks.a1.muted,
+      a2: tracks.a2.muted,
+    })
+  }, [tracks.v1.muted, tracks.a1.muted, tracks.a2.muted, onTrackMutesChange])
 
   const seekFromPointer = useCallback(
     (clientX: number) => {
@@ -230,7 +244,7 @@ export function SourceMediaTimeline({
               muted={tracks.v1.muted}
               onToggleHidden={() => toggleTrack('v1', 'hidden')}
               onToggleMuted={() => toggleTrack('v1', 'muted')}
-              muteHint="Program-Ton stumm"
+              muteHint={hasStemAudio ? 'Originalton (nach Split stumm)' : 'Program-Ton stumm'}
             />
             <TimelineTrackHeader
               id="si"
@@ -250,7 +264,7 @@ export function SourceMediaTimeline({
               muted={tracks.a1.muted}
               onToggleHidden={() => toggleTrack('a1', 'hidden')}
               onToggleMuted={() => toggleTrack('a1', 'muted')}
-              muteHint="Tonspur stumm"
+              muteHint={hasStemAudio ? 'Voice-Stem stumm' : 'Tonspur stumm'}
             />
             <TimelineTrackHeader
               id="a2"
@@ -260,6 +274,7 @@ export function SourceMediaTimeline({
               muted={tracks.a2.muted}
               onToggleHidden={() => toggleTrack('a2', 'hidden')}
               onToggleMuted={() => toggleTrack('a2', 'muted')}
+              muteHint={hasStemAudio ? 'Music-Stem stumm' : 'Music-Spur (nur Visual)'}
             />
             <TimelineTrackHeader
               id="tx"

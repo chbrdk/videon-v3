@@ -22,14 +22,6 @@ export const DEFAULT_CUT_TRACK_STATE: Record<Exclude<TimelineTrackId, 'si'>, Tim
   tx: { hidden: false, muted: false },
 }
 
-/** Program monitor audio is muted when V1 or A1 mute is on (single HTMLVideoElement). */
-export function programAudioMuted(tracks: {
-  v1: Pick<TimelineTrackState, 'muted'>
-  a1: Pick<TimelineTrackState, 'muted'>
-}): boolean {
-  return tracks.v1.muted || tracks.a1.muted
-}
-
 type TimelineTrackHeaderProps = {
   id: string
   label: string

@@ -66,6 +66,8 @@ export async function GET(request: Request, context: RouteContext) {
           voicePeaks: voice?.peaks ?? [],
           musicPeaks: music?.peaks ?? [],
           method: voice?.method ?? music?.method ?? null,
+          voice: Boolean(voice),
+          music: Boolean(music),
         }
       : null
 

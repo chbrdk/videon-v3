@@ -18,6 +18,10 @@ import { frameDurationMs, formatClock, normalizeInOutRange } from '@/lib/editor-
 import { normalizeMediaPlaybackUrl } from '@/lib/media-playback-url'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
+import {
+  useProgramAudioMixer,
+  type ProgramTrackMutes,
+} from '@/lib/use-program-audio-mixer'
 import { PipelineStatusTrack } from '@/components/pipeline-status-track'
 import { SceneInsightInspector } from '@/components/scene-insight-inspector'
 import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
@@ -100,7 +104,13 @@ export function MediaEditorView({
   const [markOutMs, setMarkOutMs] = useState<number | null>(null)
   const [activeCut, setActiveCut] = useState<ActiveCutContext | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [programMuted, setProgramMuted] = useState(false)
+  const [trackMutes, setTrackMutes] = useState<ProgramTrackMutes>({
+    v1: false,
+    a1: false,
+    a2: false,
+  })
+  const [hasVoiceStem, setHasVoiceStem] = useState(false)
+  const [hasMusicStem, setHasMusicStem] = useState(false)
   const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>('scenes')
   const [inspectOpen, setInspectOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -140,7 +150,13 @@ export function MediaEditorView({
       scenes?: SceneItem[]
       brandChecks?: BrandCheckView[]
       transcript?: TranscriptState
-      stems?: { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null } | null
+      stems?: {
+        voicePeaks?: number[]
+        musicPeaks?: number[]
+        method?: string | null
+        voice?: boolean
+        music?: boolean
+      } | null
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || 'Mediendetails konnten nicht geladen werden')
@@ -152,6 +168,8 @@ export function MediaEditorView({
     setTranscript(body.transcript ?? null)
     setVoicePeaks(body.stems?.voicePeaks ?? [])
     setMusicPeaks(body.stems?.musicPeaks ?? [])
+    setHasVoiceStem(Boolean(body.stems?.voice ?? body.stems?.voicePeaks?.length))
+    setHasMusicStem(Boolean(body.stems?.music ?? body.stems?.musicPeaks?.length))
   }, [mediaAssetId, platformProjectId])
 
   const loadPlayback = useCallback(async () => {
@@ -221,14 +239,21 @@ export function MediaEditorView({
     }
   }, [scenes, playbackUrl])
 
-  const handleVideoMutedChange = useCallback((muted: boolean) => {
-    setProgramMuted(muted)
-  }, [])
+  const voiceStemUrl = hasVoiceStem
+    ? paths.routes.apiMediaStemStream(mediaAssetId, 'voice', platformProjectId)
+    : null
+  const musicStemUrl = hasMusicStem
+    ? paths.routes.apiMediaStemStream(mediaAssetId, 'music', platformProjectId)
+    : null
+  const hasStemAudio = Boolean(voiceStemUrl || musicStemUrl)
 
-  useEffect(() => {
-    const video = videoRef.current
-    if (video) video.muted = programMuted
-  }, [programMuted, playbackUrl])
+  useProgramAudioMixer({
+    videoRef,
+    voiceUrl: voiceStemUrl,
+    musicUrl: musicStemUrl,
+    mutes: trackMutes,
+    enabled: Boolean(playbackUrl),
+  })
 
   const seekTo = (ms: number) => {
     const video = videoRef.current
@@ -643,7 +668,6 @@ export function MediaEditorView({
                 ref={videoRef}
                 className="videon-nle__video"
                 src={playbackUrl}
-                muted={programMuted}
                 playsInline
                 preload="metadata"
               />
@@ -705,7 +729,8 @@ export function MediaEditorView({
           markOutMs={markOutMs}
           disabled={!playbackUrl || Boolean(busy)}
           onSeek={seekTo}
-          onVideoMutedChange={handleVideoMutedChange}
+          onTrackMutesChange={setTrackMutes}
+          hasStemAudio={hasStemAudio}
         />
       </footer>
 

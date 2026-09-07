@@ -89,6 +89,12 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/playback?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaStream: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaStemStream: (
+      mediaAssetId: string,
+      stemKind: 'voice' | 'music',
+      platformProjectId: string,
+    ) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/stems/${encodeURIComponent(stemKind)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaAnalysis: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaBrandCheck: (mediaAssetId: string, platformProjectId: string) =>

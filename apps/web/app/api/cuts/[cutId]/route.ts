@@ -79,7 +79,10 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const stemsByMediaId = await listLatestAudioStemsForMediaIds(mediaIds)
-  const stems: Record<string, { voicePeaks: number[]; musicPeaks: number[]; method: string | null }> = {}
+  const stems: Record<
+    string,
+    { voicePeaks: number[]; musicPeaks: number[]; method: string | null; voice: boolean; music: boolean }
+  > = {}
   for (const mediaAssetId of mediaIds) {
     const list = stemsByMediaId[mediaAssetId] ?? []
     const voice = list.find((stem) => stem.stemKind === 'voice')
@@ -89,6 +92,8 @@ export async function GET(request: Request, context: RouteContext) {
       voicePeaks: voice?.peaks ?? [],
       musicPeaks: music?.peaks ?? [],
       method: voice?.method ?? music?.method ?? null,
+      voice: Boolean(voice),
+      music: Boolean(music),
     }
   }
 

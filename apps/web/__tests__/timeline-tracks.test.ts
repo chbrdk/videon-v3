@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CUT_TRACK_STATE,
   DEFAULT_SOURCE_TRACK_STATE,
-  programAudioMuted,
 } from '@/components/timeline-track-header'
+import { programAudioMuted } from '@/lib/use-program-audio-mixer'
 
 describe('timeline track defaults', () => {
   it('starts with all source tracks visible and unmuted', () => {
@@ -18,10 +18,14 @@ describe('timeline track defaults', () => {
     expect(Object.keys(DEFAULT_CUT_TRACK_STATE).sort()).toEqual(['a1', 'a2', 'tx', 'v1'])
   })
 
-  it('mutes program audio when V1 or A1 is muted', () => {
-    expect(programAudioMuted({ v1: { muted: false }, a1: { muted: false } })).toBe(false)
-    expect(programAudioMuted({ v1: { muted: true }, a1: { muted: false } })).toBe(true)
-    expect(programAudioMuted({ v1: { muted: false }, a1: { muted: true } })).toBe(true)
-    expect(programAudioMuted({ v1: { muted: true }, a1: { muted: true } })).toBe(true)
+  it('without stems, V1 or A1 mute the video bus', () => {
+    expect(programAudioMuted({ v1: false, a1: false }, false)).toBe(false)
+    expect(programAudioMuted({ v1: true, a1: false }, false)).toBe(true)
+    expect(programAudioMuted({ v1: false, a1: true }, false)).toBe(true)
+  })
+
+  it('with stems, video bus stays muted regardless of V1/A1 UI', () => {
+    expect(programAudioMuted({ v1: false, a1: false }, true)).toBe(true)
+    expect(programAudioMuted({ v1: true, a1: true }, true)).toBe(true)
   })
 })

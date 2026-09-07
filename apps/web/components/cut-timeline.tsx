@@ -8,9 +8,9 @@ import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
   DEFAULT_CUT_TRACK_STATE,
   TimelineTrackHeader,
-  programAudioMuted,
   type TimelineTrackState,
 } from '@/components/timeline-track-header'
+import type { ProgramTrackMutes } from '@/lib/use-program-audio-mixer'
 import {
   MIN_CUT_CLIP_MS,
   buildCutTimeline,
@@ -70,8 +70,9 @@ type CutTimelineProps = {
   onTrim: (sceneId: string, startMs: number, endMs: number) => void
   onRollTrim?: (leftSceneId: string, boundaryMs: number) => void
   onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null }) => void
-  /** V1 or A1 mute → program monitor audio. */
-  onProgramMutedChange?: (muted: boolean) => void
+  /** Per-track mute for the program audio mixer. */
+  onTrackMutesChange?: (mutes: ProgramTrackMutes) => void
+  hasStemAudio?: boolean
 }
 
 
@@ -94,7 +95,8 @@ export function CutTimeline({
   onTrim,
   onRollTrim,
   onDropMedia,
-  onProgramMutedChange,
+  onTrackMutesChange,
+  hasStemAudio = false,
 }: CutTimelineProps) {
   const videoTrackRef = useRef<HTMLDivElement | null>(null)
   const lanesRef = useRef<HTMLDivElement | null>(null)
@@ -134,8 +136,19 @@ export function CutTimeline({
   }, [])
 
   useEffect(() => {
-    onProgramMutedChange?.(programAudioMuted(tracks))
-  }, [tracks, onProgramMutedChange])
+    if (!hasStemAudio) return
+    setTracks((current) =>
+      current.v1.muted ? current : { ...current, v1: { ...current.v1, muted: true } },
+    )
+  }, [hasStemAudio])
+
+  useEffect(() => {
+    onTrackMutesChange?.({
+      v1: tracks.v1.muted,
+      a1: tracks.a1.muted,
+      a2: tracks.a2.muted,
+    })
+  }, [tracks.v1.muted, tracks.a1.muted, tracks.a2.muted, onTrackMutesChange])
 
   const timeline = useMemo(() => {
     const scenes = clips.map((clip) => ({
@@ -351,7 +364,7 @@ export function CutTimeline({
               muted={tracks.v1.muted}
               onToggleHidden={() => toggleTrack('v1', 'hidden')}
               onToggleMuted={() => toggleTrack('v1', 'muted')}
-              muteHint="Program-Ton stumm"
+              muteHint={hasStemAudio ? 'Originalton (nach Split stumm)' : 'Program-Ton stumm'}
             />
             <TimelineTrackHeader
               id="a1"
@@ -361,7 +374,7 @@ export function CutTimeline({
               muted={tracks.a1.muted}
               onToggleHidden={() => toggleTrack('a1', 'hidden')}
               onToggleMuted={() => toggleTrack('a1', 'muted')}
-              muteHint="Tonspur stumm"
+              muteHint={hasStemAudio ? 'Voice-Stem stumm' : 'Tonspur stumm'}
             />
             <TimelineTrackHeader
               id="a2"
@@ -371,6 +384,7 @@ export function CutTimeline({
               muted={tracks.a2.muted}
               onToggleHidden={() => toggleTrack('a2', 'hidden')}
               onToggleMuted={() => toggleTrack('a2', 'muted')}
+              muteHint={hasStemAudio ? 'Music-Stem stumm' : 'Music-Spur (nur Visual)'}
             />
             <TimelineTrackHeader
               id="tx"
