@@ -129,6 +129,8 @@ def separate_with_demucs(stereo: Path, voice_out: Path, music_out: Path) -> str:
                 "-n",
                 "htdemucs",
                 "--two-stems=vocals",
+                "-d",
+                "cpu",
                 "-o",
                 str(out_dir),
                 str(stereo),
