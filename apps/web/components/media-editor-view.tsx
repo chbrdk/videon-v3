@@ -69,9 +69,11 @@ function formatBytes(bytes: number): string {
 export function MediaEditorView({
   platformProjectId,
   mediaAssetId,
+  libraryHref,
 }: {
   platformProjectId: string
   mediaAssetId: string
+  libraryHref?: string
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -468,8 +470,14 @@ export function MediaEditorView({
 
   return (
     <div className="videon-nle videon-nle--player-first">
+      <div className="videon-nle__top">
       <header className="videon-nle__toolbar">
         <div className="videon-nle__toolbar-title">
+          {libraryHref ? (
+            <a className="videon-nle__back" href={libraryHref}>
+              ← Mediathek
+            </a>
+          ) : null}
           <h2>{media.originalFilename}</h2>
           <p className="videon-nle__toolbar-meta">
             Quelle · {media.mimeType} · {formatBytes(media.bytes)}
@@ -490,22 +498,23 @@ export function MediaEditorView({
               In/Out zum Cut
             </Button>
           ) : null}
-          <ToolButton
-            label="Inspect"
-            active={inspectOpen}
-            className={analysisAttention ? 'is-attention' : undefined}
-            onClick={() => {
-              setInspectOpen((open) => !open)
-              if (!sidePanel) setSidePanel('scenes')
-            }}
-          >
-            Inspect
-          </ToolButton>
-          <ToolButton label="Tastaturkürzel" active={showShortcuts} onClick={() => setShowShortcuts((c) => !c)}>
-            ?
-          </ToolButton>
-          <details className="videon-nle__toolbar-menu">
-            <summary className="videon-nle__tool-btn">Mehr</summary>
+          <div className="videon-nle__tool-cluster">
+            <Button
+              type="button"
+              variant={inspectOpen ? 'primary' : 'ghost'}
+              className={analysisAttention ? 'is-attention' : undefined}
+              onClick={() => {
+                setInspectOpen((open) => !open)
+                if (!sidePanel) setSidePanel('scenes')
+              }}
+            >
+              Inspect
+            </Button>
+            <ToolButton label="Tastaturkürzel" active={showShortcuts} onClick={() => setShowShortcuts((c) => !c)}>
+              ?
+            </ToolButton>
+            <details className="videon-nle__toolbar-menu">
+              <summary className="videon-nle__tool-btn">Mehr</summary>
             <div className="videon-nle__toolbar-menu-body">
               <label className="videon-nle__stem-method">
                 <span className="videon-nle__stem-method-label">Stems</span>
@@ -555,16 +564,31 @@ export function MediaEditorView({
               <Button type="button" variant="ghost" onClick={() => void deleteMedia()} disabled={Boolean(busy)}>
                 {busy === 'delete' ? 'Löscht …' : 'Löschen'}
               </Button>
-            </div>
-          </details>
+              </div>
+            </details>
+          </div>
         </div>
       </header>
 
       {analysis || analysisAttention ? (
         <EditorStatusStrip
           level={analysisStatusLevel(analysis?.status)}
-          label={analysis?.status === 'succeeded' ? 'Analyse bereit' : analysisBusy ? 'Analyse läuft' : analysis?.status === 'failed' ? 'Analyse fehlgeschlagen' : 'Pipeline'}
-          detail={media.lifecycleState}
+          label={
+            analysis?.status === 'succeeded'
+              ? 'Analyse bereit'
+              : analysisBusy
+                ? 'Analyse läuft'
+                : analysis?.status === 'failed'
+                  ? 'Analyse fehlgeschlagen'
+                  : 'Pipeline'
+          }
+          detail={
+            analysis?.status === 'succeeded' || analysisBusy
+              ? null
+              : media.lifecycleState !== 'ready'
+                ? media.lifecycleState
+                : null
+          }
           actionLabel="Details"
           onAction={() => {
             setSidePanel('pipeline')
@@ -572,6 +596,7 @@ export function MediaEditorView({
           }}
         />
       ) : null}
+      </div>
 
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
@@ -635,6 +660,37 @@ export function MediaEditorView({
         </section>
       </div>
 
+      <footer className="videon-nle__timeline-dock">
+        <SourceMediaTimeline
+          durationMs={timelineDuration}
+          playheadMs={currentMs}
+          playbackUrl={playbackUrl}
+          mediaLabel={media.originalFilename}
+          scenes={scenes.map((scene) => ({
+            sceneKey: scene.sceneKey,
+            startMs: scene.startMs,
+            endMs: scene.endMs,
+            summary: scene.insight.summary,
+            objects: scene.insight.objects?.map((object) => object.label) ?? [],
+            people: scene.insight.people?.map((person) => person.role) ?? [],
+            brandStatus:
+              brandChecks.find((check) => check.sceneKey === scene.sceneKey)?.status ?? null,
+          }))}
+          transcriptSegments={transcript?.segments ?? []}
+          peaks={waveformPeaks}
+          voicePeaks={voicePeaks}
+          musicPeaks={musicPeaks}
+          activeSceneKey={activeSceneKey}
+          markInMs={markInMs}
+          markOutMs={markOutMs}
+          disabled={!playbackUrl || Boolean(busy)}
+          onSeek={seekTo}
+          onVideoMutedChange={handleVideoMutedChange}
+        />
+      </footer>
+
+
+      <div className="videon-nle__layer">
       <EditorSideDrawer
         open={inspectOpen}
         title={sidePanelTitle}
@@ -762,36 +818,6 @@ export function MediaEditorView({
           />
         ) : null}
       </EditorSideDrawer>
-
-      <footer className="videon-nle__timeline-dock">
-        <SourceMediaTimeline
-          durationMs={timelineDuration}
-          playheadMs={currentMs}
-          playbackUrl={playbackUrl}
-          mediaLabel={media.originalFilename}
-          scenes={scenes.map((scene) => ({
-            sceneKey: scene.sceneKey,
-            startMs: scene.startMs,
-            endMs: scene.endMs,
-            summary: scene.insight.summary,
-            objects: scene.insight.objects?.map((object) => object.label) ?? [],
-            people: scene.insight.people?.map((person) => person.role) ?? [],
-            brandStatus:
-              brandChecks.find((check) => check.sceneKey === scene.sceneKey)?.status ?? null,
-          }))}
-          transcriptSegments={transcript?.segments ?? []}
-          peaks={waveformPeaks}
-          voicePeaks={voicePeaks}
-          musicPeaks={musicPeaks}
-          activeSceneKey={activeSceneKey}
-          markInMs={markInMs}
-          markOutMs={markOutMs}
-          disabled={!playbackUrl || Boolean(busy)}
-          onSeek={seekTo}
-          onVideoMutedChange={handleVideoMutedChange}
-        />
-      </footer>
-
       {showShortcuts ? (
         <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
           <div className="videon-nle__shortcuts-panel-header">
@@ -826,6 +852,7 @@ export function MediaEditorView({
           </ul>
         </div>
       ) : null}
+      </div>
     </div>
   )
 }

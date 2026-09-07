@@ -662,6 +662,7 @@ export function CutEditorView({
 
   return (
     <div className="videon-nle videon-nle--player-first">
+      <div className="videon-nle__top">
       <header className="videon-nle__toolbar">
         <div className="videon-nle__toolbar-title">
           <h2>{cut.name}</h2>
@@ -780,6 +781,8 @@ export function CutEditorView({
         />
       ) : null}
 
+      </div>
+
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
           <EditorMonitor
@@ -829,6 +832,33 @@ export function CutEditorView({
         </section>
       </div>
 
+      <footer className="videon-nle__timeline-dock">
+        <CutTimeline
+          clips={clips}
+          activeIndex={activeIndex}
+          cutPlayheadMs={cutPlayheadMs}
+          totalDurationMs={totalDurationMs}
+          transcriptSegments={transcriptSegments}
+          trimMode={trimMode}
+          disabled={busy}
+          playbackUrlByMediaId={playbackUrlByMediaId}
+          peaksByUrl={peaksByUrl}
+          voicePeaksByMediaId={voicePeaksByMediaId}
+          musicPeaksByMediaId={musicPeaksByMediaId}
+          sourceDurationMsByMediaId={sourceDurationMsByMediaId}
+          onSelectClip={setActiveIndex}
+          onSeek={seekToCutMs}
+          onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
+          onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
+          onRollTrim={(leftSceneId, boundaryMs) =>
+            void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
+          }
+          onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
+        />
+      </footer>
+
+
+      <div className="videon-nle__layer">
       <EditorSideDrawer
         open={inspectOpen}
         title="Inspect"
@@ -915,32 +945,6 @@ export function CutEditorView({
           </Link>
         ) : null}
       </EditorSideDrawer>
-
-      <footer className="videon-nle__timeline-dock">
-        <CutTimeline
-          clips={clips}
-          activeIndex={activeIndex}
-          cutPlayheadMs={cutPlayheadMs}
-          totalDurationMs={totalDurationMs}
-          transcriptSegments={transcriptSegments}
-          trimMode={trimMode}
-          disabled={busy}
-          playbackUrlByMediaId={playbackUrlByMediaId}
-          peaksByUrl={peaksByUrl}
-          voicePeaksByMediaId={voicePeaksByMediaId}
-          musicPeaksByMediaId={musicPeaksByMediaId}
-          sourceDurationMsByMediaId={sourceDurationMsByMediaId}
-          onSelectClip={setActiveIndex}
-          onSeek={seekToCutMs}
-          onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
-          onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
-          onRollTrim={(leftSceneId, boundaryMs) =>
-            void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
-          }
-          onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
-        />
-      </footer>
-
       {showShortcuts ? (
         <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
           <div className="videon-nle__shortcuts-panel-header">
@@ -969,6 +973,7 @@ export function CutEditorView({
           </ul>
         </div>
       ) : null}
+      </div>
     </div>
   )
 }

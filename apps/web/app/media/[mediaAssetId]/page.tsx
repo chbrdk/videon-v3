@@ -38,12 +38,11 @@ export default async function MediaDetailPage({ params, searchParams }: MediaPag
   return (
     <AppShell editor>
       <article className="videon-hub videon-hub--wide videon-hub--editor">
-        <div className="videon-hub__header-row videon-hub__header-row--editor">
-          <Link href={paths.routes.libraryFor(platformProjectId)}>
-            <Button variant="ghost">← Mediathek</Button>
-          </Link>
-        </div>
-        <MediaEditorView platformProjectId={platformProjectId} mediaAssetId={mediaAssetId} />
+        <MediaEditorView
+          platformProjectId={platformProjectId}
+          mediaAssetId={mediaAssetId}
+          libraryHref={paths.routes.libraryFor(platformProjectId)}
+        />
       </article>
     </AppShell>
   )

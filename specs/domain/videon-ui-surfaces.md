@@ -42,7 +42,11 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 3. WHEN a non-fatal action succeeds or fails THEN feedback MUST go through `Toast` (`ToastProvider` in app providers). Fatal empty-state errors MAY remain inline.
 4. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, stems, brand) MUST live under a “Mehr” disclosure.
 
-## Timeline DS shell (Wave C)
+## Editor layout
+
+1. WHEN the NLE shell renders THEN it MUST use exactly three grid rows (top chrome · program · timeline). Drawer/shortcuts MUST NOT participate in the grid (overlay layer).
+2. WHEN scene/transcript clips render on a source timeline THEN visible labels MUST be truncated; full text stays in `title` / Inspect.
+
 
 1. WHEN the cut timeline renders ticks THEN it MUST compose `TimelineRuler` (percent offsets); seek/trim math MAY stay pixel-based in app code.
 2. WHEN video/transcript/audio clips render THEN they MUST use `TimelineClip` (and `Waveform` for audio peaks) — edit handlers stay app-local.

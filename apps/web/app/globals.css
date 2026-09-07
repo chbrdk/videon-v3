@@ -341,7 +341,9 @@ main {
   --nle-muted: var(--muted);
   --nle-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 
+  position: relative;
   display: grid;
+  /* Exactly 3 rows: top chrome · program · timeline. Overlays live in .videon-nle__layer. */
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
   min-height: min(82vh, 60rem);
@@ -354,8 +356,45 @@ main {
 
 .videon-nle--player-first {
   min-height: min(86vh, 64rem);
-  /* Keep the program monitor visible when the timeline grows (A1+A2+TX). */
-  grid-template-rows: auto minmax(18rem, 1fr) minmax(10rem, 34vh);
+  grid-template-rows: auto minmax(18rem, 1fr) minmax(12rem, 32vh);
+}
+
+.videon-nle__top {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.videon-nle__layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.videon-nle__layer > * {
+  pointer-events: auto;
+}
+
+.videon-nle__back {
+  display: inline-block;
+  margin-bottom: 0.2rem;
+  color: var(--nle-muted);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.videon-nle__back:hover {
+  color: var(--nle-text);
+}
+
+.videon-nle__tool-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.25rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--nle-border);
 }
 
 .videon-nle__toolbar {
@@ -525,9 +564,10 @@ main {
 
 .videon-nle__toolbar-groups {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .videon-nle__tool-group {
@@ -818,6 +858,11 @@ main {
   border-top: 1px solid var(--nle-border);
   border-bottom: 1px solid var(--nle-border);
   background: var(--nle-panel);
+  flex-shrink: 0;
+}
+
+.videon-nle__transport.ds-transport-bar {
+  width: 100%;
 }
 
 .videon-nle__transport-group {
@@ -1687,6 +1732,15 @@ main {
   text-overflow: ellipsis;
   color: #f8fafc;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  max-width: 100%;
+}
+
+.videon-cut-timeline__clip--insight .videon-cut-timeline__clip-label,
+.videon-cut-timeline__transcript-segment {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .videon-cut-timeline__clip-handle {

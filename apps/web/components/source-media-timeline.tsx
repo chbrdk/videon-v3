@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Text } from '@msqdx/ui'
+import { Text, TimelineRuler, ToolButton } from '@msqdx/ui'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
   DEFAULT_SOURCE_TRACK_STATE,
@@ -10,6 +10,7 @@ import {
   type TimelineTrackState,
 } from '@/components/timeline-track-header'
 import { formatClock } from '@/lib/editor-time'
+import { timelineClipLabel } from '@/lib/timeline-clip-label'
 import {
   buildTimelineTicks,
   defaultTimelineZoomIndex,
@@ -201,25 +202,21 @@ export function SourceMediaTimeline({
           {formatClock(playheadMs)} / {formatClock(durationMs)}
         </Text>
         <div className="videon-cut-timeline__zoom">
-          <button
-            type="button"
-            className="videon-nle__tool-btn"
+          <ToolButton
+            label="Zoom out"
             disabled={zoomIndex <= 0}
             onClick={() => setZoomIndex((current) => Math.max(current - 1, 0))}
-            aria-label="Zoom out"
           >
             −
-          </button>
+          </ToolButton>
           <Text role="meta">{zoomLevel}×</Text>
-          <button
-            type="button"
-            className="videon-nle__tool-btn"
+          <ToolButton
+            label="Zoom in"
             disabled={zoomIndex >= TIMELINE_ZOOM_LEVELS.length - 1}
             onClick={() => setZoomIndex((current) => Math.min(current + 1, TIMELINE_ZOOM_LEVELS.length - 1))}
-            aria-label="Zoom in"
           >
             +
-          </button>
+          </ToolButton>
         </div>
       </div>
 
@@ -288,15 +285,16 @@ export function SourceMediaTimeline({
               </div>
 
               <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown}>
-                {ticks.map((tick) => (
-                  <div
-                    key={`label-${tick.ms}`}
-                    className={`videon-cut-timeline__ruler-tick${tick.major ? ' is-major' : ''}`}
-                    style={{ left: `${tick.leftPx}px` }}
-                  >
-                    {tick.label ? <span>{tick.label}</span> : null}
-                  </div>
-                ))}
+                <TimelineRuler
+                  className="videon-cut-timeline__ruler-ds"
+                  marks={ticks
+                    .filter((tick) => tick.label)
+                    .map((tick) => ({
+                      id: String(tick.ms),
+                      label: tick.label,
+                      offsetPct: contentWidthPx > 0 ? (tick.leftPx / contentWidthPx) * 100 : 0,
+                    }))}
+                />
               </div>
 
               <div
@@ -352,8 +350,9 @@ export function SourceMediaTimeline({
                 onPointerDown={onTrackPointerDown}
               >
                 {!tracks.si.hidden
-                  ? scenes.map((scene) => {
+                  ? scenes.map((scene, index) => {
                       const meta = sceneInsightMeta(scene)
+                      const label = timelineClipLabel(scene.summary, 36) || `Szene ${index + 1}`
                       return (
                         <button
                           key={scene.sceneKey}
@@ -370,7 +369,7 @@ export function SourceMediaTimeline({
                           title={[scene.summary, meta].filter(Boolean).join('\n')}
                           disabled={tracks.si.muted}
                         >
-                          <span className="videon-cut-timeline__clip-label">{scene.summary}</span>
+                          <span className="videon-cut-timeline__clip-label">{label}</span>
                           {meta ? <span className="videon-cut-timeline__clip-meta">{meta}</span> : null}
                         </button>
                       )
@@ -419,7 +418,7 @@ export function SourceMediaTimeline({
                         onClick={() => onSeek(segment.startMs)}
                         disabled={tracks.tx.muted}
                       >
-                        {segment.text}
+                        {timelineClipLabel(segment.text, 28)}
                       </button>
                     ))
                   : null}

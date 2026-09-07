@@ -17,6 +17,7 @@ import {
   type CutTranscriptSegment,
 } from '@/lib/cut-timeline'
 import { formatClock } from '@/lib/editor-time'
+import { timelineClipLabel } from '@/lib/timeline-clip-label'
 import {
   buildTimelineTicks,
   defaultTimelineZoomIndex,
@@ -528,7 +529,7 @@ export function CutTimeline({
                   return (
                     <TimelineClip
                       key={`${segment.cutStartMs}-${index}`}
-                      label={segment.text}
+                      label={timelineClipLabel(segment.text, 28)}
                       leftPct={contentWidthPx > 0 ? (leftPx / contentWidthPx) * 100 : 0}
                       widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
                       active={activeTxIndex === index}
