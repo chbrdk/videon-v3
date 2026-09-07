@@ -27,11 +27,15 @@ Model `htdemucs` is loaded **once at process start** and kept in memory (`uvicor
 
 | Method | Quality | Where |
 |--------|---------|--------|
-| `demucs_htdemucs` | Real vocals / accompaniment | Stem worker (warm) |
+| `demucs_htdemucs_soft` | Demucs + Wiener softmask (complementary stems, less crosstalk) | Stem worker (default) |
+| `demucs_htdemucs` | Demucs only (`STEM_SOFTMASK=0`) | Stem worker |
 | `ffmpeg_center_band` | Approximation | Worker or local fallback script |
 | `*_fallback` | Demucs failed → ffmpeg | Worker / script |
+
+Worker knobs (env): `STEM_SHIFTS` (default `1`), `STEM_OVERLAP` (default `0.5`), `STEM_SOFTMASK` (default `1`).
 
 ## UI
 
 - Default: **Voice/Music (Demucs)** → requires stem worker URL in staging.
-- Re-run analysis after stem worker is live so stems are rewritten.
+- Re-run analysis after stem worker quality changes so stems are rewritten.
+- „Letzter Stem-Lauf“ should show `demucs_htdemucs_soft` (not `ffmpeg…_fallback`).

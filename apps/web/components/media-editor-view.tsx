@@ -580,7 +580,9 @@ export function MediaEditorView({
                       Letzter Stem-Lauf: {stemMethodUsed}
                       {stemMethodUsed.includes('ffmpeg') || stemMethodUsed.includes('fallback')
                         ? ' — A1 ist Sprachband-Näherung, kein reines Vocal.'
-                        : ''}
+                        : stemMethodUsed.includes('soft')
+                          ? ' — Softmask: Voice/Music ergänzen sich (weniger Crosstalk).'
+                          : ''}
                     </Text>
                   ) : null}
                   <EditorOverflowItem

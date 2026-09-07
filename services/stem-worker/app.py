@@ -20,8 +20,13 @@ from fastapi.responses import Response
 PORT = int(os.environ.get("PORT", "8091"))
 DEVICE = os.environ.get("TORCH_DEVICE", "cpu")
 BUCKETS = 240
+# Time shifts improve isolation (Demucs paper / CLI default often ≥1). CPU cost scales ~linear.
+SHIFTS = max(0, int(os.environ.get("STEM_SHIFTS", "1")))
+OVERLAP = float(os.environ.get("STEM_OVERLAP", "0.5"))
+# Partition mixture energy so voice+music are complementary (less mutual bleed).
+SOFTMASK = os.environ.get("STEM_SOFTMASK", "1").strip() not in ("0", "false", "False")
 
-app = FastAPI(title="VIDEON stem worker", version="1.0.0")
+app = FastAPI(title="VIDEON stem worker", version="1.1.0")
 
 _MODEL = None
 _MODEL_NAME = "htdemucs"
@@ -51,6 +56,9 @@ def health() -> dict:
         "model": _MODEL_NAME,
         "modelLoaded": _MODEL is not None,
         "device": DEVICE,
+        "shifts": SHIFTS,
+        "overlap": OVERLAP,
+        "softmask": SOFTMASK,
     }
 
 
@@ -121,13 +129,35 @@ def _read_audio(path: Path, samplerate: int, channels: int):
         return wav, samplerate
 
 
+def _softmask_partition(mix: torch.Tensor, vocals: torch.Tensor, accompaniment: torch.Tensor):
+    """Wiener-style mask on the mixture → complementary stems (sum ≈ mix)."""
+    eps = 1e-8
+    v_pow = vocals.pow(2)
+    a_pow = accompaniment.pow(2)
+    denom = (v_pow + a_pow).clamp_min(eps)
+    v_mask = v_pow / denom
+    a_mask = a_pow / denom
+    return mix * v_mask, mix * a_mask
+
+
 def _separate_demucs(source: Path, voice_out: Path, music_out: Path) -> str:
     model = _load_model()
     wav, _sr = _read_audio(source, model.samplerate, model.audio_channels)
     ref = wav.mean(0)
-    wav = (wav - ref.mean()) / (ref.std() + 1e-8)
+    mean = ref.mean()
+    std = ref.std() + 1e-8
+    wav_n = (wav - mean) / std
     with torch.no_grad():
-        sources = apply_model(model, wav[None], device=DEVICE, split=True, overlap=0.25)[0]
+        sources = apply_model(
+            model,
+            wav_n[None],
+            device=DEVICE,
+            shifts=SHIFTS,
+            split=True,
+            overlap=OVERLAP,
+        )[0]
+    # Undo input normalization (matches demucs.separate).
+    sources = sources * std + mean
     index = {name: i for i, name in enumerate(model.sources)}
     if "vocals" not in index:
         raise RuntimeError(f"model sources missing vocals: {list(model.sources)}")
@@ -139,9 +169,17 @@ def _separate_demucs(source: Path, voice_out: Path, music_out: Path) -> str:
         accompaniment = sources[i] if accompaniment is None else accompaniment + sources[i]
     if accompaniment is None:
         accompaniment = torch.zeros_like(vocals)
+
+    method = "demucs_htdemucs"
+    if SOFTMASK:
+        # Partition the original mixture so stems are complementary (less mutual bleed).
+        mix = wav_n * std + mean
+        vocals, accompaniment = _softmask_partition(mix, vocals, accompaniment)
+        method = "demucs_htdemucs_soft"
+
     save_audio(vocals.cpu(), str(voice_out), model.samplerate)
     save_audio(accompaniment.cpu(), str(music_out), model.samplerate)
-    return "demucs_htdemucs"
+    return method
 
 
 def _separate_ffmpeg(source: Path, voice_out: Path, music_out: Path) -> str:
