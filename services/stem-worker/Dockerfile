@@ -10,6 +10,11 @@ ENV PORT=8091
 ENV TORCH_DEVICE=cpu
 ENV CUDA_VISIBLE_DEVICES=""
 ENV VIDEON_STEM_DEMUCS_ENABLED=true
+# Fine-tuned bag (~4× cost vs htdemucs); warm-loaded once at startup.
+ENV STEM_MODEL=htdemucs_ft
+ENV STEM_SHIFTS=1
+ENV STEM_SOFTMASK=0
+ENV STEM_OVERLAP=0.5
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -25,7 +30,7 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir --force-reinstall \
       --index-url https://download.pytorch.org/whl/cpu \
       torch torchaudio \
-    && python -c "from demucs.pretrained import get_model; get_model('htdemucs')"
+    && python -c "from demucs.pretrained import get_model; get_model('htdemucs_ft')"
 
 COPY services/stem-worker/app.py /app/app.py
 COPY scripts/separate-audio-stems.py /app/separate-audio-stems.py
