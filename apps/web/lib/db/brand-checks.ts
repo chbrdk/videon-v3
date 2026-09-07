@@ -67,19 +67,42 @@ export async function upsertPendingBrandCheck(input: {
   evidenceFrameRefs: unknown
   provenance?: Record<string, unknown>
 }): Promise<MediaBrandCheck> {
+  return upsertBrandCheck({
+    ...input,
+    status: 'queued_pending_brandion',
+    brandionRequestId: null,
+    result: null,
+    provenance: {
+      seam: 'videon.brand-compliance.v1',
+      ...(input.provenance ?? {}),
+    },
+  })
+}
+
+export async function upsertBrandCheck(input: {
+  mediaAssetId: string
+  analysisRunId: string
+  sceneKey: string
+  status: BrandCheckStatus
+  brandCandidates: unknown
+  evidenceFrameRefs: unknown
+  brandionRequestId?: string | null
+  result?: unknown
+  provenance?: Record<string, unknown>
+}): Promise<MediaBrandCheck> {
   const id = randomUUID()
   const result = await databasePool().query<BrandCheckRow>(
     `insert into media_brand_checks (
-       id, media_asset_id, analysis_run_id, scene_key, status,
-       brand_candidates, evidence_frame_refs, provenance
-     ) values ($1, $2, $3, $4, 'queued_pending_brandion', $5::jsonb, $6::jsonb, $7::jsonb)
+       id, media_asset_id, analysis_run_id, scene_key, status, brandion_request_id,
+       brand_candidates, evidence_frame_refs, result, provenance
+     ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
      on conflict (analysis_run_id, scene_key)
      do update set
-       status = 'queued_pending_brandion',
-       brandion_request_id = null,
+       status = excluded.status,
+       brandion_request_id = excluded.brandion_request_id,
        brand_candidates = excluded.brand_candidates,
        evidence_frame_refs = excluded.evidence_frame_refs,
-       result = null,
+       result = excluded.result,
        provenance = excluded.provenance,
        updated_at = now()
      returning id, media_asset_id, analysis_run_id, scene_key, status, brandion_request_id,
@@ -89,13 +112,12 @@ export async function upsertPendingBrandCheck(input: {
       input.mediaAssetId,
       input.analysisRunId,
       input.sceneKey,
+      input.status,
+      input.brandionRequestId ?? null,
       JSON.stringify(input.brandCandidates ?? []),
       JSON.stringify(input.evidenceFrameRefs ?? []),
-      JSON.stringify({
-        seam: 'videon.brand-compliance.v1',
-        note: 'Awaiting Brandion API contract',
-        ...(input.provenance ?? {}),
-      }),
+      input.result === undefined || input.result === null ? null : JSON.stringify(input.result),
+      JSON.stringify(input.provenance ?? { seam: 'videon.brand-compliance.v1' }),
     ],
   )
   return mapBrandCheck(result.rows[0])

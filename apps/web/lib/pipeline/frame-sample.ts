@@ -45,6 +45,22 @@ async function extractFrame(sourcePath: string, timestampMs: number, frameId: st
   }
 }
 
+/** JPEG base64 (no data-URL prefix) for Brandion analysis-runs image input. */
+export async function extractFrameJpegBase64(
+  sourcePath: string,
+  timestampMs: number,
+): Promise<{ base64: string; mimeType: 'image/jpeg'; } | null> {
+  try {
+    const frame = await extractFrame(sourcePath, timestampMs, `brand-${timestampMs}`)
+    const marker = 'base64,'
+    const idx = frame.dataUrl.indexOf(marker)
+    if (idx < 0) return null
+    return { base64: frame.dataUrl.slice(idx + marker.length), mimeType: 'image/jpeg' }
+  } catch {
+    return null
+  }
+}
+
 export async function sampleSceneFrames(input: {
   sourcePath: string
   sceneKey: string

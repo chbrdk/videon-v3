@@ -24,6 +24,12 @@ export const paths = {
   plexonProductsPath: '/products',
   envAudionPublicUrl: 'NEXT_PUBLIC_AUDION_URL',
   envBrandionPublicUrl: 'NEXT_PUBLIC_BRANDION_URL',
+  /** Server-side Brandion origin (prefer over public URL). */
+  envBrandionApiUrl: 'BRANDION_API_URL',
+  brandionActivePackPath: '/api/guidelines/active-pack',
+  brandionAnalysisRunsPath: (guidelineId: string) =>
+    `/api/guidelines/${encodeURIComponent(guidelineId)}/analysis-runs`,
+  activePackQueryKey: 'platformProjectId' as const,
   envCreationPublicUrl: 'NEXT_PUBLIC_CREATION_URL',
   envEchonPublicUrl: 'NEXT_PUBLIC_ECHON_URL',
   envCheckionPublicUrl: 'NEXT_PUBLIC_CHECKION_URL',

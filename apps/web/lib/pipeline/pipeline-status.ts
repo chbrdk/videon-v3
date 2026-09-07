@@ -42,7 +42,7 @@ export const PIPELINE_STAGE_HINTS: Record<PipelineStageKey, string> = {
   frame_sample: 'Stichproben pro Szene',
   audio: 'Tonspur, Stems und Transkript',
   vision: 'KI-Szenenanalyse über OpenRouter',
-  brand_compliance: 'Brandion-Guideline-Prüfung (vorbereitet)',
+  brand_compliance: 'Brandion-Guideline-Prüfung über Analysis-Runs',
   aggregate: 'Ergebnisse werden zusammengeführt',
   index: 'Suche und Metadaten-Index',
 }

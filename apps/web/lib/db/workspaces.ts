@@ -37,6 +37,16 @@ export async function findWorkspace(platformProjectId: string): Promise<Provisio
   return result.rows[0] ? mapWorkspace(result.rows[0]) : null
 }
 
+export async function findWorkspaceById(workspaceId: string): Promise<ProvisionedWorkspace | null> {
+  const result = await databasePool().query<WorkspaceRow>(
+    `select id, platform_project_id, platform_company_id, owner_plexon_user_id, name, domain, status
+       from videon_workspaces
+      where id = $1`,
+    [workspaceId],
+  )
+  return result.rows[0] ? mapWorkspace(result.rows[0]) : null
+}
+
 export async function upsertWorkspace(input: ProvisionWorkspaceRequest): Promise<{
   workspace: ProvisionedWorkspace
   created: boolean

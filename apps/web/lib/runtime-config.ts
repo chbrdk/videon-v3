@@ -115,6 +115,19 @@ export function isPlexonAuthConfigured(): boolean {
   return Boolean(plexonAuthUrl() && plexonServiceSecret())
 }
 
+/** Brandion API origin for server-side guideline checks. Prefer `BRANDION_API_URL`. */
+export function brandionApiUrl(): string | null {
+  const explicit = env(paths.envBrandionApiUrl)
+  if (explicit) return explicit.replace(/\/$/, '')
+  const pub = env(paths.envBrandionPublicUrl)
+  if (pub) return pub.replace(/\/$/, '')
+  return paths.ecosystemStagingBrandion.replace(/\/$/, '')
+}
+
+export function isBrandionCheckConfigured(): boolean {
+  return Boolean(brandionApiUrl() && plexonServiceSecret())
+}
+
 export function transcriptionConfig(): {
   enabled: boolean
   provider: 'local' | 'openrouter' | 'auto'
