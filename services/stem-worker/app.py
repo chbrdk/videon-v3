@@ -305,6 +305,10 @@ async def separate(
 
     suffix = Path(file.filename or "audio.wav").suffix or ".wav"
     source_bytes = await file.read()
+    print(
+        f"[stem-worker] separate start method={method} bytes={len(source_bytes)} suffix={suffix}",
+        flush=True,
+    )
     try:
         recorded, voice_bytes, music_bytes, duration_ms, voice_peaks, music_peaks = await asyncio.to_thread(
             _run_separation_job,
@@ -313,8 +317,10 @@ async def separate(
             method,
         )
     except Exception as error:  # noqa: BLE001
+        print(f"[stem-worker] separate failed: {error!r}", flush=True)
         raise HTTPException(500, f"stem failed: {error}") from error
 
+    print(f"[stem-worker] separate done method={recorded} voiceBytes={len(voice_bytes)}", flush=True)
     meta = {
         "method": recorded,
         "durationMs": duration_ms,
