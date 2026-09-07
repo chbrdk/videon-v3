@@ -11,6 +11,7 @@ VIDEON v3 must **compose** shared chrome, not fork a second design language.
 |------|--------|
 | Shell | `AppFrame`, `NavRail`, `BrandCorner*`, `ShellBackButton`, `MsqdxLogoMark`, `shellFrameStyle` |
 | Magazine / hub | `SectionChrome`, `Panel`, `Text`, `Lede`, `HubIndexCard`, `HubIndexLayoutSwitch`, `AddTile`, `RankedList` |
+| Browse tiles | `Card` + `CardActions` (media/title/meta slots) — not `EntityCard` / not magazine `HubIndexCard` |
 | Forms | `Field`, `Input`, `Select`, `ToggleGroup`, `Checkbox` |
 | Actions / feedback | `Button`, `Chip`, `Alert`, `Dialog`, `Spinner`, `EmptyState`, `LoadingText`, `StatusDot`, `Meter`, `Toast` / `useToast` |
 | Pipeline chrome | `StepStrip`, `StepStripItem` |

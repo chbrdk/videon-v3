@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Button,
+  Card,
+  CardActions,
   Chip,
   EmptyState,
-  EntityCard,
   FilterRow,
   LoadingText,
   RankedList,
@@ -93,7 +94,7 @@ function MediaCardThumb({
   return (
     <div
       className="videon-media-card__thumb"
-      style={{ backgroundImage: `url(${thumbnail})` }}
+      style={{ backgroundImage: `url(${thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
       aria-hidden
     />
   )
@@ -239,27 +240,39 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
               item.durationMs != null && item.durationMs > 0 ? formatClock(item.durationMs) : null
             const mediaHref = paths.routes.mediaFor(item.id, platformProjectId)
             return (
-              <li key={item.id} className="videon-media-card">
-                <EntityCard
-                  className="videon-media-card__entity"
+              <li key={item.id}>
+                <Card
+                  href={mediaHref}
+                  media={
+                    <MediaCardThumb
+                      mediaAssetId={item.id}
+                      platformProjectId={platformProjectId}
+                      durationMs={item.durationMs}
+                      ready={ready}
+                    />
+                  }
+                  title={item.originalFilename}
                   meta={
-                    <span className="videon-media-card__status">
+                    <>
                       <StatusDot level={analysisLevel(item.latestAnalysisStatus)} />
-                      <span>{item.lifecycleState}</span>
-                    </span>
+                      <Chip static size="sm">
+                        {item.lifecycleState}
+                      </Chip>
+                      <Chip static size="sm">
+                        {analysisLabel(item.latestAnalysisStatus)}
+                      </Chip>
+                      {duration ? (
+                        <Chip static size="sm">
+                          {duration}
+                        </Chip>
+                      ) : null}
+                      <Text role="meta" as="span">
+                        {item.mimeType} · {formatBytes(item.bytes)}
+                      </Text>
+                    </>
                   }
-                  badge={
-                    <Chip static size="sm">
-                      {analysisLabel(item.latestAnalysisStatus)}
-                    </Chip>
-                  }
-                  title={
-                    <Link href={mediaHref} className="videon-media-card__title-link">
-                      {item.originalFilename}
-                    </Link>
-                  }
-                  toolbar={
-                    <div className="videon-media-card__actions">
+                  actions={
+                    <CardActions>
                       <Link href={mediaHref}>
                         <Button variant="ghost" size="sm">
                           Öffnen
@@ -275,30 +288,9 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                           Cuts
                         </Button>
                       </Link>
-                    </div>
+                    </CardActions>
                   }
-                  footer={
-                    <>
-                      {duration ? (
-                        <Chip static size="sm">
-                          {duration}
-                        </Chip>
-                      ) : null}
-                      <Text role="meta" as="span">
-                        {item.mimeType} · {formatBytes(item.bytes)}
-                      </Text>
-                    </>
-                  }
-                >
-                  <Link href={mediaHref} className="videon-media-card__thumb-link" tabIndex={-1}>
-                    <MediaCardThumb
-                      mediaAssetId={item.id}
-                      platformProjectId={platformProjectId}
-                      durationMs={item.durationMs}
-                      ready={ready}
-                    />
-                  </Link>
-                </EntityCard>
+                />
               </li>
             )
           })}

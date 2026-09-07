@@ -7,7 +7,8 @@
 |---------|----------|-------|
 | AppShell + Product-Switcher | **Keep** | Compose `AppFrame` / `NavRail` / `BrandCornerProductMenu` |
 | Home magazine spine | **Reshape** | Layout app-local; tiles → `HubIndexCard`; titles → `Text` |
-| Collection / media / cuts lists | **Reshape** | `HubIndexCard` + layout switch; dense rows → `RankedList` |
+| Collection / media / cuts lists | **Reshape** | Media browse → native `Card` + `CardActions`; hubs → `HubIndexCard`; dense rows → `RankedList` |
+| `EntityCard` in Mediathek | **Drop** | Brandion catalog chrome — wrong for media browse |
 | Analyses pipeline UI | **Reshape** | `StepStrip` + `Chip` / `StatusDot` / `Meter` |
 | Settings stub | **Reshape** | `SettingsShell` / `SettingsBand` |
 | Native search inputs | **Drop** | `Field` + `Input` |
