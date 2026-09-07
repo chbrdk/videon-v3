@@ -30,6 +30,9 @@ type TimelineTrackHeaderProps = {
   variant?: 'default' | 'audio' | 'transcript' | 'insight'
   /** When true, mute is visual-only / unavailable (still toggles muted style). */
   muteHint?: string
+  /** Optional stem/media download URL (same-origin; uses session cookie). */
+  downloadHref?: string | null
+  downloadLabel?: string
   onToggleHidden: () => void
   onToggleMuted: () => void
 }
@@ -41,6 +44,8 @@ export function TimelineTrackHeader({
   muted,
   variant = 'default',
   muteHint,
+  downloadHref,
+  downloadLabel,
   onToggleHidden,
   onToggleMuted,
 }: TimelineTrackHeaderProps) {
@@ -60,6 +65,18 @@ export function TimelineTrackHeader({
     >
       <span className="videon-cut-timeline__header-name">{label}</span>
       <span className="videon-cut-timeline__header-actions">
+        {downloadHref ? (
+          <a
+            className="videon-cut-timeline__track-btn videon-cut-timeline__track-btn--link"
+            href={downloadHref}
+            download
+            title={downloadLabel ?? `${label} herunterladen`}
+            aria-label={downloadLabel ?? `${label} als WAV herunterladen`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            ↓
+          </a>
+        ) : null}
         <button
           type="button"
           className={`videon-cut-timeline__track-btn${hidden ? ' is-active' : ''}`}

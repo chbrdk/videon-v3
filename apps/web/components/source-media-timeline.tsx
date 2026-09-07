@@ -61,6 +61,9 @@ type SourceMediaTimelineProps = {
   hasStemAudio?: boolean
   /** Stored stem method label for track chrome (e.g. demucs_htdemucs). */
   stemMethodLabel?: string | null
+  /** Same-origin download URLs for A1/A2 stem WAVs (`?download=1`). */
+  voiceStemDownloadHref?: string | null
+  musicStemDownloadHref?: string | null
 }
 
 function paintSourcePeaks(
@@ -119,6 +122,8 @@ export function SourceMediaTimeline({
   onTrackMutesChange,
   hasStemAudio = false,
   stemMethodLabel = null,
+  voiceStemDownloadHref = null,
+  musicStemDownloadHref = null,
 }: SourceMediaTimelineProps) {
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -274,6 +279,8 @@ export function SourceMediaTimeline({
                     : 'Voice-Stem stumm'
                   : 'Tonspur stumm'
               }
+              downloadHref={voiceStemDownloadHref}
+              downloadLabel="A1 Voice WAV herunterladen"
             />
             <TimelineTrackHeader
               id="a2"
@@ -284,6 +291,8 @@ export function SourceMediaTimeline({
               onToggleHidden={() => toggleTrack('a2', 'hidden')}
               onToggleMuted={() => toggleTrack('a2', 'muted')}
               muteHint={hasStemAudio ? 'Music-Stem stumm' : 'Music-Spur (nur Visual)'}
+              downloadHref={musicStemDownloadHref}
+              downloadLabel="A2 Music WAV herunterladen"
             />
             <TimelineTrackHeader
               id="tx"

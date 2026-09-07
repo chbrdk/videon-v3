@@ -16,4 +16,13 @@ describe('media stem stream path', () => {
       '/api/media/media-1/stems/music/stream?platformProjectId=proj-1',
     )
   })
+
+  it('builds stem download routes with attachment flag', () => {
+    expect(paths.routes.apiMediaStemStream('media-1', 'voice', 'proj-1', { download: true })).toBe(
+      '/api/media/media-1/stems/voice/stream?platformProjectId=proj-1&download=1',
+    )
+    expect(paths.routes.apiMediaStemStream('media-1', 'music', 'proj-1', { download: true })).toBe(
+      '/api/media/media-1/stems/music/stream?platformProjectId=proj-1&download=1',
+    )
+  })
 })

@@ -1522,6 +1522,14 @@ main {
   cursor: pointer;
 }
 
+a.videon-cut-timeline__track-btn--link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
 .videon-cut-timeline__track-btn.is-active {
   border-color: var(--nle-playhead, #ff6b00);
   color: var(--nle-playhead, #ff6b00);

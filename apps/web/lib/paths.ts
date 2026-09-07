@@ -95,8 +95,11 @@ export const paths = {
       mediaAssetId: string,
       stemKind: 'voice' | 'music',
       platformProjectId: string,
-    ) =>
-      `/api/media/${encodeURIComponent(mediaAssetId)}/stems/${encodeURIComponent(stemKind)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+      options?: { download?: boolean },
+    ) => {
+      const base = `/api/media/${encodeURIComponent(mediaAssetId)}/stems/${encodeURIComponent(stemKind)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`
+      return options?.download ? `${base}&download=1` : base
+    },
     apiMediaAnalysis: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaBrandCheck: (mediaAssetId: string, platformProjectId: string) =>

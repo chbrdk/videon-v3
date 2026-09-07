@@ -250,6 +250,12 @@ export function MediaEditorView({
   const musicStemUrl = hasMusicStem
     ? paths.routes.apiMediaStemStream(mediaAssetId, 'music', platformProjectId)
     : null
+  const voiceStemDownloadHref = hasVoiceStem
+    ? paths.routes.apiMediaStemStream(mediaAssetId, 'voice', platformProjectId, { download: true })
+    : null
+  const musicStemDownloadHref = hasMusicStem
+    ? paths.routes.apiMediaStemStream(mediaAssetId, 'music', platformProjectId, { download: true })
+    : null
   const hasStemAudio = Boolean(voiceStemUrl || musicStemUrl)
 
   useProgramAudioMixer({
@@ -588,6 +594,16 @@ export function MediaEditorView({
                             : ''}
                     </Text>
                   ) : null}
+                  {voiceStemDownloadHref ? (
+                    <EditorOverflowItem close={close} href={voiceStemDownloadHref}>
+                      A1 Voice WAV
+                    </EditorOverflowItem>
+                  ) : null}
+                  {musicStemDownloadHref ? (
+                    <EditorOverflowItem close={close} href={musicStemDownloadHref}>
+                      A2 Music WAV
+                    </EditorOverflowItem>
+                  ) : null}
                   <EditorOverflowItem
                     close={close}
                     disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
@@ -755,6 +771,8 @@ export function MediaEditorView({
           onTrackMutesChange={setTrackMutes}
           hasStemAudio={hasStemAudio}
           stemMethodLabel={stemMethodUsed}
+          voiceStemDownloadHref={voiceStemDownloadHref}
+          musicStemDownloadHref={musicStemDownloadHref}
         />
       </footer>
 

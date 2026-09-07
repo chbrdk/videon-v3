@@ -15,8 +15,22 @@ function isStemKind(value: string): value is AudioStemKind {
   return value === 'voice' || value === 'music'
 }
 
-function contentDisposition(stemKind: AudioStemKind): string {
-  return `inline; filename="${stemKind}.wav"`
+function sanitizeFilenamePart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'stem'
+}
+
+function contentDisposition(input: {
+  stemKind: AudioStemKind
+  mediaAssetId: string
+  method: string
+  download: boolean
+}): string {
+  const shortId = input.mediaAssetId.slice(0, 8)
+  const track = input.stemKind === 'voice' ? 'a1-voice' : 'a2-music'
+  const method = sanitizeFilenamePart(input.method)
+  const filename = `videon-${shortId}-${track}-${method}.wav`
+  const disposition = input.download ? 'attachment' : 'inline'
+  return `${disposition}; filename="${filename}"`
 }
 
 export async function GET(request: Request, context: RouteContext) {
@@ -31,10 +45,14 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 503, 'dependency_unavailable', 'Object storage is unavailable', { retryable: true })
   }
 
-  const platformProjectId = new URL(request.url).searchParams.get('platformProjectId')?.trim() || ''
+  const url = new URL(request.url)
+  const platformProjectId = url.searchParams.get('platformProjectId')?.trim() || ''
   if (!platformProjectId) {
     return apiError(request, 400, 'invalid_payload', 'platformProjectId is required')
   }
+  const download =
+    url.searchParams.get('download') === '1' ||
+    url.searchParams.get('download') === 'true'
 
   const { mediaAssetId, stemKind: rawKind } = await context.params
   if (!isStemKind(rawKind)) {
@@ -60,7 +78,7 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 404, 'not_found', `No ${rawKind} stem for this media`)
   }
 
-  const range = request.headers.get('range')
+  const range = download ? null : request.headers.get('range')
   const store = new S3ObjectStore()
   const object = await store.openObjectStream({
     workspaceId: resolved.workspace.id,
@@ -70,15 +88,22 @@ export async function GET(request: Request, context: RouteContext) {
 
   const headers = new Headers({
     'Content-Type': object.contentType ?? stem.mimeType ?? 'audio/wav',
-    'Content-Disposition': contentDisposition(rawKind),
-    'Accept-Ranges': object.acceptRanges ?? 'bytes',
+    'Content-Disposition': contentDisposition({
+      stemKind: rawKind,
+      mediaAssetId: resolved.media.id,
+      method: stem.method,
+      download,
+    }),
+    'Accept-Ranges': download ? 'none' : (object.acceptRanges ?? 'bytes'),
     'Cache-Control': 'private, max-age=60',
+    'X-Videon-Stem-Method': stem.method,
+    'X-Videon-Stem-Kind': rawKind,
   })
   if (object.contentLength !== undefined) headers.set('Content-Length', String(object.contentLength))
-  if (object.contentRange) headers.set('Content-Range', object.contentRange)
+  if (!download && object.contentRange) headers.set('Content-Range', object.contentRange)
 
   return new Response(Readable.toWeb(object.body) as ReadableStream, {
-    status: object.statusCode,
+    status: download ? 200 : object.statusCode,
     headers,
   })
 }

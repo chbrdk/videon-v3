@@ -46,7 +46,7 @@ All require auth + `platformProjectId` (except noted).
 |--------------|------|
 | `apiMediaDetail` | `GET`/`DELETE` media |
 | `apiMediaPlayback` / `apiMediaStream` | Playback |
-| `apiMediaStemStream(id, voice\|music, projectId)` | Stem WAV stream after split |
+| `apiMediaStemStream(id, voice\|music, projectId, { download? })` | Stem WAV stream; `download: true` → attachment (`?download=1`) |
 | `apiMediaAnalysis` | `POST` full analysis re-run |
 | `apiMediaBrandCheck` | `POST` brand compliance only |
 | `apiMediaSearch` | Search |
