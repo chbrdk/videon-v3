@@ -23,7 +23,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | `knowledge/ui-rebuild-reuse.md` | Keep/reshape import map |
 | Docker `MSQDX_UI_REF` | Pinned `chbrdk/msqdx-ui` commit for Coolify sibling fetch |
 | Stem worker | Always-on Demucs (`services/stem-worker`, port **8091**); staging UUID `nodc0dxwwwnpjc2uvk0snrff` — see `staging-coolify-stem-worker.md` |
-| `VIDEON_STEM_SERVICE_URL` | Base URL of stem worker (no trailing slash); staging private `http://nodc0dxwwwnpjc2uvk0snrff:8091` |
+| `VIDEON_STEM_SERVICE_URL` | Base URL of stem worker (no trailing slash); staging `https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech` |
 
 ## Brandion seam
 

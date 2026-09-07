@@ -11,7 +11,7 @@
 | Dockerfile | `/services/stem-worker/Dockerfile` |
 | Port | **8091** |
 | Public FQDN | `https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech` (health only; app uses private URL) |
-| Private URL | `http://nodc0dxwwwnpjc2uvk0snrff:8091` |
+| Service URL (staging) | `https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech` (FQDN — UUID-Hostname resolved on Coolify-Netz nicht) |
 
 Created via Coolify REST `POST /applications/private-github-app` (same token as MCP). Build is large (CPU Torch + htdemucs) — first deploy can take a long time. Keep always-on (no scale-to-zero).
 
@@ -20,7 +20,7 @@ Created via Coolify REST `POST /applications/private-github-app` (same token as 
 On `videon-v3:main-app` (`mi0j3pyjrel80jodebwvhgvi`):
 
 ```
-VIDEON_STEM_SERVICE_URL=http://nodc0dxwwwnpjc2uvk0snrff:8091
+VIDEON_STEM_SERVICE_URL=https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech
 ```
 
 Already set via `PATCH …/envs/bulk`. Redeploy main after changes.
