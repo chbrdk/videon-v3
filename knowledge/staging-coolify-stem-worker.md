@@ -33,4 +33,6 @@ curl -s https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech/health
 ```
 
 Then re-run media analysis with Stem method **Voice/Music (Demucs)**.  
-„Letzter Stem-Lauf“ should show `demucs_htdemucs_soft` (not `ffmpeg…_fallback`).
+„Letzter Stem-Lauf“ should show `demucs_htdemucs_residual` (not soft / ffmpeg fallback).
+
+Worker quality envs (defaults in image code): `STEM_SHIFTS=2`, `STEM_SOFTMASK=0`.
