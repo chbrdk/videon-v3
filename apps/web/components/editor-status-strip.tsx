@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Chip, StatusDot, Text, ToolButton, type StatusLevel } from '@msqdx/ui'
+import { Button, Chip, StatusDot, Text, type StatusLevel } from '@msqdx/ui'
 
 export function EditorStatusStrip({
   level = 'ok',
@@ -30,9 +30,9 @@ export function EditorStatusStrip({
         ) : null}
       </div>
       {actionLabel && onAction ? (
-        <ToolButton label={actionLabel} size="sm" onClick={onAction}>
+        <Button type="button" variant="ghost" size="sm" onClick={onAction}>
           {actionLabel}
-        </ToolButton>
+        </Button>
       ) : null}
     </div>
   )

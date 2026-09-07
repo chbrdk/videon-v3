@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Text, ToolButton } from '@msqdx/ui'
-import { useToast } from '@msqdx/ui-client'
+import { Button, Field, Text, ToolButton } from '@msqdx/ui'
+import { Select, useToast } from '@msqdx/ui-client'
 import { useActiveCollection } from '@/components/collection-context'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { EditorStatusStrip, analysisStatusLevel } from '@/components/editor-status-strip'
+import { EditorOverflowItem, EditorOverflowMenu } from '@/components/editor-overflow-menu'
 import { MediaSearch } from '@/components/media-search'
 import { SourceMediaTimeline } from '@/components/source-media-timeline'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
@@ -485,13 +486,14 @@ export function MediaEditorView({
           </p>
         </div>
         <div className="videon-nle__toolbar-groups">
-          <Button type="button" variant="primary" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
+          <Button type="button" variant="primary" size="sm" onClick={() => void saveAsCut(false)} disabled={Boolean(busy)}>
             {busy === 'cut' ? 'Speichert …' : markedRange ? 'In/Out als Cut' : 'Szene als Cut'}
           </Button>
           {markedRange && activeCut ? (
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               disabled={Boolean(busy)}
               onClick={() => void addRangeToActiveCut(markedRange.startMs, markedRange.endMs)}
             >
@@ -502,6 +504,7 @@ export function MediaEditorView({
             <Button
               type="button"
               variant={inspectOpen ? 'primary' : 'ghost'}
+              size="sm"
               className={analysisAttention ? 'is-attention' : undefined}
               onClick={() => {
                 setInspectOpen((open) => !open)
@@ -513,59 +516,63 @@ export function MediaEditorView({
             <ToolButton label="Tastaturkürzel" active={showShortcuts} onClick={() => setShowShortcuts((c) => !c)}>
               ?
             </ToolButton>
-            <details className="videon-nle__toolbar-menu">
-              <summary className="videon-nle__tool-btn">Mehr</summary>
-            <div className="videon-nle__toolbar-menu-body">
-              <label className="videon-nle__stem-method">
-                <span className="videon-nle__stem-method-label">Stems</span>
-                <select
-                  className="videon-nle__stem-method-select"
-                  value={stemMethod}
-                  disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
-                  onChange={(event) =>
-                    setStemMethod(event.target.value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
-                  }
-                  title="Voice/Music-Trennung für die nächste Analyse"
-                >
-                  <option value="ffmpeg_mid_side">Schnell (Mid/Side)</option>
-                  <option value="demucs">Neural (Demucs)</option>
-                </select>
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => void rerunAnalysis()}
-                disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
-              >
-                {busy === 'analysis' ? 'Startet …' : 'Analyse'}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => void rerunBrandCheck()}
-                disabled={
-                  Boolean(busy) ||
-                  brandStageBusy ||
-                  media.lifecycleState === 'uploading' ||
-                  analysis?.status !== 'succeeded' ||
-                  scenes.length === 0
-                }
-              >
-                {busy === 'brand' || brandStageBusy ? 'Brand …' : 'Brand-Check'}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => void refresh()} disabled={Boolean(busy)}>
-                Aktualisieren
-              </Button>
-              {scenes.length > 1 ? (
-                <Button type="button" variant="ghost" onClick={() => void saveAsCut(true)} disabled={Boolean(busy)}>
-                  Alle Szenen als Cut
-                </Button>
-              ) : null}
-              <Button type="button" variant="ghost" onClick={() => void deleteMedia()} disabled={Boolean(busy)}>
-                {busy === 'delete' ? 'Löscht …' : 'Löschen'}
-              </Button>
-              </div>
-            </details>
+            <EditorOverflowMenu>
+              {({ close }) => (
+                <>
+                  <Field label="Stems" size="sm">
+                    <Select
+                      aria-label="Stem-Methode"
+                      size="sm"
+                      value={stemMethod}
+                      disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+                      onChange={(value) =>
+                        setStemMethod(value === 'demucs' ? 'demucs' : 'ffmpeg_mid_side')
+                      }
+                      options={[
+                        { value: 'ffmpeg_mid_side', label: 'Schnell (Mid/Side)' },
+                        { value: 'demucs', label: 'Neural (Demucs)' },
+                      ]}
+                    />
+                  </Field>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+                    onClick={() => void rerunAnalysis()}
+                  >
+                    {busy === 'analysis' ? 'Startet …' : 'Analyse'}
+                  </EditorOverflowItem>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={
+                      Boolean(busy) ||
+                      brandStageBusy ||
+                      media.lifecycleState === 'uploading' ||
+                      analysis?.status !== 'succeeded' ||
+                      scenes.length === 0
+                    }
+                    onClick={() => void rerunBrandCheck()}
+                  >
+                    {busy === 'brand' || brandStageBusy ? 'Brand …' : 'Brand-Check'}
+                  </EditorOverflowItem>
+                  <EditorOverflowItem close={close} disabled={Boolean(busy)} onClick={() => void refresh()}>
+                    Aktualisieren
+                  </EditorOverflowItem>
+                  {scenes.length > 1 ? (
+                    <EditorOverflowItem close={close} disabled={Boolean(busy)} onClick={() => void saveAsCut(true)}>
+                      Alle Szenen als Cut
+                    </EditorOverflowItem>
+                  ) : null}
+                  <EditorOverflowItem
+                    close={close}
+                    danger
+                    disabled={Boolean(busy)}
+                    onClick={() => void deleteMedia()}
+                  >
+                    {busy === 'delete' ? 'Löscht …' : 'Löschen'}
+                  </EditorOverflowItem>
+                </>
+              )}
+            </EditorOverflowMenu>
           </div>
         </div>
       </header>
@@ -822,9 +829,9 @@ export function MediaEditorView({
         <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
           <div className="videon-nle__shortcuts-panel-header">
             <strong>Tastaturkürzel</strong>
-            <button type="button" className="videon-nle__tool-btn" onClick={() => setShowShortcuts(false)} aria-label="Schließen">
+            <ToolButton label="Schließen" onClick={() => setShowShortcuts(false)}>
               ✕
-            </button>
+            </ToolButton>
           </div>
           <ul>
             <li>

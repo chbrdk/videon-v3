@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
-import { useToast } from '@msqdx/ui-client'
+import { Button, Field, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
+import { Select, useToast } from '@msqdx/ui-client'
 import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { EditorStatusStrip, exportStatusLevel } from '@/components/editor-status-strip'
+import { EditorOverflowItem, EditorOverflowMenu } from '@/components/editor-overflow-menu'
 import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
@@ -721,41 +722,45 @@ export function CutEditorView({
               Löschen
             </Button>
           </div>
-          <Button type="button" variant="primary" onClick={() => void startExport()} disabled={busy || exportBusy || clips.length === 0}>
+          <Button type="button" variant="primary" size="sm" onClick={() => void startExport()} disabled={busy || exportBusy || clips.length === 0}>
             {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
               ? 'Export …'
               : 'Export MP4'}
           </Button>
-          <ToolButton
-            label="Bin"
-            active={inspectOpen}
-            onClick={() => {
-              setSidePanel('bin')
-              setInspectOpen((open) => !open)
-            }}
-          >
-            Bin ({clips.length})
-          </ToolButton>
-          <ToolButton
-            label="Tastaturkürzel"
-            active={showShortcuts}
-            onClick={() => setShowShortcuts((current) => !current)}
-          >
-            ?
-          </ToolButton>
-          <details className="videon-nle__toolbar-menu">
-            <summary className="videon-nle__tool-btn">Mehr</summary>
-            <div className="videon-nle__toolbar-menu-body">
-              {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
-                <a className="videon-nle__tool-btn" href={latestExport.downloadUrl} download>
-                  Download
-                </a>
-              ) : null}
-              <Button type="button" variant="ghost" onClick={() => void deleteCut()} disabled={busy}>
-                Archivieren
-              </Button>
-            </div>
-          </details>
+          <div className="videon-nle__tool-cluster">
+            <Button
+              type="button"
+              variant={inspectOpen ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                setSidePanel('bin')
+                setInspectOpen((open) => !open)
+              }}
+            >
+              Bin ({clips.length})
+            </Button>
+            <ToolButton
+              label="Tastaturkürzel"
+              active={showShortcuts}
+              onClick={() => setShowShortcuts((current) => !current)}
+            >
+              ?
+            </ToolButton>
+            <EditorOverflowMenu>
+              {({ close }) => (
+                <>
+                  {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
+                    <EditorOverflowItem close={close} href={latestExport.downloadUrl}>
+                      Download
+                    </EditorOverflowItem>
+                  ) : null}
+                  <EditorOverflowItem close={close} danger disabled={busy} onClick={() => void deleteCut()}>
+                    Archivieren
+                  </EditorOverflowItem>
+                </>
+              )}
+            </EditorOverflowMenu>
+          </div>
         </div>
       </header>
 
@@ -871,18 +876,21 @@ export function CutEditorView({
         }}
       >
         <div className="videon-nle__field-row">
-          <Text role="meta" as="span">
-            Clip einfügen
-          </Text>
-          <select value={selectedMediaId} onChange={(event) => setSelectedMediaId(event.target.value)} disabled={busy}>
-            <option value="">Video wählen …</option>
-            {libraryMedia.map((media) => (
-              <option key={media.id} value={media.id}>
-                {media.originalFilename}
-              </option>
-            ))}
-          </select>
-          <Button type="button" variant="ghost" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
+          <Field label="Clip einfügen" size="sm">
+            <Select
+              aria-label="Video für Clip"
+              size="sm"
+              value={selectedMediaId}
+              disabled={busy}
+              placeholder="Video wählen …"
+              onChange={setSelectedMediaId}
+              options={libraryMedia.map((media) => ({
+                value: media.id,
+                label: media.originalFilename,
+              }))}
+            />
+          </Field>
+          <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
             Nach aktivem Clip einfügen
           </Button>
         </div>
@@ -949,9 +957,9 @@ export function CutEditorView({
         <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
           <div className="videon-nle__shortcuts-panel-header">
             <strong>Tastaturkürzel</strong>
-            <button type="button" className="videon-nle__tool-btn" onClick={() => setShowShortcuts(false)} aria-label="Schließen">
+            <ToolButton label="Schließen" onClick={() => setShowShortcuts(false)}>
               ✕
-            </button>
+            </ToolButton>
           </div>
           <ul>
             <li>

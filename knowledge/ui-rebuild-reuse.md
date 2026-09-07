@@ -15,8 +15,10 @@ VIDEON v3 must **compose** shared chrome, not fork a second design language.
 | Actions / feedback | `Button`, `Chip`, `Alert`, `Dialog`, `Spinner`, `EmptyState`, `LoadingText`, `StatusDot`, `Meter`, `Toast` / `useToast` |
 | Pipeline chrome | `StepStrip`, `StepStripItem` |
 | Settings | `SettingsShell`, `SettingsBand` |
-| Editor chrome (DS) | `ToolButton`, `Timecode`, `TransportBar`, `MediaMonitor`, `TimelineRuler`, `TimelineTrack`, `TimelineClip`, `Waveform`, `InspectTabs` |
-| Overlays | `FloatingPanel`, `Flyout`, `InspectSection`, `InspectTabs` |
+| Editor chrome (DS) | `ToolButton` (icon), `Timecode`, `TransportBar`, `MediaMonitor`, `TimelineRuler`, `TimelineTrack`, `TimelineClip`, `Waveform`, `InspectTabs` |
+| Toolbar overflow | `useFlyout` + `Button` + `ds-flyover` (app: `EditorOverflowMenu`) — not native `<details>` |
+| Forms in editor | `Field` + `Select` — not native `<select>` |
+| Overlays | `FloatingPanel`, `Flyout`, `InspectSection`, `InspectTabs`, `ContextMenu` (pointer menus only) |
 
 App barrels: `apps/web/lib/msqdx-ui.ts`, `msqdx-ui-shell.ts`, `msqdx-ui-client.ts`.
 

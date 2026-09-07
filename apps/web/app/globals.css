@@ -398,6 +398,24 @@ main {
   border-left: 1px solid var(--nle-border);
 }
 
+.videon-nle__overflow {
+  position: relative;
+}
+
+.videon-nle__overflow-panel.ds-flyover {
+  right: 0;
+  left: auto;
+  min-width: 14rem;
+  max-width: min(20rem, 90vw);
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.55rem;
+}
+
+.videon-nle__overflow-item {
+  justify-content: flex-start;
+}
+
 .videon-nle__toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

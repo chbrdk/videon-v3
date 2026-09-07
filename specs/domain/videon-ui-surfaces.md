@@ -42,12 +42,20 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 3. WHEN a non-fatal action succeeds or fails THEN feedback MUST go through `Toast` (`ToastProvider` in app providers). Fatal empty-state errors MAY remain inline.
 4. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, stems, brand) MUST live under a “Mehr” disclosure.
 
+## Editor chrome (DS consistency)
+
+1. WHEN toolbar overflow is needed THEN it MUST use `useFlyout` + `Button` + `ds-flyover` (app helper `EditorOverflowMenu`) — NOT native `<details>`/`<summary>`.
+2. WHEN a form control is shown in the editor THEN it MUST use `Field` + `Select`/`Input` — NOT native OS `<select>`.
+3. WHEN a control is an icon tool THEN it MUST use `ToolButton`; text actions MUST use `Button` (ghost/sm or primary).
+4. `ContextMenu` is for pointer-positioned menus only — not toolbar overflow.
+
 ## Editor layout
 
 1. WHEN the NLE shell renders THEN it MUST use exactly three grid rows (top chrome · program · timeline). Drawer/shortcuts MUST NOT participate in the grid (overlay layer).
 2. WHEN the timeline dock renders THEN it MUST size to its track stack (`auto`) and MUST NOT clip with a vertical scrollbar; horizontal overflow for zoom/scrub is allowed.
 3. WHEN scene/transcript clips render on a source timeline THEN visible labels MUST be truncated; full text stays in `title` / Inspect.
 
+## Timeline DS shell (Wave C)
 
 1. WHEN the cut timeline renders ticks THEN it MUST compose `TimelineRuler` (percent offsets); seek/trim math MAY stay pixel-based in app code.
 2. WHEN video/transcript/audio clips render THEN they MUST use `TimelineClip` (and `Waveform` for audio peaks) — edit handlers stay app-local.
@@ -59,3 +67,4 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 - No MUI / `@msqdx/react`.
 - Paths only via `lib/paths.ts` / `runtime-config.ts`.
 - Editor drawer uses `InspectTabs`; timeline shell uses `TimelineRuler` / `TimelineClip` / `Waveform`.
+- Toolbar overflow uses Flyout pattern; editor selects use `Select`.
