@@ -90,6 +90,8 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaAnalysis: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaBrandCheck: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/brand-check?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaSearch: (platformProjectId: string, query: string) =>
       `/api/media/search?platformProjectId=${encodeURIComponent(platformProjectId)}&q=${encodeURIComponent(query)}`,
     apiCuts: (platformProjectId: string) =>

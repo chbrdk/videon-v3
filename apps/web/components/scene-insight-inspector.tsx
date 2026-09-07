@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import { Text } from '@msqdx/ui'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
-import type { BrandCheckStatus } from '@/lib/db/brand-checks'
+import type { BrandCheckView } from '@/lib/brand-findings'
 import type { SceneInsight } from '@/lib/vision-schema'
 import { formatClock } from '@/lib/editor-time'
 
@@ -18,7 +18,7 @@ const AGE_LABELS: Record<string, string> = {
   unknown: 'Unbekannt',
 }
 
-const BRAND_STATUS_LABELS: Record<BrandCheckStatus | 'unchecked', string> = {
+const BRAND_STATUS_LABELS: Record<BrandCheckView['status'] | 'unchecked', string> = {
   unchecked: 'ungeprüft',
   queued_pending_brandion: 'wartet auf Brandion',
   running: 'läuft',
@@ -26,6 +26,21 @@ const BRAND_STATUS_LABELS: Record<BrandCheckStatus | 'unchecked', string> = {
   warn: 'warn',
   fail: 'fail',
   skipped: 'übersprungen',
+}
+
+const BRAND_REASON_LABELS: Record<string, string> = {
+  brandion_unconfigured: 'Brandion API nicht konfiguriert',
+  no_active_guideline: 'Kein Active-Pack in Brandion',
+  evidence_frame_extract_failed: 'Evidence-Frame konnte nicht extrahiert werden',
+  brandion_upstream_retryable: 'Brandion vorübergehend nicht erreichbar',
+  brandion_evaluate_rejected: 'Brandion hat die Prüfung abgelehnt',
+  brandion_network_error: 'Netzwerkfehler zu Brandion',
+}
+
+const OBSERVED_LABELS: Record<SceneInsight['observedVsInferred'], string> = {
+  observed_primary: 'überwiegend beobachtet',
+  mixed: 'gemischt beobachtet/inferred',
+  inferred_heavy: 'stark inferred',
 }
 
 function EvidenceStrip(props: {
@@ -60,18 +75,70 @@ export function SceneInsightInspector(props: {
   insight: SceneInsight
   frameRefs: SceneFrameRef[]
   playbackUrl: string | null
-  brandStatus?: BrandCheckStatus | null
+  brandCheck?: BrandCheckView | null
 }) {
   const { insight, frameRefs, playbackUrl } = props
-  const brandStatus = props.brandStatus ?? null
+  const brandCheck = props.brandCheck ?? null
+  const brandStatus = brandCheck?.status ?? null
+  const failedFindings = brandCheck?.findings.filter((finding) => !finding.passed && !finding.skipped) ?? []
+  const warnFindings = brandCheck?.findings.filter((finding) => finding.skipped) ?? []
+  const passFindings = brandCheck?.findings.filter((finding) => finding.passed && !finding.skipped) ?? []
 
   return (
     <div className="videon-scene-insight">
       <div className="videon-scene-insight__brand-row">
         <span className={`videon-scene-insight__brand-badge status-${brandStatus ?? 'unchecked'}`}>
           Brand: {BRAND_STATUS_LABELS[brandStatus ?? 'unchecked']}
+          {brandCheck && (brandCheck.failed > 0 || brandCheck.passed > 0)
+            ? ` · ${brandCheck.passed} ok / ${brandCheck.failed} fail`
+            : ''}
         </span>
+        {brandCheck?.guidelineId ? (
+          <span className="videon-scene-insight__brand-meta">Guideline {brandCheck.guidelineId}</span>
+        ) : brandCheck?.reason === 'no_active_guideline' ? (
+          <span className="videon-scene-insight__brand-meta">keine Guideline gebunden</span>
+        ) : null}
+        {brandCheck && brandCheck.evidenceFrameCount > 0 ? (
+          <span className="videon-scene-insight__brand-meta">
+            {brandCheck.evidenceFrameCount} Evidence-Frame
+            {brandCheck.evidenceFrameCount === 1 ? '' : 's'}
+          </span>
+        ) : null}
       </div>
+
+      {brandCheck?.reason ? (
+        <p className="videon-scene-insight__line">
+          {BRAND_REASON_LABELS[brandCheck.reason] ?? brandCheck.reason}
+          {brandCheck.hint ? ` — ${brandCheck.hint}` : ''}
+        </p>
+      ) : null}
+
+      {brandCheck?.detail ? (
+        <p className="videon-scene-insight__line">{brandCheck.detail}</p>
+      ) : null}
+
+      {brandCheck && brandCheck.findings.length > 0 ? (
+        <FactSection title="Brandion Findings">
+          <ul className="videon-scene-insight__list videon-scene-insight__findings">
+            {[...failedFindings, ...warnFindings, ...passFindings].slice(0, 12).map((finding) => (
+              <li
+                key={finding.ruleId}
+                className={`videon-scene-insight__finding is-${finding.skipped ? 'skip' : finding.passed ? 'pass' : 'fail'}`}
+              >
+                <strong>
+                  {finding.skipped ? 'skip' : finding.passed ? 'pass' : 'fail'} · {finding.name}
+                </strong>
+                <span>{finding.message}</span>
+                {finding.subjectValue || finding.targetValue ? (
+                  <span>
+                    {finding.subjectValue ?? '—'} → {finding.targetValue ?? '—'}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </FactSection>
+      ) : null}
 
       <FactSection title="Personen">
         {insight.people.length === 0 ? (
@@ -125,6 +192,29 @@ export function SceneInsightInspector(props: {
         )}
       </FactSection>
 
+      <FactSection title="Aktionen">
+        {insight.actions.length === 0 ? (
+          <Text role="body">Keine Aktionen erkannt.</Text>
+        ) : (
+          <ul className="videon-scene-insight__list">
+            {insight.actions.map((action, index) => (
+              <li key={`${action.label}-${index}`}>
+                <strong>{action.label}</strong>
+                <span>
+                  {formatClock(action.startMs)} – {formatClock(action.endMs)}
+                  {action.actorIds.length ? ` · ${action.actorIds.join(', ')}` : ''}
+                </span>
+                <EvidenceStrip
+                  playbackUrl={playbackUrl}
+                  frameRefs={frameRefs}
+                  evidenceFrameIds={action.evidenceFrameIds}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </FactSection>
+
       <FactSection title="Setting">
         <p className="videon-scene-insight__line">
           {insight.setting.location} · {insight.setting.timeOfDay}
@@ -166,6 +256,12 @@ export function SceneInsightInspector(props: {
             ))}
           </ul>
         )}
+      </FactSection>
+
+      <FactSection title="Beobachtung">
+        <p className="videon-scene-insight__line">
+          {OBSERVED_LABELS[insight.observedVsInferred] ?? insight.observedVsInferred}
+        </p>
       </FactSection>
 
       {insight.safetyFlags.length ? (

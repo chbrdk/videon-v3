@@ -18,7 +18,7 @@ import { useWaveformPeaks } from '@/lib/use-waveform'
 import { PipelineStatusTrack } from '@/components/pipeline-status-track'
 import { SceneInsightInspector } from '@/components/scene-insight-inspector'
 import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
-import type { BrandCheckStatus } from '@/lib/db/brand-checks'
+import type { BrandCheckView } from '@/lib/brand-findings'
 import type { SceneInsight } from '@/lib/vision-schema'
 import { paths } from '@/lib/paths'
 
@@ -30,12 +30,6 @@ type SceneItem = {
   endMs: number
   frameRefs?: SceneFrameRef[]
   insight: SceneInsight
-}
-
-type BrandCheckItem = {
-  sceneKey: string
-  status: BrandCheckStatus
-  brandionRequestId?: string | null
 }
 
 type MediaDetail = {
@@ -84,7 +78,7 @@ export function MediaEditorView({
   const [analysis, setAnalysis] = useState<AnalysisState>(null)
   const [stages, setStages] = useState<StageState[]>([])
   const [scenes, setScenes] = useState<SceneItem[]>([])
-  const [brandChecks, setBrandChecks] = useState<BrandCheckItem[]>([])
+  const [brandChecks, setBrandChecks] = useState<BrandCheckView[]>([])
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
@@ -123,7 +117,7 @@ export function MediaEditorView({
       analysis?: AnalysisState
       stages?: StageState[]
       scenes?: SceneItem[]
-      brandChecks?: BrandCheckItem[]
+      brandChecks?: BrandCheckView[]
       transcript?: TranscriptState
       stems?: { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null } | null
       error?: { message?: string }
@@ -169,13 +163,18 @@ export function MediaEditorView({
     void refresh()
   }, [refresh])
 
+  const brandStageBusy = stages.some(
+    (stage) => stage.stageKey === 'brand_compliance' && (stage.status === 'running' || stage.status === 'queued'),
+  )
+
   useEffect(() => {
-    if (!analysis || (analysis.status !== 'queued' && analysis.status !== 'running')) return
+    const analysisBusy = analysis?.status === 'queued' || analysis?.status === 'running'
+    if (!analysisBusy && !brandStageBusy) return
     const timer = window.setInterval(() => {
       void loadDetail()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [analysis, loadDetail])
+  }, [analysis, brandStageBusy, loadDetail])
 
   useEffect(() => {
     const video = videoRef.current
@@ -327,6 +326,33 @@ export function MediaEditorView({
     }
   }
 
+  const rerunBrandCheck = async () => {
+    setBusy('brand')
+    setError(null)
+    setNotice(null)
+    try {
+      const response = await fetch(paths.routes.apiMediaBrandCheck(mediaAssetId, platformProjectId), {
+        method: 'POST',
+      })
+      const body = (await response.json()) as {
+        queued?: boolean
+        sceneCount?: number
+        error?: { message?: string }
+      }
+      if (!response.ok) throw new Error(body.error?.message || 'Brand-Check konnte nicht gestartet werden')
+      setNotice(
+        body.queued
+          ? `Brand-Check gestartet (${body.sceneCount ?? 0} Szenen)`
+          : 'Brand-Check nicht queued — Queue nicht konfiguriert',
+      )
+      await loadDetail()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Brand-Check konnte nicht gestartet werden')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const saveAsCut = async (allScenes = false) => {
     if (!media) return
     const defaultName = media.originalFilename.replace(/\.[^.]+$/, '')
@@ -419,7 +445,10 @@ export function MediaEditorView({
   const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey) ?? null
   const analysisBusy = analysis?.status === 'running' || analysis?.status === 'queued'
   const analysisAttention =
-    analysisBusy || analysis?.status === 'failed' || media.lifecycleState === 'processing'
+    analysisBusy ||
+    brandStageBusy ||
+    analysis?.status === 'failed' ||
+    media.lifecycleState === 'processing'
   const sidePanelTitle =
     sidePanel === 'scenes'
       ? 'Szenen'
@@ -516,6 +545,21 @@ export function MediaEditorView({
             disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
           >
             {busy === 'analysis' ? 'Startet …' : 'Analyse'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => void rerunBrandCheck()}
+            disabled={
+              Boolean(busy) ||
+              brandStageBusy ||
+              media.lifecycleState === 'uploading' ||
+              analysis?.status !== 'succeeded' ||
+              scenes.length === 0
+            }
+            title="Brandion-Check ohne Vollanalyse erneut ausführen"
+          >
+            {busy === 'brand' || brandStageBusy ? 'Brand …' : 'Brand-Check'}
           </Button>
           <details className="videon-nle__toolbar-menu">
             <summary className="videon-nle__tool-btn">Mehr</summary>
@@ -657,8 +701,8 @@ export function MediaEditorView({
                     insight={activeScene.insight}
                     frameRefs={activeScene.frameRefs ?? []}
                     playbackUrl={playbackUrl}
-                    brandStatus={
-                      brandChecks.find((check) => check.sceneKey === activeScene.sceneKey)?.status ?? null
+                    brandCheck={
+                      brandChecks.find((check) => check.sceneKey === activeScene.sceneKey) ?? null
                     }
                   />
                 ) : null}

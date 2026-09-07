@@ -1118,6 +1118,29 @@ a.videon-home-cta.videon-capability-tile:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  align-items: baseline;
+}
+
+.videon-scene-insight__brand-meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.videon-scene-insight__findings li {
+  border-left: 2px solid var(--line);
+  padding-left: 0.45rem;
+}
+
+.videon-scene-insight__finding.is-fail {
+  border-left-color: #c45c5c;
+}
+
+.videon-scene-insight__finding.is-pass {
+  border-left-color: #4f9d6e;
+}
+
+.videon-scene-insight__finding.is-skip {
+  border-left-color: var(--muted);
 }
 
 .videon-scene-insight__brand-badge {

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkSceneImageAgainstBrandion, fetchBrandionActivePack } from '@/lib/brandion-client'
+import {
+  checkSceneFramesAgainstBrandion,
+  checkSceneImageAgainstBrandion,
+  fetchBrandionActivePack,
+} from '@/lib/brandion-client'
 
 const savedEnv = { ...process.env }
 
@@ -18,7 +22,7 @@ describe('Brandion client', () => {
       return new Response(JSON.stringify({ guidelineId: 'gl-demo', tokens: [] }), { status: 200 })
     }
     const pack = await fetchBrandionActivePack('proj-1', { fetcher })
-    expect(pack).toEqual({ guidelineId: 'gl-demo', platformProjectId: 'proj-1' })
+    expect(pack).toEqual({ guidelineId: 'gl-demo', platformProjectId: 'proj-1', tokens: [] })
   })
 
   it('maps Brandion image analysis-runs failed counts to fail', async () => {
@@ -68,5 +72,51 @@ describe('Brandion client', () => {
       fetcher,
     })
     expect(result.status).toBe('queued_pending_brandion')
+  })
+
+  it('runs one Brandion analysis per evidence frame and aggregates fail', async () => {
+    process.env.BRANDION_API_URL = 'https://brandion.invalid'
+    process.env.PLEXON_SERVICE_SECRET = 'test-secret'
+    let calls = 0
+    const fetcher: typeof fetch = async (_url, init) => {
+      calls += 1
+      const body = JSON.parse(String(init?.body)) as { input: { fileName?: string } }
+      const fail = String(body.input.fileName).includes('f1')
+      return new Response(
+        JSON.stringify({
+          id: `run-${calls}`,
+          status: 'completed',
+          passed: fail ? 0 : 1,
+          failed: fail ? 1 : 0,
+          skipped: 0,
+          results: fail
+            ? [{ ruleId: 'logo', name: 'Logo', passed: false, severity: 'error', message: 'missing' }]
+            : [{ ruleId: 'logo', name: 'Logo', passed: true, severity: 'info', message: 'ok' }],
+          observations: [],
+        }),
+        { status: 201 },
+      )
+    }
+
+    const result = await checkSceneFramesAgainstBrandion({
+      guidelineId: 'gl-demo',
+      platformProjectId: 'proj-1',
+      sceneKey: 'scene-0',
+      frames: [
+        { frameId: 'f0', timestampMs: 0, base64Jpeg: 'AA' },
+        { frameId: 'f1', timestampMs: 1000, base64Jpeg: 'BB' },
+      ],
+      brandCandidates: [],
+      fetcher,
+    })
+
+    expect(calls).toBe(2)
+    expect(result.status).toBe('fail')
+    expect(result.brandionRequestId).toBe('run-2')
+    expect(result.provenance.evidenceFrameCount).toBe(2)
+    expect(result.result.frameRuns).toEqual([
+      { frameId: 'f0', timestampMs: 0, status: 'pass', brandionRequestId: 'run-1' },
+      { frameId: 'f1', timestampMs: 1000, status: 'fail', brandionRequestId: 'run-2' },
+    ])
   })
 })

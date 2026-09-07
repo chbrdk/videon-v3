@@ -1,7 +1,12 @@
 import { listRecentFailedPipelineStages } from '@/lib/db/analysis'
-import { registerCutExportHandler, registerMediaAnalysisHandler } from '@/lib/jobs/pg-boss-queue'
+import {
+  registerBrandComplianceHandler,
+  registerCutExportHandler,
+  registerMediaAnalysisHandler,
+} from '@/lib/jobs/pg-boss-queue'
 import { runCutExport } from '@/lib/pipeline/export-cut'
 import { runMediaAnalysis } from '@/lib/pipeline/run-analysis'
+import { runBrandComplianceForAnalysis } from '@/lib/pipeline/run-brand-compliance'
 
 let started = false
 
@@ -33,8 +38,13 @@ export async function startPipelineWorker(): Promise<void> {
   await registerMediaAnalysisHandler(async (payload) => {
     await runMediaAnalysis(payload.analysisRunId)
   })
+  await registerBrandComplianceHandler(async (payload) => {
+    await runBrandComplianceForAnalysis(payload.analysisRunId)
+  })
   await registerCutExportHandler(async (payload) => {
     await runCutExport(payload.exportId)
   })
-  console.info('[VIDEON-v3] Pipeline worker subscribed to durable media analysis and cut export jobs')
+  console.info(
+    '[VIDEON-v3] Pipeline worker subscribed to durable media analysis, brand compliance, and cut export jobs',
+  )
 }

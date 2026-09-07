@@ -12,10 +12,11 @@ describe('pipeline status helpers', () => {
       { stageKey: 'ingest', status: 'succeeded' },
       { stageKey: 'probe', status: 'running', progressCompleted: 0, progressTotal: 1 },
     ])
-    expect(merged).toHaveLength(8)
+    expect(merged).toHaveLength(9)
     expect(merged[0]?.status).toBe('succeeded')
     expect(merged[1]?.status).toBe('running')
     expect(merged[2]?.status).toBe('pending')
+    expect(merged.some((stage) => stage.stageKey === 'brand_compliance')).toBe(true)
   })
 
   it('computes weighted progress including vision sub-progress', () => {

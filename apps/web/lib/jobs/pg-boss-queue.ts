@@ -1,8 +1,17 @@
 import { PgBoss } from 'pg-boss'
 import { databaseUrl } from '@/lib/runtime-config'
-import { ANALYSIS_JOB_NAME, EXPORT_JOB_NAME } from '@/lib/pipeline/constants'
+import {
+  ANALYSIS_JOB_NAME,
+  BRAND_COMPLIANCE_JOB_NAME,
+  EXPORT_JOB_NAME,
+} from '@/lib/pipeline/constants'
 
 export type MediaAnalysisJobPayload = {
+  analysisRunId: string
+  mediaAssetId: string
+}
+
+export type BrandComplianceJobPayload = {
   analysisRunId: string
   mediaAssetId: string
 }
@@ -38,6 +47,7 @@ async function getBoss(): Promise<PgBoss> {
     boss = new PgBoss({ connectionString })
     bossStart = boss.start().then(async () => {
       await ensureQueue(boss as PgBoss, ANALYSIS_JOB_NAME)
+      await ensureQueue(boss as PgBoss, BRAND_COMPLIANCE_JOB_NAME)
       await ensureQueue(boss as PgBoss, EXPORT_JOB_NAME)
       return boss as PgBoss
     })
@@ -53,6 +63,19 @@ export async function enqueueMediaAnalysisJob(payload: MediaAnalysisJobPayload):
     retryDelay: 30,
     retryBackoff: true,
     expireInSeconds: 120 * 60,
+  })
+}
+
+export async function enqueueBrandComplianceJob(
+  payload: BrandComplianceJobPayload,
+): Promise<string | null> {
+  const queue = await getBoss()
+  return queue.send(BRAND_COMPLIANCE_JOB_NAME, payload, {
+    singletonKey: `brand:${payload.analysisRunId}`,
+    retryLimit: 2,
+    retryDelay: 20,
+    retryBackoff: true,
+    expireInSeconds: 60 * 60,
   })
 }
 
@@ -83,6 +106,34 @@ export async function registerMediaAnalysisHandler(
         const message = error instanceof Error ? error.message : String(error)
         console.error(
           '[VIDEON-v3] Media analysis job failed',
+          JSON.stringify({
+            analysisRunId: payload.analysisRunId,
+            mediaAssetId: payload.mediaAssetId,
+            message,
+          }),
+        )
+        throw error
+      }
+    }
+  })
+}
+
+export async function registerBrandComplianceHandler(
+  handler: (payload: BrandComplianceJobPayload) => Promise<void>,
+): Promise<void> {
+  const queue = await getBoss()
+  await queue.work(BRAND_COMPLIANCE_JOB_NAME, { localConcurrency: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      const payload = job.data as BrandComplianceJobPayload
+      if (!payload?.analysisRunId || !payload?.mediaAssetId) {
+        throw new Error('Invalid brand compliance job payload')
+      }
+      try {
+        await handler(payload)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(
+          '[VIDEON-v3] Brand compliance job failed',
           JSON.stringify({
             analysisRunId: payload.analysisRunId,
             mediaAssetId: payload.mediaAssetId,

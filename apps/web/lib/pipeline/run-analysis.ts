@@ -21,14 +21,8 @@ import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
 import { separateAndStoreAudioStems, resolveStemMethod } from '@/lib/pipeline/audio-stems'
 import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
-import { upsertBrandCheck } from '@/lib/db/brand-checks'
-import { findWorkspaceById } from '@/lib/db/workspaces'
-import {
-  checkSceneImageAgainstBrandion,
-  fetchBrandionActivePack,
-} from '@/lib/brandion-client'
-import { isBrandionCheckConfigured } from '@/lib/runtime-config'
-import { extractFrameJpegBase64, sampleSceneFrames } from '@/lib/pipeline/frame-sample'
+import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
+import { executeBrandCompliance } from '@/lib/pipeline/run-brand-compliance'
 import { probeMediaFile } from '@/lib/pipeline/ffprobe'
 import { transcriptExcerptForScene, transcribeAudioFile, type TranscriptSegment } from '@/lib/pipeline/transcribe'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
@@ -266,107 +260,24 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
     })
 
     await runStage(analysisRunId, 'brand_compliance', fingerprint, sceneFrames.length, async () => {
-      const insights = await listSceneInsightsForAnalysis(analysisRunId)
-      const workspace = await findWorkspaceById(media.workspaceId)
-      const platformProjectId = workspace?.platformProjectId ?? ''
-      const pack =
-        isBrandionCheckConfigured() && platformProjectId
-          ? await fetchBrandionActivePack(platformProjectId, {
-              userId: analysis.requestedByPlexonUserId,
-            })
-          : null
-      const guidelineId = pack?.guidelineId ?? null
-
-      let completed = 0
-      for (const entry of insights) {
-        const candidateRefs = entry.frameRefs.filter((frame) =>
-          entry.insight.brandCandidates.some((candidate) =>
-            candidate.evidenceFrameIds.includes(frame.id),
-          ),
-        )
-        const evidenceRefs = candidateRefs.length > 0 ? candidateRefs : entry.frameRefs.slice(0, 1)
-
-        if (!isBrandionCheckConfigured()) {
-          await upsertBrandCheck({
-            mediaAssetId: media.id,
+      const result = await executeBrandCompliance({
+        analysisRunId,
+        mediaAssetId: media.id,
+        sourcePath: tempPath,
+        requestedByPlexonUserId: analysis.requestedByPlexonUserId,
+        inputFingerprint: fingerprint,
+        onProgress: async ({ completed, total }) => {
+          await upsertStageRun({
             analysisRunId,
-            sceneKey: entry.sceneKey,
-            status: 'queued_pending_brandion',
-            brandCandidates: entry.insight.brandCandidates,
-            evidenceFrameRefs: evidenceRefs,
-            provenance: { reason: 'brandion_unconfigured', schemaVersion: entry.insight.schemaVersion },
+            stageKey: 'brand_compliance',
+            inputFingerprint: fingerprint,
+            status: 'running',
+            progressCompleted: completed,
+            progressTotal: total,
           })
-        } else if (!guidelineId) {
-          await upsertBrandCheck({
-            mediaAssetId: media.id,
-            analysisRunId,
-            sceneKey: entry.sceneKey,
-            status: 'skipped',
-            brandCandidates: entry.insight.brandCandidates,
-            evidenceFrameRefs: evidenceRefs,
-            provenance: {
-              reason: 'no_active_guideline',
-              platformProjectId,
-              schemaVersion: entry.insight.schemaVersion,
-            },
-          })
-        } else {
-          const timestampMs =
-            evidenceRefs[0]?.timestampMs ??
-            Math.floor((entry.startMs + entry.endMs) / 2)
-          const jpeg = await extractFrameJpegBase64(tempPath, timestampMs)
-          if (!jpeg) {
-            await upsertBrandCheck({
-              mediaAssetId: media.id,
-              analysisRunId,
-              sceneKey: entry.sceneKey,
-              status: 'queued_pending_brandion',
-              brandCandidates: entry.insight.brandCandidates,
-              evidenceFrameRefs: evidenceRefs,
-              provenance: { reason: 'evidence_frame_extract_failed', guidelineId },
-            })
-          } else {
-            const check = await checkSceneImageAgainstBrandion({
-              guidelineId,
-              platformProjectId,
-              sceneKey: entry.sceneKey,
-              base64Jpeg: jpeg.base64,
-              brandCandidates: entry.insight.brandCandidates.map((candidate) => ({
-                text: candidate.text,
-                kind: candidate.kind,
-                confidence: candidate.confidence,
-              })),
-              userId: analysis.requestedByPlexonUserId,
-            })
-            await upsertBrandCheck({
-              mediaAssetId: media.id,
-              analysisRunId,
-              sceneKey: entry.sceneKey,
-              status: check.status,
-              brandCandidates: entry.insight.brandCandidates,
-              evidenceFrameRefs: evidenceRefs,
-              brandionRequestId: check.brandionRequestId,
-              result: check.result,
-              provenance: {
-                ...check.provenance,
-                schemaVersion: entry.insight.schemaVersion,
-                evidenceTimestampMs: timestampMs,
-              },
-            })
-          }
-        }
-
-        completed += 1
-        await upsertStageRun({
-          analysisRunId,
-          stageKey: 'brand_compliance',
-          inputFingerprint: fingerprint,
-          status: 'running',
-          progressCompleted: completed,
-          progressTotal: insights.length || 1,
-        })
-      }
-      return insights.length
+        },
+      })
+      return result.sceneCount
     })
 
     await runStage(analysisRunId, 'aggregate', fingerprint, 1, async () => true)
