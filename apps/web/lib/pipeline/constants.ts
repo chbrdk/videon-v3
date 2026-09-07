@@ -9,6 +9,7 @@ export const PIPELINE_STAGES = [
   'frame_sample',
   'audio',
   'vision',
+  'brand_compliance',
   'aggregate',
   'index',
 ] as const

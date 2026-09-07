@@ -11,6 +11,7 @@ import { resolveMediaInWorkspace, resolveWorkspaceForMediaRequest } from '@/lib/
 import { requireSessionUserId } from '@/lib/session-user'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMedia } from '@/lib/db/media-stems'
+import { listBrandChecksForAnalysis } from '@/lib/db/brand-checks'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +54,7 @@ export async function GET(request: Request, context: RouteContext) {
   const analysis = await findLatestAnalysisForMedia(resolved.media.id)
   const stages = analysis ? await listStagesForAnalysis(analysis.id) : []
   const scenes = analysis ? await listSceneInsightsForAnalysis(analysis.id) : []
+  const brandChecks = analysis ? await listBrandChecksForAnalysis(analysis.id) : []
   const transcript = await findLatestTranscriptForMedia(resolved.media.id)
   const stemRows = await listLatestAudioStemsForMedia(resolved.media.id)
   const voice = stemRows.find((stem) => stem.stemKind === 'voice')
@@ -71,6 +73,11 @@ export async function GET(request: Request, context: RouteContext) {
     analysis,
     stages,
     scenes,
+    brandChecks: brandChecks.map((check) => ({
+      sceneKey: check.sceneKey,
+      status: check.status,
+      brandionRequestId: check.brandionRequestId,
+    })),
     transcript,
     stems,
   })

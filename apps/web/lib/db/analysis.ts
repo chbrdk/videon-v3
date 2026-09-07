@@ -6,7 +6,7 @@ import {
   resolveRequestedCapabilities,
   type PipelineStageKey,
 } from '@/lib/pipeline/constants'
-import { SCENE_INSIGHT_SCHEMA_VERSION } from '@/lib/vision-schema'
+import { SCENE_INSIGHT_SCHEMA_VERSION, emptySceneInsight, toSceneInsightView } from '@/lib/vision-schema'
 import type { SceneInsight } from '@/lib/vision-schema'
 import { randomUUID } from 'node:crypto'
 
@@ -298,11 +298,26 @@ export async function findLatestAnalysisForMedia(mediaAssetId: string): Promise<
   return result.rows[0] ? mapAnalysis(result.rows[0]) : null
 }
 
+export type SceneFrameRef = { id: string; timestampMs: number }
+
 export type SceneInsightRecord = {
   sceneKey: string
   startMs: number
   endMs: number
   insight: SceneInsight
+  frameRefs: SceneFrameRef[]
+}
+
+function asFrameRefs(value: unknown): SceneFrameRef[] {
+  if (!Array.isArray(value)) return []
+  const out: SceneFrameRef[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const record = item as Record<string, unknown>
+    if (typeof record.id !== 'string' || typeof record.timestampMs !== 'number') continue
+    out.push({ id: record.id, timestampMs: record.timestampMs })
+  }
+  return out
 }
 
 export async function listSceneInsightsForAnalysis(analysisRunId: string): Promise<SceneInsightRecord[]> {
@@ -310,20 +325,26 @@ export async function listSceneInsightsForAnalysis(analysisRunId: string): Promi
     scene_key: string
     start_ms: number
     end_ms: number
-    insight: SceneInsight
+    insight: unknown
+    frame_refs: unknown
+    schema_version: string
   }>(
-    `select scene_key, start_ms, end_ms, insight
+    `select distinct on (scene_key)
+            scene_key, start_ms, end_ms, insight, frame_refs, schema_version
        from scene_insights
       where analysis_run_id = $1
-      order by start_ms asc`,
+      order by scene_key, schema_version desc, start_ms asc`,
     [analysisRunId],
   )
-  return result.rows.map((row) => ({
-    sceneKey: row.scene_key,
-    startMs: row.start_ms,
-    endMs: row.end_ms,
-    insight: row.insight,
-  }))
+  return result.rows
+    .map((row) => ({
+      sceneKey: row.scene_key,
+      startMs: row.start_ms,
+      endMs: row.end_ms,
+      insight: toSceneInsightView(row.insight) ?? emptySceneInsight(),
+      frameRefs: asFrameRefs(row.frame_refs),
+    }))
+    .sort((a, b) => a.startMs - b.startMs)
 }
 
 export async function createAnalysisRunForMedia(input: {

@@ -3,6 +3,7 @@ import { defaultVisionLane, openRouterProviderPolicy, type VisionLane } from './
 import {
   parseSceneInsight,
   sceneInsightJsonSchema,
+  SCENE_ANALYSIS_PROMPT_VERSION,
   SCENE_INSIGHT_SCHEMA_VERSION,
   type SceneInsight,
 } from './vision-schema'
@@ -23,7 +24,7 @@ export type VisionProvenance = {
   actualModel: string
   provider: string | null
   requestId: string | null
-  promptVersion: 'videon.scene-analysis-prompt.v1'
+  promptVersion: typeof SCENE_ANALYSIS_PROMPT_VERSION
   schemaVersion: typeof SCENE_INSIGHT_SCHEMA_VERSION
   usage: {
     promptTokens: number | null
@@ -55,10 +56,15 @@ type VisionRequestProfile = {
 function scenePrompt(input: AnalyzeSceneInput): string {
   const frameIds = input.frames.map((frame) => frame.id).join(', ')
   return [
-    `Return one JSON object matching ${SCENE_INSIGHT_SCHEMA_VERSION}.`,
+    `Return one JSON object matching ${SCENE_INSIGHT_SCHEMA_VERSION} (${SCENE_ANALYSIS_PROMPT_VERSION}).`,
     `Locale: ${input.locale}. Scene range: ${input.startMs}ms–${input.endMs}ms.`,
     `Allowed evidenceFrameIds: ${frameIds}.`,
     'Use only those frame ids for evidenceFrameIds. Do not invent ids.',
+    'Split people and objects. People are observed descriptions only — never identity claims.',
+    'apparentAgeRange must be one of: child, teen, young_adult, middle_adult, older_adult, unknown.',
+    'object.category must be one of: vehicle, product, prop, animal, text_on_screen, other.',
+    'brandCandidates are OCR/logo hints only — never invent Brandion entity IDs.',
+    'Include setting.environment, composition, actions.actorIds, observedVsInferred.',
     'Use empty arrays when evidence is absent. Keep all text concise and factual.',
     input.transcriptExcerpt ? `Transcript excerpt: ${input.transcriptExcerpt.slice(0, 4_000)}` : '',
   ]
@@ -81,7 +87,7 @@ function responseFormatForProfile(profile: VisionRequestProfile) {
     return {
       type: 'json_schema',
       json_schema: {
-        name: 'videon_scene_insight_v1',
+        name: 'videon_scene_insight_v2',
         strict: true,
         schema: sceneInsightJsonSchema,
       },
@@ -225,7 +231,7 @@ export async function analyzeSceneWithOpenRouter(
         actualModel: typeof payload.model === 'string' ? payload.model : lane.model,
         provider: typeof payload.provider === 'string' ? payload.provider : null,
         requestId: response.headers.get('x-request-id'),
-        promptVersion: 'videon.scene-analysis-prompt.v1',
+        promptVersion: SCENE_ANALYSIS_PROMPT_VERSION,
         schemaVersion: SCENE_INSIGHT_SCHEMA_VERSION,
         usage: {
           promptTokens: asNumber(usage.prompt_tokens),

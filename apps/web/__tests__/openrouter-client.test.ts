@@ -8,6 +8,38 @@ afterEach(() => {
   process.env = { ...savedEnv }
 })
 
+const validV2 = {
+  schemaVersion: 'videon.scene-insight.v2',
+  summary: 'A person speaks.',
+  objects: [],
+  people: [
+    {
+      id: 'p1',
+      count: 1,
+      apparentAgeRange: 'young_adult',
+      apparentPresentation: [],
+      role: 'speaker',
+      evidenceFrameIds: ['frame-1'],
+    },
+  ],
+  setting: { location: 'unknown', timeOfDay: 'unknown', environment: [], details: [] },
+  composition: { shotType: 'medium', cameraMotion: 'static', dominantColors: [] },
+  actions: [
+    {
+      label: 'speaking',
+      startMs: 0,
+      endMs: 2000,
+      actorIds: ['p1'],
+      evidenceFrameIds: ['frame-1'],
+    },
+  ],
+  brandCandidates: [],
+  mood: [],
+  notableDetails: [],
+  safetyFlags: [],
+  observedVsInferred: 'observed_primary',
+}
+
 describe('OpenRouter scene gateway', () => {
   it('sends text before frames and validates the returned Qwen3.7 JSON', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
@@ -15,29 +47,17 @@ describe('OpenRouter scene gateway', () => {
     process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
     process.env.VIDEON_OPENROUTER_DATA_COLLECTION = 'deny'
     const fetcher: typeof fetch = async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as { messages: Array<{ content: Array<{ type: string }> }>; provider: Record<string, unknown> }
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<{ content: Array<{ type: string }> }>
+        provider: Record<string, unknown>
+      }
       expect(body.messages[0].content.map((item) => item.type)).toEqual(['text', 'image_url'])
       expect(body.provider).toMatchObject({ data_collection: 'deny' })
       return new Response(
         JSON.stringify({
           model: 'qwen/qwen3.7-flash',
           provider: 'Alibaba Cloud Int.',
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  schemaVersion: 'videon.scene-insight.v1',
-                  summary: 'A person speaks.',
-                  subjects: [{ label: 'person', attributes: [], evidenceFrameIds: ['frame-1'] }],
-                  actions: [{ label: 'speaking', startMs: 0, endMs: 2000, evidenceFrameIds: ['frame-1'] }],
-                  setting: { location: 'unknown', timeOfDay: 'unknown', details: [] },
-                  mood: [],
-                  notableDetails: [],
-                  safetyFlags: [],
-                }),
-              },
-            },
-          ],
+          choices: [{ message: { content: JSON.stringify(validV2) } }],
           usage: { prompt_tokens: 12, completion_tokens: 23, cost: 0.0001 },
         }),
         { status: 200, headers: { 'x-request-id': 'or-test-1' } },
@@ -56,6 +76,9 @@ describe('OpenRouter scene gateway', () => {
     )
 
     expect(result.insight.summary).toBe('A person speaks.')
+    expect(result.insight.people[0]?.id).toBe('p1')
+    expect(result.provenance.promptVersion).toBe('videon.scene-analysis-prompt.v2')
+    expect(result.provenance.schemaVersion).toBe('videon.scene-insight.v2')
     expect(result.provenance.usage.costUsd).toBe('0.000100')
   })
 
@@ -64,11 +87,17 @@ describe('OpenRouter scene gateway', () => {
     process.env.OPENROUTER_API_BASE_URL = 'https://router.invalid/api/v1'
     process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
     const fetcher: typeof fetch = async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as { response_format: Record<string, unknown>; provider?: Record<string, unknown>; model: string }
+      const body = JSON.parse(String(init?.body)) as {
+        response_format: Record<string, unknown>
+        provider?: Record<string, unknown>
+        model: string
+      }
       expect(body.model).toBe('qwen/qwen3.7-flash')
       expect(body.response_format).toMatchObject({ type: 'json_schema' })
       expect(body.provider?.require_parameters).toBeUndefined()
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 })
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), {
+        status: 200,
+      })
     }
     await expect(
       analyzeSceneWithOpenRouter(
@@ -113,14 +142,10 @@ describe('OpenRouter scene gateway', () => {
             {
               message: {
                 content: JSON.stringify({
-                  schemaVersion: 'videon.scene-insight.v1',
+                  ...validV2,
                   summary: 'Recovered after routing fallback.',
-                  subjects: [],
+                  people: [],
                   actions: [],
-                  setting: { location: 'unknown', timeOfDay: 'unknown', details: [] },
-                  mood: [],
-                  notableDetails: [],
-                  safetyFlags: [],
                 }),
               },
             },

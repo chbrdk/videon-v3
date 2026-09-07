@@ -21,6 +21,7 @@ import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
 import { separateAndStoreAudioStems, resolveStemMethod } from '@/lib/pipeline/audio-stems'
 import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
+import { upsertPendingBrandCheck } from '@/lib/db/brand-checks'
 import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
 import { probeMediaFile } from '@/lib/pipeline/ffprobe'
 import { transcriptExcerptForScene, transcribeAudioFile, type TranscriptSegment } from '@/lib/pipeline/transcribe'
@@ -258,6 +259,39 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
       }
     })
 
+    await runStage(analysisRunId, 'brand_compliance', fingerprint, sceneFrames.length, async () => {
+      const insights = await listSceneInsightsForAnalysis(analysisRunId)
+      let completed = 0
+      for (const entry of insights) {
+        await upsertPendingBrandCheck({
+          mediaAssetId: media.id,
+          analysisRunId,
+          sceneKey: entry.sceneKey,
+          brandCandidates: entry.insight.brandCandidates,
+          evidenceFrameRefs: entry.frameRefs.filter((frame) =>
+            entry.insight.brandCandidates.some((candidate) =>
+              candidate.evidenceFrameIds.includes(frame.id),
+            ),
+          ),
+          provenance: {
+            schemaVersion: entry.insight.schemaVersion,
+            softSkip: true,
+            reason: 'brandion_api_pending',
+          },
+        })
+        completed += 1
+        await upsertStageRun({
+          analysisRunId,
+          stageKey: 'brand_compliance',
+          inputFingerprint: fingerprint,
+          status: 'running',
+          progressCompleted: completed,
+          progressTotal: insights.length || 1,
+        })
+      }
+      return insights.length
+    })
+
     await runStage(analysisRunId, 'aggregate', fingerprint, 1, async () => true)
     await runStage(analysisRunId, 'index', fingerprint, 1, async () => {
       const insights = await listSceneInsightsForAnalysis(analysisRunId)
@@ -271,6 +305,9 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
           summary: entry.insight.summary,
           mood: entry.insight.mood,
           location: entry.insight.setting?.location,
+          objectLabels: entry.insight.objects.map((object) => object.label),
+          peopleRoles: entry.insight.people.map((person) => person.role),
+          brandHints: entry.insight.brandCandidates.map((candidate) => candidate.text),
         })),
       })
       return insights.length

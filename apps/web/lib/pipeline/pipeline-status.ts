@@ -30,6 +30,7 @@ export const PIPELINE_STAGE_LABELS: Record<PipelineStageKey, string> = {
   frame_sample: 'Frames',
   audio: 'Audio',
   vision: 'Vision',
+  brand_compliance: 'Brand-Check',
   aggregate: 'Zusammenführung',
   index: 'Index',
 }
@@ -41,6 +42,7 @@ export const PIPELINE_STAGE_HINTS: Record<PipelineStageKey, string> = {
   frame_sample: 'Stichproben pro Szene',
   audio: 'Tonspur, Stems und Transkript',
   vision: 'KI-Szenenanalyse über OpenRouter',
+  brand_compliance: 'Brandion-Guideline-Prüfung (vorbereitet)',
   aggregate: 'Ergebnisse werden zusammengeführt',
   index: 'Suche und Metadaten-Index',
 }

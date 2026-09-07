@@ -16,19 +16,26 @@ import { normalizeMediaPlaybackUrl } from '@/lib/media-playback-url'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import { useWaveformPeaks } from '@/lib/use-waveform'
 import { PipelineStatusTrack } from '@/components/pipeline-status-track'
+import { SceneInsightInspector } from '@/components/scene-insight-inspector'
 import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
+import type { BrandCheckStatus } from '@/lib/db/brand-checks'
+import type { SceneInsight } from '@/lib/vision-schema'
 import { paths } from '@/lib/paths'
+
+type SceneFrameRef = { id: string; timestampMs: number }
 
 type SceneItem = {
   sceneKey: string
   startMs: number
   endMs: number
-  insight: {
-    summary: string
-    mood: string[]
-    setting?: { location: string; timeOfDay: string }
-    subjects?: Array<{ label: string }>
-  }
+  frameRefs?: SceneFrameRef[]
+  insight: SceneInsight
+}
+
+type BrandCheckItem = {
+  sceneKey: string
+  status: BrandCheckStatus
+  brandionRequestId?: string | null
 }
 
 type MediaDetail = {
@@ -77,6 +84,7 @@ export function MediaEditorView({
   const [analysis, setAnalysis] = useState<AnalysisState>(null)
   const [stages, setStages] = useState<StageState[]>([])
   const [scenes, setScenes] = useState<SceneItem[]>([])
+  const [brandChecks, setBrandChecks] = useState<BrandCheckItem[]>([])
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
@@ -115,6 +123,7 @@ export function MediaEditorView({
       analysis?: AnalysisState
       stages?: StageState[]
       scenes?: SceneItem[]
+      brandChecks?: BrandCheckItem[]
       transcript?: TranscriptState
       stems?: { voicePeaks?: number[]; musicPeaks?: number[]; method?: string | null } | null
       error?: { message?: string }
@@ -124,6 +133,7 @@ export function MediaEditorView({
     setAnalysis(body.analysis ?? null)
     setStages(body.stages ?? [])
     setScenes(body.scenes ?? [])
+    setBrandChecks(body.brandChecks ?? [])
     setTranscript(body.transcript ?? null)
     setVoicePeaks(body.stems?.voicePeaks ?? [])
     setMusicPeaks(body.stems?.musicPeaks ?? [])
@@ -614,25 +624,41 @@ export function MediaEditorView({
                 {analysisBusy ? 'Analyse läuft — Szenen erscheinen nach Abschluss.' : 'Noch keine Szenen.'}
               </Text>
             ) : (
-              <ul className="videon-editor__scene-list">
-                {scenes.map((scene) => (
-                  <li key={scene.sceneKey}>
-                    <button
-                      type="button"
-                      className={`videon-nle__bin-item${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-                      onClick={() => {
-                        seekTo(scene.startMs)
-                        setActiveSceneKey(scene.sceneKey)
-                      }}
-                    >
-                      <span className="videon-nle__bin-item-title">{scene.insight.summary}</span>
-                      <span className="videon-nle__bin-item-meta">
-                        {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="videon-scene-insight__drawer">
+                <ul className="videon-editor__scene-list">
+                  {scenes.map((scene) => {
+                    const brand = brandChecks.find((check) => check.sceneKey === scene.sceneKey)
+                    return (
+                      <li key={scene.sceneKey}>
+                        <button
+                          type="button"
+                          className={`videon-nle__bin-item${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
+                          onClick={() => {
+                            seekTo(scene.startMs)
+                            setActiveSceneKey(scene.sceneKey)
+                          }}
+                        >
+                          <span className="videon-nle__bin-item-title">{scene.insight.summary}</span>
+                          <span className="videon-nle__bin-item-meta">
+                            {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
+                            {brand ? ` · Brand: ${brand.status}` : ''}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {activeScene ? (
+                  <SceneInsightInspector
+                    insight={activeScene.insight}
+                    frameRefs={activeScene.frameRefs ?? []}
+                    playbackUrl={playbackUrl}
+                    brandStatus={
+                      brandChecks.find((check) => check.sceneKey === activeScene.sceneKey)?.status ?? null
+                    }
+                  />
+                ) : null}
+              </div>
             )}
           </>
         ) : null}

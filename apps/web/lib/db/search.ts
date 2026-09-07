@@ -18,7 +18,15 @@ export async function replaceSearchEntriesForAnalysis(input: {
   mediaAssetId: string
   analysisRunId: string
   mediaFilename: string
-  scenes: Array<{ sceneKey: string; summary: string; mood: string[]; location?: string }>
+  scenes: Array<{
+    sceneKey: string
+    summary: string
+    mood: string[]
+    location?: string
+    objectLabels?: string[]
+    peopleRoles?: string[]
+    brandHints?: string[]
+  }>
 }): Promise<void> {
   await databasePool().query(`delete from media_search_entries where analysis_run_id = $1`, [
     input.analysisRunId,
@@ -31,7 +39,16 @@ export async function replaceSearchEntriesForAnalysis(input: {
     },
     ...input.scenes.map((scene) => ({
       sceneKey: scene.sceneKey,
-      searchText: [scene.summary, scene.location, ...scene.mood].filter(Boolean).join(' '),
+      searchText: [
+        scene.summary,
+        scene.location,
+        ...scene.mood,
+        ...(scene.objectLabels ?? []),
+        ...(scene.peopleRoles ?? []),
+        ...(scene.brandHints ?? []),
+      ]
+        .filter(Boolean)
+        .join(' '),
     })),
   ]
 
