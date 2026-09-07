@@ -27,8 +27,9 @@ Model is loaded **once at process start** and kept in memory (`uvicorn --workers
 
 | Method | Quality | Where |
 |--------|---------|--------|
-| `demucs_htdemucs_residual` | **Default:** raw Demucs vocals + `mix − vocals` for music (clean A1) | Stem worker |
-| `demucs_htdemucs_soft` | Demucs + Wiener softmask on mix (`STEM_SOFTMASK=1`) — often re-bleeds into A1 | Optional |
+| `demucs_htdemucs_ft_residual` | **Default:** fine-tuned Demucs bag + residual music | Stem worker |
+| `demucs_htdemucs_residual` | Faster base model (`STEM_MODEL=htdemucs`) | Optional |
+| `demucs_*_soft` | Wiener softmask (`STEM_SOFTMASK=1`) — often re-bleeds into A1 | Optional |
 | `ffmpeg_center_band` | Approximation | Worker or local fallback script |
 | `*_fallback` | Demucs failed → ffmpeg | Worker / script |
 
@@ -36,13 +37,13 @@ Worker knobs (env):
 
 | Env | Default | Notes |
 |-----|---------|--------|
-| `STEM_SHIFTS` | `2` | Higher = better isolation, slower |
+| `STEM_MODEL` | `htdemucs_ft` | Best quality bag; `htdemucs` = faster |
+| `STEM_SHIFTS` | `1` | Extra shifts on top of ft bag (costly) |
 | `STEM_OVERLAP` | `0.5` | Chunk overlap |
 | `STEM_SOFTMASK` | `0` | Keep off for clean voice |
-| `STEM_MODEL` | `htdemucs` | `htdemucs_ft` = better, ~4× cost |
 
 ## UI
 
 - Default: **Voice/Music (Demucs)** → requires stem worker URL in staging.
 - Re-run analysis after stem worker quality changes so stems are rewritten.
-- „Letzter Stem-Lauf“ should show `demucs_htdemucs_residual` (not `ffmpeg…_fallback` / soft).
+- „Letzter Stem-Lauf“ should show `demucs_htdemucs_ft_residual` (not soft / ffmpeg fallback).

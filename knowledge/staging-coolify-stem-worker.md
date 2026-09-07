@@ -33,6 +33,7 @@ curl -s https://nodc0dxwwwnpjc2uvk0snrff.projects-a.plygrnd.tech/health
 ```
 
 Then re-run media analysis with Stem method **Voice/Music (Demucs)**.  
-„Letzter Stem-Lauf“ should show `demucs_htdemucs_residual` (not soft / ffmpeg fallback).
+„Letzter Stem-Lauf“ should show `demucs_htdemucs_ft_residual` (not soft / ffmpeg fallback).
 
-Worker quality envs (defaults in image code): `STEM_SHIFTS=2`, `STEM_SOFTMASK=0`.
+Worker quality envs: `STEM_MODEL=htdemucs_ft`, `STEM_SHIFTS=1`, `STEM_SOFTMASK=0`.  
+First deploy after switching to `htdemucs_ft` downloads the fine-tuned bag (large / slow).

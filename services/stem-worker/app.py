@@ -20,16 +20,16 @@ from fastapi.responses import Response
 PORT = int(os.environ.get("PORT", "8091"))
 DEVICE = os.environ.get("TORCH_DEVICE", "cpu")
 BUCKETS = 240
-# Time shifts improve isolation (Demucs paper). CPU cost scales ~linear with shifts.
-SHIFTS = max(0, int(os.environ.get("STEM_SHIFTS", "2")))
+# Time shifts improve isolation; htdemucs_ft already bags 4 fine-tunes — default 1.
+SHIFTS = max(0, int(os.environ.get("STEM_SHIFTS", "1")))
 OVERLAP = float(os.environ.get("STEM_OVERLAP", "0.5"))
 # Softmask re-partitions the MIX into voice/music and often re-bleeds music into A1.
 # Default OFF: keep raw Demucs vocals; music = mix − vocals (clean A1, complementary A2).
 SOFTMASK = os.environ.get("STEM_SOFTMASK", "0").strip() in ("1", "true", "True")
-# htdemucs = warm default; htdemucs_ft = better, ~4× slower / more RAM (set via env).
-_MODEL_NAME = os.environ.get("STEM_MODEL", "htdemucs").strip() or "htdemucs"
+# Staging default: fine-tuned bag. Override with STEM_MODEL=htdemucs for faster/cheaper.
+_MODEL_NAME = os.environ.get("STEM_MODEL", "htdemucs_ft").strip() or "htdemucs_ft"
 
-app = FastAPI(title="VIDEON stem worker", version="1.2.0")
+app = FastAPI(title="VIDEON stem worker", version="1.3.0")
 
 _MODEL = None
 

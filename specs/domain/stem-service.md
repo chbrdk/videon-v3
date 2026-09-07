@@ -17,14 +17,14 @@ Spawning `python3 -m demucs` per analysis job reloads `htdemucs` every time (min
 | Health | `GET /health` → `{ ok, modelLoaded, device }` |
 | Separate | `POST /v1/separate` multipart `file` + `method` (`demucs` \| `ffmpeg_mid_side`) |
 | Response | multipart: `meta` (JSON) + `voice` WAV + `music` WAV |
-| Model | `STEM_MODEL` (default `htdemucs`) loaded **once at startup**, kept in memory; inference on `cpu` |
+| Model | `STEM_MODEL` (default `htdemucs_ft`) loaded **once at startup**, kept in memory; inference on `cpu` |
 | Coolify | Dedicated always-on application in project VIDEON (not scaled to zero) |
 
 ## Quality (Voice / Music)
 
 1. WHEN method is Demucs AND softmask is off (default) THEN Voice MUST be the raw Demucs `vocals` stem and Music MUST be `mix − vocals` (residual). Softmask MUST NOT be the default — it re-partitions the mix and often bleeds music into Voice.
-2. WHEN Demucs runs THEN the worker SHOULD use `STEM_SHIFTS ≥ 2` for better isolation (CPU cost scales with shifts).
-3. WHERE operators need maximum quality THEN `STEM_MODEL=htdemucs_ft` MAY be set (slower / more RAM); default remains `htdemucs`.
+2. WHEN Demucs runs THEN the worker SHOULD use the fine-tuned bag (`STEM_MODEL=htdemucs_ft` by default). Operators MAY set `STEM_MODEL=htdemucs` for cheaper/faster runs.
+3. WHERE extra isolation is needed THEN `STEM_SHIFTS ≥ 1` MAY be raised; with `htdemucs_ft` the default SHOULD stay `1` because the bag already ensembles four fine-tunes.
 
 ## Client (VIDEON web/worker)
 
@@ -35,5 +35,5 @@ Spawning `python3 -m demucs` per analysis job reloads `htdemucs` every time (min
 ## Acceptance
 
 1. Stem worker process stays up; `/health` reports `modelLoaded: true` without per-request reload.
-2. Analysis with Demucs capability records `demucs_htdemucs_residual` (or `demucs_<model>_residual` / soft variant when opted in) — not silent ffmpeg fallback.
+2. Analysis with Demucs capability records `demucs_htdemucs_ft_residual` (or `demucs_<model>_residual` / soft variant when opted in) — not silent ffmpeg fallback.
 3. Paths/env documented in `knowledge/paths.md` / `.env.example`.
