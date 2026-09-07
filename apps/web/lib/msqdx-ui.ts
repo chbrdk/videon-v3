@@ -60,6 +60,19 @@ export type {
 export { InspectSection } from '../../../../msqdx-ui/packages/ui/src/components/InspectSection'
 export { InspectTabs } from '../../../../msqdx-ui/packages/ui/src/components/InspectTabs'
 export { ScrollArea } from '../../../../msqdx-ui/packages/ui/src/components/ScrollArea'
+export { Stack } from '../../../../msqdx-ui/packages/ui/src/components/Stack'
+export type { StackProps } from '../../../../msqdx-ui/packages/ui/src/components/Stack'
+export { Divider } from '../../../../msqdx-ui/packages/ui/src/components/Divider'
+export { ChatKeyValueList } from '../../../../msqdx-ui/packages/ui/src/components/ChatKeyValueList'
+export type {
+  ChatKeyValueItem,
+  ChatKeyValueListProps,
+} from '../../../../msqdx-ui/packages/ui/src/components/ChatKeyValueList'
+export { ChatEntityGrid } from '../../../../msqdx-ui/packages/ui/src/components/ChatEntityGrid'
+export type {
+  ChatEntityItem,
+  ChatEntityGridProps,
+} from '../../../../msqdx-ui/packages/ui/src/components/ChatEntityGrid'
 export { Hint } from '../../../../msqdx-ui/packages/ui/src/components/Hint'
 export { FilterRow } from '../../../../msqdx-ui/packages/ui/src/components/FilterRow'
 export {

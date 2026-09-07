@@ -10,3 +10,5 @@ export { Tooltip } from '../../../../msqdx-ui/packages/ui/src/components/Tooltip
 export type { TooltipProps } from '../../../../msqdx-ui/packages/ui/src/components/Tooltip'
 export { Flyout, useFlyout } from '../../../../msqdx-ui/packages/ui/src/components/Flyout'
 export type { FlyoutProps } from '../../../../msqdx-ui/packages/ui/src/components/Flyout'
+export { ChatCollapsible } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'
+export type { ChatCollapsibleProps } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'

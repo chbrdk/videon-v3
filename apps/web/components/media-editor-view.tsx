@@ -24,6 +24,7 @@ import {
 } from '@/lib/use-program-audio-mixer'
 import { PipelineStatusTrack } from '@/components/pipeline-status-track'
 import { SceneInsightInspector } from '@/components/scene-insight-inspector'
+import { SceneInspectNavigator } from '@/components/scene-inspect-navigator'
 import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
 import type { BrandCheckView } from '@/lib/brand-findings'
 import type { SceneInsight } from '@/lib/vision-schema'
@@ -775,30 +776,21 @@ export function MediaEditorView({
                 {analysisBusy ? 'Analyse läuft — Szenen erscheinen nach Abschluss.' : 'Noch keine Szenen.'}
               </Text>
             ) : (
-              <div className="videon-scene-insight__drawer">
-                <ul className="videon-editor__scene-list">
-                  {scenes.map((scene) => {
-                    const brand = brandChecks.find((check) => check.sceneKey === scene.sceneKey)
-                    return (
-                      <li key={scene.sceneKey}>
-                        <button
-                          type="button"
-                          className={`videon-nle__bin-item${activeSceneKey === scene.sceneKey ? ' is-active' : ''}`}
-                          onClick={() => {
-                            seekTo(scene.startMs)
-                            setActiveSceneKey(scene.sceneKey)
-                          }}
-                        >
-                          <span className="videon-nle__bin-item-title">{scene.insight.summary}</span>
-                          <span className="videon-nle__bin-item-meta">
-                            {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
-                            {brand ? ` · Brand: ${brand.status}` : ''}
-                          </span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
+              <div className="videon-scene-inspect" data-testid="scene-inspect-drawer">
+                <SceneInspectNavigator
+                  scenes={scenes.map((scene) => ({
+                    sceneKey: scene.sceneKey,
+                    summary: scene.insight.summary,
+                    startMs: scene.startMs,
+                    endMs: scene.endMs,
+                    brand: brandChecks.find((check) => check.sceneKey === scene.sceneKey) ?? null,
+                  }))}
+                  activeSceneKey={activeSceneKey}
+                  onSelect={(sceneKey, startMs) => {
+                    seekTo(startMs)
+                    setActiveSceneKey(sceneKey)
+                  }}
+                />
                 {activeScene ? (
                   <SceneInsightInspector
                     insight={activeScene.insight}
@@ -808,7 +800,11 @@ export function MediaEditorView({
                       brandChecks.find((check) => check.sceneKey === activeScene.sceneKey) ?? null
                     }
                   />
-                ) : null}
+                ) : (
+                  <Text role="meta" as="p">
+                    Szene in der Liste wählen, um Details zu sehen.
+                  </Text>
+                )}
               </div>
             )}
           </>
