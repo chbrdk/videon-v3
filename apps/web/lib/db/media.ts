@@ -33,6 +33,12 @@ export type MediaAssetDetail = MediaAsset & {
   frameRate: number | null
 }
 
+/** List/browse payload — duration + latest analysis for Mediathek cards. */
+export type MediaBrowseItem = MediaAsset & {
+  durationMs: number | null
+  latestAnalysisStatus: string | null
+}
+
 type MediaRow = {
   id: string
   workspace_id: string
@@ -49,6 +55,7 @@ type MediaRow = {
   frame_rate: string | number | null
   created_at: Date | string
   updated_at: Date | string
+  latest_analysis_status?: string | null
 }
 
 function mapMedia(row: MediaRow): MediaAsset {
@@ -81,9 +88,16 @@ const MEDIA_SELECT_COLUMNS = `id, workspace_id, created_by_plexon_user_id, stora
             bytes, checksum_sha256, lifecycle_state, duration_ms, width, height, frame_rate,
             created_at, updated_at`
 
-export async function listMediaForWorkspace(workspaceId: string): Promise<MediaAsset[]> {
+export async function listMediaForWorkspace(workspaceId: string): Promise<MediaBrowseItem[]> {
   const result = await databasePool().query<MediaRow>(
-    `select ${MEDIA_SELECT_COLUMNS}
+    `select ${MEDIA_SELECT_COLUMNS},
+            (
+              select ar.status
+                from analysis_runs ar
+               where ar.media_asset_id = media_assets.id
+               order by ar.created_at desc
+               limit 1
+            ) as latest_analysis_status
        from media_assets
       where workspace_id = $1
         and lifecycle_state <> 'archived'
@@ -91,7 +105,11 @@ export async function listMediaForWorkspace(workspaceId: string): Promise<MediaA
       limit 200`,
     [workspaceId],
   )
-  return result.rows.map(mapMedia)
+  return result.rows.map((row) => ({
+    ...mapMedia(row),
+    durationMs: row.duration_ms,
+    latestAnalysisStatus: row.latest_analysis_status ?? null,
+  }))
 }
 
 export async function findMediaAsset(mediaAssetId: string): Promise<MediaAsset | null> {

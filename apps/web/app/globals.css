@@ -199,6 +199,43 @@ main {
   flex-wrap: wrap;
 }
 
+.videon-media-browse .ds-filter-row {
+  margin: 0;
+}
+
+.videon-media-card {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.videon-media-card__thumb {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  border-radius: 0.2rem;
+  background: color-mix(in srgb, var(--bg0, var(--bg)) 70%, black) center / cover no-repeat;
+}
+
+.videon-media-card__thumb--empty {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--line) 35%, transparent),
+    transparent 60%
+  );
+}
+
+.videon-media-card__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.videon-media-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
 .videon-analyses-list {
   list-style: none;
   margin: 0;

@@ -25,3 +25,4 @@
 4. **Wave B (done):** Editor IA — `InspectTabs` drawer, status strip, Toast, quieter toolbar  
 5. **Wave C (done):** Timeline DS shell — `TimelineRuler` / `TimelineClip` / `Waveform` without rewriting edit math  
 6. **Deferred:** Mediathek browse polish (Wave A) — not editor-critical  
+7. **Wave A (in progress):** Mediathek Browse — thumbs, duration, FilterRow, analysis status  

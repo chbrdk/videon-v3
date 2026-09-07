@@ -21,7 +21,14 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 |-------|------|----------------|
 | `/` | Home magazine | Cover + `HubIndexCard` capabilities + activity columns |
 | `/collections` | Access Model B picker | `HubIndexCard` grid |
-| `/library` | Media hub | Header + `Input` search + cards/list |
+| `/library` | Media hub | Header + `Input` search + cards/list + browse filters |
+
+## Mediathek browse (Wave A)
+
+1. WHEN the media list loads THEN each item MUST expose `durationMs` and `latestAnalysisStatus` for card/list chrome.
+2. WHEN the card layout is active THEN cards SHOULD show a preview thumb (client capture), lifecycle chip, analysis chip, and duration when known.
+3. WHEN filters are shown THEN they MUST use `FilterRow` + `Chip` for lifecycle and analysis facets.
+4. WHERE quick actions appear THEN they MUST link to open / analyses / cuts without nesting interactive controls inside the card anchor.
 | `/upload` | Ingest | `Field` + native file input + `Button` |
 | `/analyses` | Vision runs | `StepStrip` / `Meter` / `Chip` rows |
 | `/cuts` | Cut index | `HubIndexCard` / `RankedList` |
