@@ -256,6 +256,7 @@ async def separate(
                 recorded = _separate_ffmpeg(source, voice_out, music_out)
         except Exception as error:  # noqa: BLE001
             if method == "demucs":
+                print(f"[stem-worker] demucs failed, using ffmpeg fallback: {error!r}", flush=True)
                 try:
                     recorded = f"{_separate_ffmpeg(source, voice_out, music_out)}_fallback"
                 except Exception as nested:  # noqa: BLE001
