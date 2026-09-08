@@ -17,7 +17,7 @@ Assemble and edit a **Cut** from analysis scenes (and whole clips) drawn from **
 | Multi-`videoId` project_scenes | Keep — `cut_scenes.media_asset_id` per clip |
 | AI Creator (NL → multi-video rough cut) | **Drop** this wave |
 | Audio level / trim extras beyond start/end | **Drop** (times only + optional `scene_key`) |
-| Premiere export | **Drop** |
+| Premiere export | **Keep XML-only** — `premiere_xml` on `cut_exports` (no ZIP/FCPXML). Spec: `cut-export-extras.md` |
 | Scene key on timeline clip | **Keep as optional** `scene_key` (provenance; times are export truth) |
 
 ## Model

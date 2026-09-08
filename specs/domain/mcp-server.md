@@ -89,7 +89,7 @@ Hard limits (initial): `media_search` ≤ 20 hits; `media_get` scene list ≤ 40
 | `videon.brand_check_run` | `POST /api/media/:id/brand-check` | Requires succeeded analysis |
 | `videon.cut_create` | `POST /api/cuts` | Multi-source `scenes[].mediaAssetId`; confirm |
 | `videon.cut_scenes_add` | `PATCH /api/cuts/:id` `addScenes` | Append batch; confirm; **no** Flow node |
-| `videon.export_run` | `POST /api/cuts/:id/exports` | Prefer Collection Flow first |
+| `videon.export_run` | `POST /api/cuts/:id/exports` | Prefer Collection Flow; optional `format` `mp4`\|`premiere_xml` |
 | `videon.reframe_run` | `POST /api/media/:id/reframe` | Confirm/job; no Hit-Card; no Flow node yet |
 
 Writes require writable membership + idempotency keys where the Product API supports them.

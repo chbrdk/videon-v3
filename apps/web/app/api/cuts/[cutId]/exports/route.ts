@@ -3,6 +3,7 @@ import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { createCutExport, listCutExportsForCut } from '@/lib/db/cut-exports'
 import { findCut } from '@/lib/db/cuts'
+import { isCutExportFormat } from '@/lib/cut-canvas'
 import { enqueueCutExportJob, pipelineQueueConfigured } from '@/lib/jobs/pg-boss-queue'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
@@ -70,17 +71,28 @@ export async function POST(request: Request, context: RouteContext) {
     body = {}
   }
   const record = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
-  const idempotencyKey =
+  const rawFormat = typeof record.format === 'string' ? record.format.trim() : 'mp4'
+  if (!isCutExportFormat(rawFormat)) {
+    return apiError(request, 400, 'invalid_payload', 'format must be mp4 or premiere_xml')
+  }
+  const format = rawFormat
+  const clientKey =
     typeof record.idempotencyKey === 'string' && record.idempotencyKey.trim()
       ? record.idempotencyKey.trim()
       : randomUUID()
+  const idempotencyKey = `${clientKey}:${format}`
 
   const exportJob = await createCutExport({
     cutId: resolved.cut.id,
     workspaceId: resolved.cut.workspaceId,
     requestedByPlexonUserId: resolved.userId,
+    format,
     idempotencyKey,
   })
+
+  if (exportJob.format !== format) {
+    return apiError(request, 409, 'invalid_payload', 'Idempotency key already used with a different format')
+  }
 
   if (!pipelineQueueConfigured()) {
     return apiError(request, 503, 'dependency_unavailable', 'Export queue is unavailable', { retryable: true })

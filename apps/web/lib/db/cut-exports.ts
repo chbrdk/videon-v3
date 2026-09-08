@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { databasePool } from './client'
+import type { CutExportFormat } from '@/lib/cut-canvas'
 
 export type CutExportStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
-export type CutExportFormat = 'mp4'
+export type { CutExportFormat }
 
 export type CutExport = {
   id: string

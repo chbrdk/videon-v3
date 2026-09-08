@@ -10,6 +10,7 @@ import {
   trimCutScene,
   reorderCutScenes,
   renameCut,
+  updateCutCanvas,
   addSceneToCut,
   addScenesToCut,
   rollTrimCutBoundary,
@@ -17,6 +18,7 @@ import {
 } from '@/lib/db/cuts'
 import { findMediaAsset } from '@/lib/db/media'
 import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
+import { CUT_CANVAS_DEFAULT_FPS, resolveCutCanvas } from '@/lib/cut-canvas'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMediaIds } from '@/lib/db/media-stems'
 import type { TranscriptSegment } from '@/lib/cut-timeline'
@@ -198,6 +200,25 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!name) return apiError(request, 400, 'invalid_payload', 'name is required for rename')
     const updated = await renameCut({ cutId: cut.id, workspaceId: workspace.workspace.id, name })
     if (!updated) return apiError(request, 409, 'invalid_payload', 'Cut could not be renamed')
+    return apiJson(request, { cut: updated })
+  }
+
+  if (action === 'setCanvas') {
+    const aspectPreset = typeof record.aspectPreset === 'string' ? record.aspectPreset.trim() : ''
+    const resolved = resolveCutCanvas({
+      aspectPreset,
+      width: record.width,
+      height: record.height,
+    })
+    if (!resolved.ok) return apiError(request, 400, 'invalid_payload', resolved.message)
+    const updated = await updateCutCanvas({
+      cutId: cut.id,
+      workspaceId: workspace.workspace.id,
+      width: resolved.width,
+      height: resolved.height,
+      defaultFrameRate: CUT_CANVAS_DEFAULT_FPS,
+    })
+    if (!updated) return apiError(request, 409, 'invalid_payload', 'Cut canvas could not be updated')
     return apiJson(request, { cut: updated })
   }
 

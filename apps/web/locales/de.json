@@ -172,6 +172,27 @@
     "statusSucceeded": "Fertig",
     "statusFailed": "Fehlgeschlagen"
   },
+  "cutEditor": {
+    "loadFailed": "Cut konnte nicht geladen werden",
+    "canvas": "Canvas",
+    "custom": "Benutzerdefiniert",
+    "width": "Breite",
+    "height": "Höhe",
+    "canvasApply": "Canvas anwenden",
+    "canvasApplying": "Wendet an …",
+    "canvasApplied": "Canvas aktualisiert",
+    "canvasFailed": "Canvas konnte nicht gesetzt werden",
+    "exportFormat": "Export",
+    "exportMp4": "MP4",
+    "exportPremiere": "Premiere XML",
+    "exportStart": "Exportieren",
+    "exportBusy": "Export …",
+    "exportStarted": "Export gestartet …",
+    "exportReady": "Export fertig — Download verfügbar",
+    "exportFailed": "Export fehlgeschlagen",
+    "downloadMp4": "MP4 herunterladen",
+    "downloadXml": "Premiere XML herunterladen"
+  },
   "home": {
     "kicker": "VIDEON",
     "title": "Video-Intelligence",

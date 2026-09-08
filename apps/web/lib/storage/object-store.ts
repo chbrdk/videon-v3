@@ -23,13 +23,19 @@ export function mediaStemStorageKey(
   return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/stems/${stemKind}.wav`
 }
 
-export function cutExportStorageKey(workspaceId: string, cutId: string, exportId: string): string {
+export function cutExportStorageKey(
+  workspaceId: string,
+  cutId: string,
+  exportId: string,
+  format: 'mp4' | 'premiere_xml' = 'mp4',
+): string {
   const safe = (value: string, label: string) => {
     const trimmed = value.trim()
     if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
     return trimmed
   }
-  return `${safe(workspaceId, 'workspaceId')}/cuts/${safe(cutId, 'cutId')}/exports/${safe(exportId, 'exportId')}.mp4`
+  const ext = format === 'premiere_xml' ? 'xml' : 'mp4'
+  return `${safe(workspaceId, 'workspaceId')}/cuts/${safe(cutId, 'cutId')}/exports/${safe(exportId, 'exportId')}.${ext}`
 }
 
 export function mediaReframeStorageKey(workspaceId: string, mediaAssetId: string, reframeId: string): string {

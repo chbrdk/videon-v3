@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Field, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
+import { Button, Field, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
 import { Select, useToast } from '@msqdx/ui-client'
 import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { EditorStatusStrip, exportStatusLevel } from '@/components/editor-status-strip'
 import { EditorOverflowItem, EditorOverflowMenu } from '@/components/editor-overflow-menu'
+import {
+  CUT_ASPECT_PRESET_PIXELS,
+  type CutAspectPreset,
+  type CutExportFormat,
+} from '@/lib/cut-canvas'
 import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
@@ -40,6 +45,7 @@ import {
   useProgramAudioMixer,
   type ProgramTrackMutes,
 } from '@/lib/use-program-audio-mixer'
+import { useT } from '@/lib/user-prefs'
 
 type Clip = {
   scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
@@ -50,6 +56,8 @@ type CutDetail = {
   id: string
   name: string
   status: string
+  width?: number | null
+  height?: number | null
   frameRate?: number | null
 }
 
@@ -71,6 +79,7 @@ export function CutEditorView({
 }) {
   const router = useRouter()
   const toast = useToast()
+  const t = useT()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const cutPlayheadRef = useRef(0)
   const playingRef = useRef(false)
@@ -101,9 +110,15 @@ export function CutEditorView({
   const [latestExport, setLatestExport] = useState<{
     id: string
     status: string
+    format?: CutExportFormat
     errorMessage?: string | null
     downloadUrl?: string | null
   } | null>(null)
+  const [aspectPreset, setAspectPreset] = useState<CutAspectPreset>('16:9')
+  const [customWidth, setCustomWidth] = useState('1920')
+  const [customHeight, setCustomHeight] = useState('1080')
+  const [canvasBusy, setCanvasBusy] = useState(false)
+  const [exportFormat, setExportFormat] = useState<CutExportFormat>('mp4')
   const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
   const [libraryMedia, setLibraryMedia] = useState<LibraryMedia[]>([])
   const [selectedMediaId, setSelectedMediaId] = useState('')
@@ -195,7 +210,7 @@ export function CutEditorView({
       >
       error?: { message?: string }
     }
-    if (!response.ok) throw new Error(body.error?.message || 'Cut konnte nicht geladen werden')
+    if (!response.ok) throw new Error(body.error?.message || t('cutEditor.loadFailed'))
     setCut(body.cut ?? null)
     if (body.cut) {
       writeStoredActiveCut({
@@ -203,6 +218,16 @@ export function CutEditorView({
         platformProjectId,
         name: body.cut.name,
       })
+      const w = body.cut.width ?? null
+      const h = body.cut.height ?? null
+      if (w === 1080 && h === 1920) setAspectPreset('9:16')
+      else if (w === 1920 && h === 1080) setAspectPreset('16:9')
+      else if (w === 1080 && h === 1080) setAspectPreset('1:1')
+      else if (w != null && h != null) {
+        setAspectPreset('custom')
+        setCustomWidth(String(w))
+        setCustomHeight(String(h))
+      }
     }
     setClips(body.clips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
@@ -221,7 +246,7 @@ export function CutEditorView({
     setMusicPeaksByMediaId(nextMusic)
     setStemPresenceByMediaId(nextPresence)
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
-  }, [cutId, platformProjectId])
+  }, [cutId, platformProjectId, t])
 
   const loadLibrary = useCallback(async () => {
     const response = await fetch(paths.routes.apiMediaList(platformProjectId), { cache: 'no-store' })
@@ -676,24 +701,59 @@ export function CutEditorView({
     }
   }, [selectedMediaId, platformProjectId])
 
-  const startExport = async () => {
+  const applyCanvas = async () => {
+    setCanvasBusy(true)
+    setError(null)
+    try {
+      const body: Record<string, unknown> = { action: 'setCanvas', aspectPreset }
+      if (aspectPreset === 'custom') {
+        body.width = Number.parseInt(customWidth, 10)
+        body.height = Number.parseInt(customHeight, 10)
+      }
+      const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const payload = (await response.json()) as {
+        cut?: CutDetail
+        error?: { message?: string }
+      }
+      if (!response.ok || !payload.cut) {
+        throw new Error(payload.error?.message || t('cutEditor.canvasFailed'))
+      }
+      setCut(payload.cut)
+      notifyOk(t('cutEditor.canvasApplied'))
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('cutEditor.canvasFailed'))
+    } finally {
+      setCanvasBusy(false)
+    }
+  }
+
+  const startExport = async (format: CutExportFormat = exportFormat) => {
     setExportBusy(true)
     setError(null)
     try {
       const response = await fetch(paths.routes.apiCutExports(cutId, platformProjectId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ format }),
       })
       const body = (await response.json()) as {
-        export?: { id: string; status: string; errorMessage?: string | null }
+        export?: { id: string; status: string; format?: CutExportFormat; errorMessage?: string | null }
         error?: { message?: string }
       }
-      if (!response.ok || !body.export) throw new Error(body.error?.message || 'Export konnte nicht gestartet werden')
-      setLatestExport({ id: body.export.id, status: body.export.status, errorMessage: body.export.errorMessage })
-      notifyOk('Export gestartet …')
+      if (!response.ok || !body.export) throw new Error(body.error?.message || t('cutEditor.exportFailed'))
+      setLatestExport({
+        id: body.export.id,
+        status: body.export.status,
+        format: body.export.format ?? format,
+        errorMessage: body.export.errorMessage,
+      })
+      notifyOk(t('cutEditor.exportStarted'))
     } catch (err) {
-      notifyError(err instanceof Error ? err.message : 'Export fehlgeschlagen')
+      notifyError(err instanceof Error ? err.message : t('cutEditor.exportFailed'))
     } finally {
       setExportBusy(false)
     }
@@ -708,23 +768,25 @@ export function CutEditorView({
           { cache: 'no-store' },
         )
         const body = (await response.json()) as {
-          export?: { id: string; status: string; errorMessage?: string | null }
+          export?: { id: string; status: string; format?: CutExportFormat; errorMessage?: string | null }
           downloadUrl?: string | null
         }
         if (!body.export) return
         setLatestExport({
           id: body.export.id,
           status: body.export.status,
+          format: body.export.format ?? latestExport.format,
           errorMessage: body.export.errorMessage,
           downloadUrl: body.downloadUrl,
         })
-        if (body.export.status === 'succeeded') notifyOk('Export fertig — Download verfügbar')
-        if (body.export.status === 'failed') notifyError(body.export.errorMessage || 'Export fehlgeschlagen')
+        if (body.export.status === 'succeeded') notifyOk(t('cutEditor.exportReady'))
+        if (body.export.status === 'failed') {
+          notifyError(body.export.errorMessage || t('cutEditor.exportFailed'))
+        }
       })()
     }, 2500)
     return () => window.clearInterval(timer)
-  }, [cutId, latestExport, platformProjectId])
-
+  }, [cutId, latestExport, notifyError, notifyOk, platformProjectId, t])
 
   useEditorKeyboard({
     enabled: Boolean(cut) && !busy,
@@ -787,9 +849,68 @@ export function CutEditorView({
           <h2>{cut.name}</h2>
           <p className="videon-nle__toolbar-meta">
             Cut · {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
+            {cut.width && cut.height ? ` · ${cut.width}×${cut.height}` : ''}
           </p>
         </div>
         <div className="videon-nle__toolbar-groups">
+          <div className="videon-nle__tool-group videon-nle__tool-group--canvas">
+            <Field label={t('cutEditor.canvas')}>
+              <Select
+                value={aspectPreset}
+                disabled={busy || canvasBusy}
+                options={[
+                  { value: '9:16', label: '9:16' },
+                  { value: '16:9', label: '16:9' },
+                  { value: '1:1', label: '1:1' },
+                  { value: 'custom', label: t('cutEditor.custom') },
+                ]}
+                onChange={(value: string) => {
+                  const next = value as CutAspectPreset
+                  setAspectPreset(next)
+                  if (next !== 'custom') {
+                    const pixels = CUT_ASPECT_PRESET_PIXELS[next]
+                    setCustomWidth(String(pixels.width))
+                    setCustomHeight(String(pixels.height))
+                  }
+                }}
+              />
+            </Field>
+            {aspectPreset === 'custom' ? (
+              <>
+                <Field label={t('cutEditor.width')}>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={3840}
+                    step={2}
+                    value={customWidth}
+                    disabled={busy || canvasBusy}
+                    onChange={(event) => setCustomWidth(event.target.value)}
+                  />
+                </Field>
+                <Field label={t('cutEditor.height')}>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={3840}
+                    step={2}
+                    value={customHeight}
+                    disabled={busy || canvasBusy}
+                    onChange={(event) => setCustomHeight(event.target.value)}
+                  />
+                </Field>
+              </>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy || canvasBusy}
+              onClick={() => void applyCanvas()}
+            >
+              {canvasBusy ? t('cutEditor.canvasApplying') : t('cutEditor.canvasApply')}
+            </Button>
+          </div>
           <div className="videon-nle__tool-group">
             <ToolButton label="Rückgängig" disabled={busy || !canUndo} onClick={undo}>
               <IconUndo />
@@ -840,11 +961,30 @@ export function CutEditorView({
               Löschen
             </Button>
           </div>
-          <Button type="button" variant="primary" size="sm" onClick={() => void startExport()} disabled={busy || exportBusy || clips.length === 0}>
-            {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
-              ? 'Export …'
-              : 'Export MP4'}
-          </Button>
+          <div className="videon-nle__tool-group">
+            <Field label={t('cutEditor.exportFormat')}>
+              <Select
+                value={exportFormat}
+                disabled={busy || exportBusy || clips.length === 0}
+                options={[
+                  { value: 'mp4', label: t('cutEditor.exportMp4') },
+                  { value: 'premiere_xml', label: t('cutEditor.exportPremiere') },
+                ]}
+                onChange={(value: string) => setExportFormat(value as CutExportFormat)}
+              />
+            </Field>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => void startExport(exportFormat)}
+              disabled={busy || exportBusy || clips.length === 0}
+            >
+              {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
+                ? t('cutEditor.exportBusy')
+                : t('cutEditor.exportStart')}
+            </Button>
+          </div>
           <div className="videon-nle__tool-cluster">
             <Button
               type="button"
@@ -867,9 +1007,25 @@ export function CutEditorView({
             <EditorOverflowMenu>
               {({ close }) => (
                 <>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={busy || exportBusy || clips.length === 0}
+                    onClick={() => void startExport('mp4')}
+                  >
+                    {t('cutEditor.exportMp4')}
+                  </EditorOverflowItem>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={busy || exportBusy || clips.length === 0}
+                    onClick={() => void startExport('premiere_xml')}
+                  >
+                    {t('cutEditor.exportPremiere')}
+                  </EditorOverflowItem>
                   {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
                     <EditorOverflowItem close={close} href={latestExport.downloadUrl}>
-                      Download
+                      {latestExport.format === 'premiere_xml'
+                        ? t('cutEditor.downloadXml')
+                        : t('cutEditor.downloadMp4')}
                     </EditorOverflowItem>
                   ) : null}
                   <EditorOverflowItem close={close} danger disabled={busy} onClick={() => void deleteCut()}>
@@ -887,13 +1043,19 @@ export function CutEditorView({
           level={exportStatusLevel(latestExport.status)}
           label={
             latestExport.status === 'succeeded'
-              ? 'Export fertig'
+              ? t('cutEditor.exportReady')
               : latestExport.status === 'failed'
-                ? 'Export fehlgeschlagen'
-                : 'Export läuft'
+                ? t('cutEditor.exportFailed')
+                : t('cutEditor.exportBusy')
           }
           detail={latestExport.errorMessage ?? latestExport.status}
-          actionLabel={latestExport.status === 'succeeded' && latestExport.downloadUrl ? 'Download' : undefined}
+          actionLabel={
+            latestExport.status === 'succeeded' && latestExport.downloadUrl
+              ? latestExport.format === 'premiere_xml'
+                ? t('cutEditor.downloadXml')
+                : t('cutEditor.downloadMp4')
+              : undefined
+          }
           onAction={
             latestExport.status === 'succeeded' && latestExport.downloadUrl
               ? () => {

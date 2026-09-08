@@ -54,11 +54,38 @@ Create a Cut.
 - Inserted in array order after `afterSceneId` (or at end).
 - Returns `{ scenes }` full ordered timeline.
 
+### New: `setCanvas`
+
+```json
+{
+  "action": "setCanvas",
+  "aspectPreset": "9:16"
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `aspectPreset` | `9:16` \| `16:9` \| `1:1` \| `custom` |
+| `width` / `height` | Required when `custom`; even integers 2–3840 |
+
+Returns `{ cut }` with updated `width`/`height`. Spec: `cut-export-extras.md`.
+
+## Exports
+
+### `POST /api/cuts/:cutId/exports?platformProjectId=`
+
+Body: `{ "format"?: "mp4" | "premiere_xml", "idempotencyKey"?: string }` — default `mp4`.  
+Response `202` `{ export }`.
+
+### `GET /api/cuts/:cutId/exports/:exportId`
+
+Returns `{ export, downloadUrl? }`. Download filename `.mp4` or `.xml` by format; MIME accordingly.
+
 ## Errors
 
 | Code | When |
 |------|------|
-| `invalid_payload` | Empty batch, bad ranges, unknown sceneKey without times |
+| `invalid_payload` | Empty batch, bad ranges, unknown sceneKey without times, bad canvas/format |
 | `not_found` | Cut or media missing |
 | `collection_access_denied` | Access Model B |
 | `dependency_unavailable` | DB down |

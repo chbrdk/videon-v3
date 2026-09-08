@@ -534,25 +534,32 @@ export function registerVideonTools(server: ToolServer) {
     {
       title: 'Start cut export',
       description:
-        'POST /api/cuts/:id/exports — enqueue export job. Prefer Collection Flow when available. Write tool — confirm. Access Model B via actorUserId + service auth.',
+        'POST /api/cuts/:id/exports — enqueue export job (mp4 or premiere_xml). Prefer Collection Flow when available. Write tool — confirm. Access Model B via actorUserId + service auth.',
       inputSchema: z.object({
         actorUserId,
         cutId: z.string(),
         platformProjectId: z.string(),
+        format: z.enum(['mp4', 'premiere_xml']).optional(),
+        idempotencyKey: z.string().optional(),
       }),
     },
     async (args) => {
-      const { cutId, platformProjectId } = args as {
+      const { cutId, platformProjectId, format, idempotencyKey } = args as {
         actorUserId?: string
         cutId: string
         platformProjectId: string
+        format?: 'mp4' | 'premiere_xml'
+        idempotencyKey?: string
       }
+      const body: Record<string, unknown> = {}
+      if (format) body.format = format
+      if (idempotencyKey) body.idempotencyKey = idempotencyKey
       return textResult(
         `/api/cuts/${encodeURIComponent(cutId)}/exports?platformProjectId=${encodeURIComponent(platformProjectId)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: '{}',
+          body: JSON.stringify(body),
           videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
         },
       )

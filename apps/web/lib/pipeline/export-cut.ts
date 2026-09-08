@@ -12,6 +12,7 @@ import {
   markCutExportSucceeded,
 } from '@/lib/db/cut-exports'
 import { findMediaAssetDetail, type MediaAssetDetail } from '@/lib/db/media'
+import { buildPremiereXmeml } from '@/lib/pipeline/export-premiere-xml'
 import { cutExportStorageKey } from '@/lib/storage/object-store'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
@@ -189,6 +190,58 @@ async function buildSegments(input: {
   return segmentPaths
 }
 
+async function runPremiereXmlExport(input: {
+  exportId: string
+  cut: Cut
+  scenes: CutScene[]
+}): Promise<void> {
+  const mediaById = new Map<string, MediaAssetDetail>()
+  for (const scene of input.scenes) {
+    if (mediaById.has(scene.mediaAssetId)) continue
+    const media = await findMediaAssetDetail(scene.mediaAssetId)
+    if (!media || media.workspaceId !== input.cut.workspaceId) {
+      throw new Error(`Source media unavailable for scene ${scene.id}`)
+    }
+    mediaById.set(media.id, media)
+  }
+
+  const xml = buildPremiereXmeml({
+    cut: input.cut,
+    scenes: input.scenes.map((scene) => {
+      const media = mediaById.get(scene.mediaAssetId)!
+      return {
+        id: scene.id,
+        mediaAssetId: scene.mediaAssetId,
+        startMs: scene.startMs,
+        endMs: scene.endMs,
+        originalFilename: media.originalFilename,
+        mediaDurationMs: media.durationMs,
+      }
+    }),
+  })
+
+  const outputPath = join(tmpdir(), `videon-export-${input.exportId}.xml`)
+  try {
+    await writeFile(outputPath, xml, 'utf8')
+    const store = new S3ObjectStore()
+    const storageKey = cutExportStorageKey(
+      input.cut.workspaceId,
+      input.cut.id,
+      input.exportId,
+      'premiere_xml',
+    )
+    const bytes = await store.uploadFileFromPath({
+      workspaceId: input.cut.workspaceId,
+      storageKey,
+      filePath: outputPath,
+      mimeType: 'application/xml',
+    })
+    await markCutExportSucceeded({ exportId: input.exportId, storageKey, bytes })
+  } finally {
+    await unlink(outputPath).catch(() => {})
+  }
+}
+
 export async function runCutExport(exportId: string): Promise<void> {
   const exportJob = await findCutExport(exportId)
   if (!exportJob) throw new Error('Cut export not found')
@@ -207,6 +260,18 @@ export async function runCutExport(exportId: string): Promise<void> {
   }
 
   await markCutExportRunning(exportId)
+
+  if (exportJob.format === 'premiere_xml') {
+    try {
+      await runPremiereXmlExport({ exportId, cut, scenes })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Cut export failed'
+      await markCutExportFailed(exportId, message)
+      throw error
+    }
+    return
+  }
+
   const store = new S3ObjectStore()
   const sourceCache = new Map<string, string>()
   const mediaById = new Map<string, MediaAssetDetail>()
@@ -230,7 +295,7 @@ export async function runCutExport(exportId: string): Promise<void> {
       sourceCache.set(scene.mediaAssetId, sourcePath)
     }
 
-    let normalize = cutExportNeedsNormalize(cut, scenes, mediaById)
+    const normalize = cutExportNeedsNormalize(cut, scenes, mediaById)
     segmentPaths = await buildSegments({ scenes, sourceCache, reencode: normalize, cut })
 
     try {
@@ -242,7 +307,7 @@ export async function runCutExport(exportId: string): Promise<void> {
       await concatSegments(segmentPaths, outputPath, true)
     }
 
-    const storageKey = cutExportStorageKey(cut.workspaceId, cut.id, exportId)
+    const storageKey = cutExportStorageKey(cut.workspaceId, cut.id, exportId, 'mp4')
     const bytes = await store.uploadFileFromPath({
       workspaceId: cut.workspaceId,
       storageKey,

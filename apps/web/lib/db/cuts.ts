@@ -415,6 +415,31 @@ export async function renameCut(input: {
   return result.rows[0] ? mapCut(result.rows[0]) : null
 }
 
+/** Update export canvas; keeps fps when set, else defaults to 25. Spec: cut-export-extras.md */
+export async function updateCutCanvas(input: {
+  cutId: string
+  workspaceId: string
+  width: number
+  height: number
+  defaultFrameRate?: number
+}): Promise<Cut | null> {
+  const defaultFps = input.defaultFrameRate ?? 25
+  const result = await databasePool().query<CutRow>(
+    `update cuts
+        set width = $3,
+            height = $4,
+            frame_rate = coalesce(frame_rate, $5),
+            updated_at = now()
+      where id = $1
+        and workspace_id = $2
+        and status <> 'archived'
+      returning id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status,
+                created_at, updated_at`,
+    [input.cutId, input.workspaceId, input.width, input.height, defaultFps],
+  )
+  return result.rows[0] ? mapCut(result.rows[0]) : null
+}
+
 export async function addSceneToCut(input: {
   cutId: string
   mediaAssetId: string

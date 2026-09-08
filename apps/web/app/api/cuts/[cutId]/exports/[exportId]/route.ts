@@ -50,11 +50,12 @@ export async function GET(request: Request, context: RouteContext) {
   let downloadUrl: string | null = null
   if (exportJob.status === 'succeeded' && exportJob.storageKey) {
     const store = new S3ObjectStore()
+    const ext = exportJob.format === 'premiere_xml' ? 'xml' : 'mp4'
     const target = await store.createDownloadTarget({
       workspaceId: workspace.workspace.id,
       mediaAssetId: exportJob.id,
       storageKey: exportJob.storageKey,
-      filename: `${cut.name}.mp4`,
+      filename: `${cut.name}.${ext}`,
       disposition: 'attachment',
     })
     downloadUrl = target.uploadUrl
