@@ -44,7 +44,7 @@ main {
   padding-block-start: clamp(2.25rem, 5vw, 3.75rem);
 }
 
-/* Scene chat — Audion-style full-stage panel using @msqdx/ui chat.css */
+/* Scene chat — Audion/Plexon-style full-stage panel; DS open-chat caps (56/52/36rem) overridden. */
 .videon-stage:has(.videon-chat-panel) {
   padding-block-start: 0;
   min-height: calc(100vh - 2rem);
@@ -53,17 +53,62 @@ main {
 }
 
 .videon-chat-panel.chat-panel-open {
+  --chat-panel-open-min-height: 0;
+  /* Soft ultra-wide cap; at 1920 ≈ full stage, not the DS 56rem column. */
+  --videon-chat-stage-max: min(112rem, 100%);
+  --chat-composer-collapsed: min(42rem, 100%);
+  --chat-composer-expanded: min(64rem, 100%);
   flex: 1;
   min-height: 0;
+  width: 100%;
+  max-width: var(--videon-chat-stage-max);
+  margin-inline: 0;
   display: flex;
   flex-direction: column;
+  gap: 0.55rem;
 }
 
 .videon-chat-panel.chat-panel-open .chat-turns {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-block: 1rem 6rem;
+  padding-inline: clamp(0.25rem, 1vw, 0.75rem);
+}
+
+/* User prompts stay readable; assistant (esp. card grids) uses the stage. */
+.videon-chat-panel.chat-panel-open .chat-turn-user {
+  max-width: min(42rem, 92%);
+}
+
+.videon-chat-panel.chat-panel-open .chat-turn-assistant {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.videon-chat-panel.chat-panel-open .chat-turn-assistant > .ds-text,
+.videon-chat-panel.chat-panel-open .chat-turn-assistant > p {
+  max-width: min(48rem, 100%);
+}
+
+.videon-chat-panel.chat-panel-open .chat-form {
+  align-self: center;
+  width: 100%;
+  max-width: var(--chat-composer-collapsed);
+  margin-inline: auto;
+  padding-block: 0.5rem 1.25rem;
+}
+
+.videon-chat-panel.chat-panel-open .chat-form:hover,
+.videon-chat-panel.chat-panel-open .chat-form:focus-within,
+.videon-chat-panel.chat-panel-open .chat-form.is-expanded {
+  max-width: var(--chat-composer-expanded);
 }
 
 .videon-chat-panel.chat-panel-open .chat-turn-assistant .ds-rank-block {
@@ -72,6 +117,8 @@ main {
 
 .videon-chat-panel .videon-scene-hit-grid {
   margin-block-start: 0.85rem;
+  width: 100%;
+  max-width: none;
   list-style: none;
   padding: 0;
 }
