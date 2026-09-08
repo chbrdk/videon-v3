@@ -125,6 +125,20 @@ export const paths = {
       if (tMs != null && Number.isFinite(tMs) && tMs >= 0) params.set('t', String(Math.floor(tMs)))
       return `/api/media/${encodeURIComponent(mediaAssetId)}/frame?${params.toString()}`
     },
+    apiMediaPreview: (
+      mediaAssetId: string,
+      platformProjectId: string,
+      opts?: { tMs?: number; durationMs?: number },
+    ) => {
+      const params = new URLSearchParams({ platformProjectId })
+      if (opts?.tMs != null && Number.isFinite(opts.tMs) && opts.tMs >= 0) {
+        params.set('t', String(Math.floor(opts.tMs)))
+      }
+      if (opts?.durationMs != null && Number.isFinite(opts.durationMs) && opts.durationMs > 0) {
+        params.set('durationMs', String(Math.floor(opts.durationMs)))
+      }
+      return `/api/media/${encodeURIComponent(mediaAssetId)}/preview?${params.toString()}`
+    },
     apiMediaStemStream: (
       mediaAssetId: string,
       stemKind: 'voice' | 'music',

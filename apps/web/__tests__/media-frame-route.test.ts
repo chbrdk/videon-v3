@@ -13,7 +13,7 @@ describe('media frame route', () => {
     )
   })
 
-  it('route uses Model B session resolver and frame extract', () => {
+  it('route uses Model B session resolver, cache, and frame extract', () => {
     const source = readFileSync(
       join(__dirname, '../app/api/media/[mediaAssetId]/frame/route.ts'),
       'utf8',
@@ -21,6 +21,8 @@ describe('media frame route', () => {
     expect(source).toContain('requireSessionUserId')
     expect(source).toContain('resolveMediaInWorkspace')
     expect(source).toContain('extractFrameJpegBytes')
+    expect(source).toContain('getCachedFrame')
+    expect(source).toContain('setCachedFrame')
     expect(source).toContain('image/jpeg')
   })
 })

@@ -79,6 +79,55 @@ export async function extractFrameJpegBytes(
   }
 }
 
+const PREVIEW_DURATION_MIN_MS = 1
+const PREVIEW_DURATION_MAX_MS = 3000
+
+/**
+ * Short muted MP4 clip for assistant hover preview.
+ * Spec: specs/api/media-preview.md — durationMs clamped to 1..3000.
+ */
+export async function extractPreviewMp4Bytes(
+  sourcePath: string,
+  timestampMs: number,
+  durationMs = PREVIEW_DURATION_MAX_MS,
+): Promise<Buffer | null> {
+  const clampedMs = Math.min(
+    PREVIEW_DURATION_MAX_MS,
+    Math.max(PREVIEW_DURATION_MIN_MS, Math.floor(Number.isFinite(durationMs) ? durationMs : PREVIEW_DURATION_MAX_MS)),
+  )
+  const durationSec = clampedMs / 1000
+  const outputPath = join(tmpdir(), `videon-preview-${randomUUID()}.mp4`)
+  try {
+    await execFileAsync('ffmpeg', [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-ss',
+      timestampForMs(timestampMs),
+      '-i',
+      sourcePath,
+      '-t',
+      String(durationSec),
+      '-an',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '28',
+      '-movflags',
+      '+faststart',
+      '-y',
+      outputPath,
+    ])
+    return await readFile(outputPath)
+  } catch {
+    return null
+  } finally {
+    await unlink(outputPath).catch(() => {})
+  }
+}
+
 /** JPEG base64 (no data-URL prefix) for Brandion analysis-runs image input. */
 export async function extractFrameJpegBase64(
   sourcePath: string,

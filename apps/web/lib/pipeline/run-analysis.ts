@@ -34,6 +34,7 @@ import { probeMediaFile } from '@/lib/pipeline/ffprobe'
 import { transcriptExcerptForScene, transcribeAudioFile, type TranscriptSegment } from '@/lib/pipeline/transcribe'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import type { VisionFrame } from '@/lib/openrouter-client'
+import { publishWorkspaceMediaInsights } from '@/lib/media-insights-publish'
 
 function userPseudonym(workspaceId: string, plexonUserId: string): string {
   return createHash('sha256').update(`${workspaceId}:${plexonUserId}`).digest('hex').slice(0, 32)
@@ -368,6 +369,18 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
 
     await markMediaReady(media.id, media.workspaceId)
     await markAnalysisFinished(analysisRunId, 'succeeded')
+
+    // Soft Collection pack update — never fail the analysis pipeline.
+    void publishWorkspaceMediaInsights({
+      workspaceId: media.workspaceId,
+      analysisRunId,
+      soft: true,
+    }).catch((err) => {
+      console.warn(
+        '[VIDEON-v3] media_insights publish failed:',
+        err instanceof Error ? err.message : err,
+      )
+    })
   } catch (error) {
     await markMediaFailed(media.id, media.workspaceId).catch(() => {})
     await markAnalysisFinished(analysisRunId, 'failed')

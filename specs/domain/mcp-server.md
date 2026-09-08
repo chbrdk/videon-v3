@@ -91,6 +91,8 @@ Hard limits (initial): `media_search` ≤ 20 hits; `media_get` scene list ≤ 40
 
 Writes require writable membership + idempotency keys where the Product API supports them.
 
+Plexon assistant card actions (`open` / `analysis_run` / `brand_check_run` on `video_hit_strip`) MUST enqueue these write tools only after the existing chat confirmation policy — see PLEXON `assistant-videon-mcp.md` § Card actions. MCP itself does not auto-confirm.
+
 ## Agent guidance (for tool descriptions)
 
 For “finde Szene / Video / Dashboard / Interview…”:
@@ -105,8 +107,8 @@ For “finde Szene / Video / Dashboard / Interview…”:
 - Replacing Federation provisioning / health contract  
 - Driving the NLE UI remotely (seek = deep link)  
 - Embedding LLM inside VIDEON MCP (orchestration stays in Plexon)  
-- Knowledge-pack publisher (`media_insights`) until Collection Knowledge Pack specs land  
-- Upload / delete media via MCP in Phase 1
+- Upload / delete media via MCP in Phase 1  
+- Unbounded video binaries in tool results (use Product frame/preview routes + Plexon proxies)
 
 ## Acceptance
 

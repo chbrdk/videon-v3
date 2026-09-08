@@ -216,3 +216,58 @@ export async function searchMediaForAccessibleProjects(input: {
 
   return { hits: result.rows.map(mapHit), planTerms: plan.terms }
 }
+
+/** Recent index rows for Collection knowledge distill (bounded). */
+export async function listRecentSearchEntriesForWorkspace(input: {
+  workspaceId: string
+  limit?: number
+}): Promise<
+  Array<{
+    id: string
+    mediaAssetId: string
+    analysisRunId: string
+    sceneKey: string | null
+    searchText: string
+    mediaFilename: string
+    startMs: number | null
+    endMs: number | null
+  }>
+> {
+  const limit = Math.min(Math.max(input.limit ?? 40, 1), 80)
+  const result = await databasePool().query<{
+    id: string
+    media_asset_id: string
+    analysis_run_id: string
+    scene_key: string | null
+    search_text: string
+    original_filename: string
+    start_ms: number | null
+    end_ms: number | null
+  }>(
+    `select mse.id, mse.media_asset_id, mse.analysis_run_id, mse.scene_key, mse.search_text,
+            ma.original_filename,
+            si.start_ms, si.end_ms
+       from media_search_entries mse
+       join media_assets ma on ma.id = mse.media_asset_id
+       left join scene_insights si
+         on si.analysis_run_id = mse.analysis_run_id
+        and si.scene_key = mse.scene_key
+      where mse.workspace_id = $1
+        and ma.lifecycle_state <> 'archived'
+        and mse.scene_key is not null
+      order by mse.created_at desc
+      limit $2`,
+    [input.workspaceId, limit],
+  )
+  return result.rows.map((row) => ({
+    id: row.id,
+    mediaAssetId: row.media_asset_id,
+    analysisRunId: row.analysis_run_id,
+    sceneKey: row.scene_key,
+    searchText: row.search_text,
+    mediaFilename: row.original_filename,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
+  }))
+}
+

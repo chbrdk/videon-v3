@@ -4,20 +4,16 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { apiError } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import {
-  frameCacheKey,
-  getCachedFrame,
-  setCachedFrame,
-} from '@/lib/media-frame-cache'
 import { resolveMediaInWorkspace } from '@/lib/media-access'
-import { extractFrameJpegBytes } from '@/lib/pipeline/frame-sample'
+import { extractPreviewMp4Bytes } from '@/lib/pipeline/frame-sample'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
 
-const FRAME_MAX_WIDTH = 480
+const PREVIEW_DEFAULT_MS = 3000
+const PREVIEW_MAX_MS = 3000
 
 type RouteContext = { params: Promise<{ mediaAssetId: string }> }
 
@@ -28,9 +24,16 @@ function parseTimestampMs(raw: string | null): number {
   return Math.floor(n)
 }
 
+function parseDurationMs(raw: string | null): number {
+  if (raw == null || raw.trim() === '') return PREVIEW_DEFAULT_MS
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return PREVIEW_DEFAULT_MS
+  return Math.min(PREVIEW_MAX_MS, Math.max(1, Math.floor(n)))
+}
+
 /**
- * GET /api/media/:id/frame — single JPEG still for assistant posters.
- * Spec: specs/api/media-frame.md
+ * GET /api/media/:id/preview — short muted MP4 for assistant hover.
+ * Spec: specs/api/media-preview.md
  */
 export async function GET(request: Request, context: RouteContext) {
   const userId = await requireSessionUserId()
@@ -50,6 +53,7 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 400, 'invalid_payload', 'platformProjectId is required')
   }
   const atMs = parseTimestampMs(url.searchParams.get('t'))
+  const durationMs = parseDurationMs(url.searchParams.get('durationMs'))
 
   const { mediaAssetId } = await context.params
   const resolved = await resolveMediaInWorkspace({
@@ -69,26 +73,7 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 409, 'invalid_payload', 'Upload is not complete yet')
   }
 
-  const cacheKey = frameCacheKey({
-    workspaceId: resolved.workspace.id,
-    mediaAssetId,
-    tMs: atMs,
-    maxWidth: FRAME_MAX_WIDTH,
-  })
-  const cached = getCachedFrame(cacheKey)
-  if (cached) {
-    return new Response(new Uint8Array(cached), {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/jpeg',
-        'Cache-Control': 'private, max-age=300',
-        'Content-Length': String(cached.byteLength),
-        'X-Videon-Frame-Cache': 'hit',
-      },
-    })
-  }
-
-  const tempPath = join(tmpdir(), `videon-frame-src-${randomUUID()}`)
+  const tempPath = join(tmpdir(), `videon-preview-src-${randomUUID()}`)
   try {
     const store = new S3ObjectStore()
     await store.downloadObjectToFile({
@@ -96,24 +81,22 @@ export async function GET(request: Request, context: RouteContext) {
       storageKey: resolved.media.storageKey,
       destinationPath: tempPath,
     })
-    const jpeg = await extractFrameJpegBytes(tempPath, atMs, { maxWidth: FRAME_MAX_WIDTH })
-    if (!jpeg) {
-      return apiError(request, 503, 'dependency_unavailable', 'Frame extraction failed', {
+    const mp4 = await extractPreviewMp4Bytes(tempPath, atMs, durationMs)
+    if (!mp4) {
+      return apiError(request, 503, 'dependency_unavailable', 'Preview extraction failed', {
         retryable: true,
       })
     }
-    setCachedFrame(cacheKey, jpeg)
-    return new Response(new Uint8Array(jpeg), {
+    return new Response(new Uint8Array(mp4), {
       status: 200,
       headers: {
-        'Content-Type': 'image/jpeg',
+        'Content-Type': 'video/mp4',
         'Cache-Control': 'private, max-age=300',
-        'Content-Length': String(jpeg.byteLength),
-        'X-Videon-Frame-Cache': 'miss',
+        'Content-Length': String(mp4.byteLength),
       },
     })
   } catch {
-    return apiError(request, 503, 'dependency_unavailable', 'Frame extraction unavailable', {
+    return apiError(request, 503, 'dependency_unavailable', 'Preview extraction unavailable', {
       retryable: true,
     })
   } finally {
