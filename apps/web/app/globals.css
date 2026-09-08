@@ -1,8 +1,6 @@
 @import '@msqdx/ui/styles.css';
 
-:root {
-  color-scheme: dark;
-}
+/* color-scheme follows [data-theme] from @msqdx/ui tokens — do not hardcode dark. */
 
 * {
   box-sizing: border-box;
@@ -19,6 +17,13 @@ body {
 
 body {
   font-family: var(--font-body);
+}
+
+/* Stage next to the rail uses brand paper (--bg0), not a forced gray wash. */
+.app-main {
+  max-width: none;
+  width: 100%;
+  background: var(--bg0);
 }
 
 a {
@@ -322,7 +327,7 @@ main {
   width: 100%;
   height: 100%;
   min-height: 100%;
-  background: color-mix(in srgb, var(--bg0, var(--bg)) 70%, black) center / cover no-repeat;
+  background: color-mix(in srgb, var(--ink) 8%, var(--bg0, var(--bg, #f8f6f0))) center / cover no-repeat;
 }
 
 .videon-media-card__thumb--empty {
@@ -390,12 +395,13 @@ main {
 }
 
 .videon-nle {
-  --nle-bg: color-mix(in srgb, var(--bg0, var(--bg)) 88%, black);
-  --nle-panel: color-mix(in srgb, var(--bg1, var(--bg)) 82%, black);
-  --nle-panel-2: color-mix(in srgb, var(--bg1, var(--bg)) 70%, black);
+  /* Light: brand paper (--bg0 #f8f6f0). Dark themes already ship dark tokens — no black wash. */
+  --nle-bg: var(--bg0, var(--bg, #f8f6f0));
+  --nle-panel: var(--bg1, var(--bg0, #fff));
+  --nle-panel-2: color-mix(in srgb, var(--bg1, var(--bg0)) 94%, var(--ink, #0f172a));
   --nle-border: var(--line);
   --nle-border-strong: color-mix(in srgb, var(--line) 70%, var(--fg));
-  --nle-track: color-mix(in srgb, var(--bg0, var(--bg)) 92%, black);
+  --nle-track: color-mix(in srgb, var(--bg0, var(--bg)) 96%, var(--ink, #0f172a));
   --nle-clip: color-mix(in srgb, var(--accent, #2f5f8f) 55%, transparent);
   --nle-clip-active: color-mix(in srgb, var(--accent, #4f8ec8) 70%, transparent);
   --nle-transcript: color-mix(in srgb, var(--accent, #6b5a2a) 40%, transparent);
@@ -503,7 +509,7 @@ main {
   gap: 0.65rem;
   padding: 0.35rem 0.75rem;
   border-bottom: 1px solid var(--nle-border);
-  background: color-mix(in srgb, var(--nle-panel) 88%, black);
+  background: color-mix(in srgb, var(--ink) 4%, var(--nle-panel));
 }
 
 .videon-nle__status-strip {
@@ -513,7 +519,7 @@ main {
   gap: 0.75rem;
   padding: 0.35rem 0.75rem;
   border-bottom: 1px solid var(--nle-border);
-  background: color-mix(in srgb, var(--nle-panel) 92%, black);
+  background: color-mix(in srgb, var(--ink) 3%, var(--nle-panel));
   font-size: 0.78rem;
 }
 
@@ -659,7 +665,7 @@ main {
   padding: 0.15rem;
   border: 1px solid var(--nle-border);
   border-radius: 0.35rem;
-  background: color-mix(in srgb, var(--nle-panel) 85%, black);
+  background: color-mix(in srgb, var(--ink) 4%, var(--nle-panel));
 }
 
 .videon-nle__tool-btn,
@@ -681,7 +687,7 @@ main {
 .videon-nle__tool-btn:hover:not(:disabled),
 .videon-nle__transport-btn:hover:not(:disabled),
 .videon-nle .ds-tool-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--nle-panel-2) 70%, white 8%);
+  background: color-mix(in srgb, var(--ink) 6%, var(--nle-panel-2));
   border-color: var(--nle-border);
 }
 
@@ -712,7 +718,7 @@ main {
   gap: 0;
   min-width: 0;
   min-height: 0;
-  background: color-mix(in srgb, var(--nle-bg) 70%, black);
+  background: var(--nle-bg);
 }
 
 .videon-nle--player-first .videon-nle__program {
@@ -729,7 +735,7 @@ main {
   min-height: 0;
   height: 100%;
   padding: 0.35rem 0.5rem;
-  background: color-mix(in srgb, var(--nle-bg) 55%, black);
+  background: color-mix(in srgb, var(--ink) 6%, var(--nle-bg));
 }
 
 .videon-nle__monitor-host .ds-media-monitor,
@@ -1133,8 +1139,8 @@ main {
   padding: 0.75rem;
   border: 1px solid var(--nle-border);
   border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--nle-panel-2) 94%, black);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  background: var(--nle-panel-2);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 18%, transparent);
 }
 
 .videon-nle__shortcuts-panel-header {
@@ -1234,7 +1240,7 @@ main {
 
 .videon-editor__player-wrap {
   width: 100%;
-  background: color-mix(in srgb, var(--bg0) 80%, black);
+  background: color-mix(in srgb, var(--ink) 8%, var(--bg0));
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   overflow: hidden;
