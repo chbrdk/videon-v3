@@ -27,9 +27,10 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 1. WHEN the media list loads THEN each item MUST expose `durationMs` and `latestAnalysisStatus` for card/list chrome.
 2. WHEN the card layout is active THEN cards MUST use native `@msqdx/ui` `Card` (+ `CardActions`) with media/title/meta slots — NOT `EntityCard` (catalog) and NOT `HubIndexCard` (magazine headlines).
-3. WHEN filters are shown THEN they MUST use `FilterRow` + `Chip` for lifecycle and analysis facets.
-4. WHEN item status is shown on browse cards/list THEN it MUST use toned `@msqdx/ui` `Badge` (lifecycle + analysis) — NOT uncolored static `Chip`s and NOT a lone green `StatusDot` for “keine Analyse”.
-5. WHERE quick actions appear THEN they MUST link to open / analyses / cuts without nesting interactive controls inside the card anchor.
+3. WHEN browse cards render THEN they MUST be **square-cornered** (`border-radius: 0`) in a hairline magazine grid — same eckige Kachel-Sprache as Checkion collection cards / Audion hub panels; NOT the default DS panel radius.
+4. WHEN filters and search are shown THEN they MUST share one browse band: search input + icon submit (`ToolButton` + search icon), lifecycle `FilterRow`+`Chip`, analysis `FilterRow`+`Chip`, and layout switch — NOT a separate search block above disconnected filter rows with a text „Suchen“ button.
+5. WHEN item status is shown on browse cards/list THEN it MUST use toned `@msqdx/ui` `Badge` (lifecycle + analysis) — NOT uncolored static `Chip`s and NOT a lone green `StatusDot` for “keine Analyse”.
+6. WHERE quick actions appear THEN they MUST link to open / analyses / cuts without nesting interactive controls inside the card anchor.
 | `/upload` | Ingest | `Field` + native file input + `Button` |
 | `/analyses` | Vision runs | `StepStrip` / `Meter` / `Chip` rows |
 | `/cuts` | Cut index | `HubIndexCard` / `RankedList` |

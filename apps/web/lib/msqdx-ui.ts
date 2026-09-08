@@ -97,7 +97,7 @@ export {
 export type { AccentPreference, AccentOption } from '../../../../msqdx-ui/packages/ui/src/accentPreference'
 export { AccentSwatchGroup } from '../../../../msqdx-ui/packages/ui/src/components/AccentSwatchGroup'
 export type { AccentSwatchGroupProps } from '../../../../msqdx-ui/packages/ui/src/components/AccentSwatchGroup'
-export { IconVideo, IconMic } from '../../../../msqdx-ui/packages/ui/src/components/icons'
+export { IconVideo, IconMic, IconResearch } from '../../../../msqdx-ui/packages/ui/src/components/icons'
 export { ToolButton } from '../../../../msqdx-ui/packages/ui/src/components/ToolButton'
 export type { ToolButtonProps } from '../../../../msqdx-ui/packages/ui/src/components/ToolButton'
 export { Timecode } from '../../../../msqdx-ui/packages/ui/src/components/Timecode'

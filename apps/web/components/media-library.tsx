@@ -16,6 +16,7 @@ import {
   Text,
 } from '@msqdx/ui'
 import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
+import { MediaSearch } from '@/components/media-search'
 import { formatClock } from '@/lib/editor-time'
 import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import {
@@ -130,6 +131,8 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
     )
   }, [analysisFilter, items, lifecycleFilter])
 
+  const filtersActive = lifecycleFilter !== 'all' || analysisFilter !== 'all'
+
   if (loading) {
     return (
       <EmptyState>
@@ -173,39 +176,56 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
             Aktualisieren
           </Button>
         </div>
-        <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
       </div>
 
-      <FilterRow label="Status" variant="toolbar">
-        {(
-          [
-            ['all', 'Alle'],
-            ['ready', 'Ready'],
-            ['processing', 'In Arbeit'],
-            ['uploading', 'Upload'],
-            ['failed', 'Fehler'],
-          ] as const
-        ).map(([id, label]) => (
-          <Chip key={id} size="sm" selected={lifecycleFilter === id} onClick={() => setLifecycleFilter(id)}>
-            {label}
-          </Chip>
-        ))}
-      </FilterRow>
-      <FilterRow label="Analyse" variant="toolbar">
-        {(
-          [
-            ['all', 'Alle'],
-            ['none', 'Ohne'],
-            ['running', 'Läuft'],
-            ['succeeded', 'Fertig'],
-            ['failed', 'Fehler'],
-          ] as const
-        ).map(([id, label]) => (
-          <Chip key={id} size="sm" selected={analysisFilter === id} onClick={() => setAnalysisFilter(id)}>
-            {label}
-          </Chip>
-        ))}
-      </FilterRow>
+      <div className="videon-media-browse__band">
+        <MediaSearch platformProjectId={platformProjectId} compact />
+        <FilterRow role="group" aria-label="Medienstatus" variant="magazine">
+          {(
+            [
+              ['all', 'Alle'],
+              ['ready', 'Ready'],
+              ['processing', 'In Arbeit'],
+              ['uploading', 'Upload'],
+              ['failed', 'Fehler'],
+            ] as const
+          ).map(([id, label]) => (
+            <Chip key={id} size="sm" selected={lifecycleFilter === id} onClick={() => setLifecycleFilter(id)}>
+              {label}
+            </Chip>
+          ))}
+        </FilterRow>
+        <FilterRow role="group" aria-label="Analysestatus" variant="magazine">
+          {(
+            [
+              ['all', 'Analyse'],
+              ['none', 'Ohne'],
+              ['running', 'Läuft'],
+              ['succeeded', 'Fertig'],
+              ['failed', 'Fehler'],
+            ] as const
+          ).map(([id, label]) => (
+            <Chip key={id} size="sm" selected={analysisFilter === id} onClick={() => setAnalysisFilter(id)}>
+              {label}
+            </Chip>
+          ))}
+        </FilterRow>
+        <div className="videon-media-browse__band-end">
+          {filtersActive ? (
+            <button
+              type="button"
+              className="videon-media-browse__reset"
+              onClick={() => {
+                setLifecycleFilter('all')
+                setAnalysisFilter('all')
+              }}
+            >
+              Filter zurücksetzen
+            </button>
+          ) : null}
+          <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
+        </div>
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState>
@@ -232,6 +252,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
             return (
               <li key={item.id}>
                 <Card
+                  className="videon-media-card"
                   href={mediaHref}
                   media={
                     <MediaCardThumb
@@ -255,9 +276,6 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                           {duration}
                         </Text>
                       ) : null}
-                      <Text role="meta" as="span">
-                        {item.mimeType} · {formatBytes(item.bytes)}
-                      </Text>
                     </>
                   }
                   actions={

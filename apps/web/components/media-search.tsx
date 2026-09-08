@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Alert, Button, Field, Input, Text } from '@msqdx/ui'
+import { Alert, Button, IconResearch, Input, Text, ToolButton } from '@msqdx/ui'
 import { paths } from '@/lib/paths'
 
 type SearchHit = {
@@ -18,10 +18,13 @@ export function MediaSearch({
   platformProjectId,
   onAddToCut,
   activeCutName,
+  compact = false,
 }: {
   platformProjectId: string
   onAddToCut?: (hit: SearchHit) => void | Promise<void>
   activeCutName?: string | null
+  /** Inline in the Mediathek browse band (no outer margin). */
+  compact?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<SearchHit[]>([])
@@ -51,18 +54,17 @@ export function MediaSearch({
   }
 
   return (
-    <div className="videon-search">
-      <form className="videon-search__form" onSubmit={onSearch}>
-        <Field label="Medien durchsuchen" size="md">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Szene, Stimmung, Dateiname …"
-          />
-        </Field>
-        <Button type="submit" variant="ghost" disabled={loading || !query.trim()}>
-          {loading ? 'Sucht …' : 'Suchen'}
-        </Button>
+    <div className={compact ? 'videon-search videon-search--compact' : 'videon-search'}>
+      <form className="videon-search__form" onSubmit={onSearch} role="search">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Szene, Stimmung, Dateiname …"
+          aria-label="Medien durchsuchen"
+        />
+        <ToolButton type="submit" label={loading ? 'Sucht …' : 'Suchen'} size="md" disabled={loading || !query.trim()}>
+          <IconResearch aria-hidden />
+        </ToolButton>
       </form>
       {activeCutName ? (
         <Text role="meta">Aktiver Cut: {activeCutName}</Text>
