@@ -96,7 +96,7 @@ function relativeWorkspaceLinks(platformProjectId) {
         upload: `/upload?platformProjectId=${id}`,
     };
 }
-var legacy_migration_js_1 = require("./legacy-migration.js");
-Object.defineProperty(exports, "LEGACY_MIGRATION_DECISIONS", { enumerable: true, get: function () { return legacy_migration_js_1.LEGACY_MIGRATION_DECISIONS; } });
-Object.defineProperty(exports, "LEGACY_MIGRATION_SCHEMA_VERSION", { enumerable: true, get: function () { return legacy_migration_js_1.LEGACY_MIGRATION_SCHEMA_VERSION; } });
-Object.defineProperty(exports, "parseLegacyMigrationMappingReport", { enumerable: true, get: function () { return legacy_migration_js_1.parseLegacyMigrationMappingReport; } });
+var legacy_migration_1 = require("./legacy-migration");
+Object.defineProperty(exports, "LEGACY_MIGRATION_DECISIONS", { enumerable: true, get: function () { return legacy_migration_1.LEGACY_MIGRATION_DECISIONS; } });
+Object.defineProperty(exports, "LEGACY_MIGRATION_SCHEMA_VERSION", { enumerable: true, get: function () { return legacy_migration_1.LEGACY_MIGRATION_SCHEMA_VERSION; } });
+Object.defineProperty(exports, "parseLegacyMigrationMappingReport", { enumerable: true, get: function () { return legacy_migration_1.parseLegacyMigrationMappingReport; } });

@@ -69,5 +69,5 @@ export declare function relativeWorkspaceLinks(platformProjectId: string): {
     home: string;
     upload: string;
 };
-export { LEGACY_MIGRATION_DECISIONS, LEGACY_MIGRATION_SCHEMA_VERSION, parseLegacyMigrationMappingReport, } from './legacy-migration.js';
-export type { LegacyMigrationDecision, LegacyMigrationEntry, LegacyMigrationIssue, LegacyMigrationMappingReport, LegacyMigrationParseResult, } from './legacy-migration.js';
+export { LEGACY_MIGRATION_DECISIONS, LEGACY_MIGRATION_SCHEMA_VERSION, parseLegacyMigrationMappingReport, } from './legacy-migration';
+export type { LegacyMigrationDecision, LegacyMigrationEntry, LegacyMigrationIssue, LegacyMigrationMappingReport, LegacyMigrationParseResult, } from './legacy-migration';
