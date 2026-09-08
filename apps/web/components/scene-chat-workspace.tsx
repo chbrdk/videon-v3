@@ -10,7 +10,7 @@ import {
   Text,
   Textarea,
 } from '@msqdx/ui'
-import { SceneSearchHitCard } from '@/components/scene-search-hit-card'
+import { SceneSearchHitStrip } from '@/components/scene-search-hit-strip'
 import { paths } from '@/lib/paths'
 import { useT } from '@/lib/user-prefs'
 
@@ -110,22 +110,16 @@ export function SceneChatWorkspace() {
                   {turn.text}
                 </Text>
                 {turn.hits?.length ? (
-                  <ul className="videon-media-browse__grid videon-scene-hit-grid" aria-label={t('chat.hitsAria')}>
-                    {turn.hits.map((hit) => {
-                      const projectId = hit.platformProjectId
-                      if (!projectId) return null
-                      return (
-                        <li key={hit.id}>
-                          <SceneSearchHitCard
-                            hit={{
-                              ...hit,
-                              platformProjectId: projectId,
-                            }}
-                          />
-                        </li>
+                  <SceneSearchHitStrip
+                    hits={turn.hits
+                      .filter((hit): hit is SearchHit & { platformProjectId: string } =>
+                        Boolean(hit.platformProjectId),
                       )
-                    })}
-                  </ul>
+                      .map((hit) => ({
+                        ...hit,
+                        platformProjectId: hit.platformProjectId,
+                      }))}
+                  />
                 ) : null}
               </div>
             ),

@@ -27,7 +27,7 @@
   "chat": {
     "aria": "Scene chat",
     "emptyTitle": "Search scenes",
-    "emptyBody": "Ask about mood, people, objects, or filenames — hits show the scene, timing, and seek the editor.",
+    "emptyBody": "Ask about mood, people, objects, or filenames — hits as a journey strip; hover enlarges, click seeks the editor.",
     "placeholder": "e.g. logo in office, interview, product close-up …",
     "composerLabel": "Question",
     "send": "Search",
@@ -36,7 +36,12 @@
     "noHits": "No scenes for “{query}”.",
     "triedTerms": "Searched for: {terms}.",
     "hitCount": "{count} hits for “{query}”.",
-    "hitsAria": "Scene hits"
+    "hitsAria": "Scene hits",
+    "hitsTitle": "Hits",
+    "hitsHint": "Hover enlarges the frame — click opens the scene in the editor.",
+    "hitScene": "Scene",
+    "hitHoverHint": "Hover to enlarge",
+    "hitOpenHint": "Click opens in editor"
   },
   "collections": {
     "title": "Projects",

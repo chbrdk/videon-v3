@@ -22,6 +22,8 @@ describe('i18n', () => {
     expect(de('nav.projects')).toBe('Projekte')
     expect(de('nav.chat')).toBe('Chat')
     expect(de('chat.emptyTitle')).toBe('Szenen suchen')
+    expect(de('chat.hitsTitle')).toBe('Treffer')
+    expect(en('chat.hitsHint')).toContain('Hover')
     expect(en('nav.chat')).toBe('Chat')
     expect(en('library.deck')).toContain('every project')
   })
