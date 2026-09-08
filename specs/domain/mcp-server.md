@@ -1,9 +1,9 @@
 # VIDEON v3 MCP Server
 
-**Status:** Draft — 2026-09-08 (Phase 1 read)  
-**Implements:** `mcp-server/` (planned — Streamable HTTP + stdio)  
+**Status:** Accepted — 2026-09-08 (Phase 1 read + Phase 2 write/jobs live)  
+**Implements:** `mcp-server/` (Streamable HTTP + stdio)  
 **Knowledge:** `knowledge/mcp-server.md` · `knowledge/paths.md`  
-**Companions:** `specs/domain/scene-chat.md` · PLEXON `specs/domain/videon-integration.md` · `specs/domain/assistant-videon-mcp.md`  
+**Companions:** `specs/domain/scene-chat.md` · PLEXON `specs/domain/videon-integration.md` · `specs/domain/assistant-videon-mcp.md` · Capability Catalog VIDEON set  
 **Federation:** `2026-05-plexon-federation-v3`
 
 ## Purpose
