@@ -39,6 +39,11 @@ export type MediaBrowseItem = MediaAsset & {
   latestAnalysisStatus: string | null
 }
 
+/** Cross-project Mediathek row — always carries platformProjectId for deep links. */
+export type MediaBrowseItemAcrossProjects = MediaBrowseItem & {
+  platformProjectId: string
+}
+
 type MediaRow = {
   id: string
   workspace_id: string
@@ -56,6 +61,7 @@ type MediaRow = {
   created_at: Date | string
   updated_at: Date | string
   latest_analysis_status?: string | null
+  platform_project_id?: string
 }
 
 function mapMedia(row: MediaRow): MediaAsset {
@@ -109,6 +115,52 @@ export async function listMediaForWorkspace(workspaceId: string): Promise<MediaB
     ...mapMedia(row),
     durationMs: row.duration_ms,
     latestAnalysisStatus: row.latest_analysis_status ?? null,
+  }))
+}
+
+/**
+ * Fail-closed Mediathek across Access Model B projects:
+ * platform_project_id allowlist ∩ local owner/member.
+ */
+export async function listMediaForAccessibleProjects(input: {
+  platformProjectIds: string[]
+  plexonUserId: string
+  limit?: number
+}): Promise<MediaBrowseItemAcrossProjects[]> {
+  const ids = [...new Set(input.platformProjectIds.map((id) => id.trim()).filter(Boolean))]
+  if (!ids.length) return []
+  const limit = Math.min(Math.max(input.limit ?? 500, 1), 500)
+  const result = await databasePool().query<MediaRow>(
+    `select m.id, m.workspace_id, m.created_by_plexon_user_id, m.storage_key, m.original_filename, m.mime_type,
+            m.bytes, m.checksum_sha256, m.lifecycle_state, m.duration_ms, m.width, m.height, m.frame_rate,
+            m.created_at, m.updated_at, w.platform_project_id,
+            (
+              select ar.status
+                from analysis_runs ar
+               where ar.media_asset_id = m.id
+               order by ar.created_at desc
+               limit 1
+            ) as latest_analysis_status
+       from media_assets m
+       join videon_workspaces w on w.id = m.workspace_id
+      where w.platform_project_id = any($1::text[])
+        and m.lifecycle_state <> 'archived'
+        and (
+              w.owner_plexon_user_id = $2
+           or exists (
+                select 1 from videon_workspace_members mem
+                 where mem.workspace_id = w.id and mem.plexon_user_id = $2
+              )
+            )
+      order by m.created_at desc
+      limit $3`,
+    [ids, input.plexonUserId, limit],
+  )
+  return result.rows.map((row) => ({
+    ...mapMedia(row),
+    durationMs: row.duration_ms,
+    latestAnalysisStatus: row.latest_analysis_status ?? null,
+    platformProjectId: row.platform_project_id ?? '',
   }))
 }
 

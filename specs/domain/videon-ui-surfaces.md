@@ -17,21 +17,22 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 ## Information architecture
 
-1. WHEN the operator works in VIDEON THEN the **active Collection** (`platformProjectId`) MUST be the sole user-facing project — NOT a nested “Projects contain Collections” model.
-2. WHEN user-facing copy names that entity THEN it MUST say **Projekt** / **Project** (DE/EN) — NOT mix “Collection” and “Projekt” in the same surface. Internal code, routes (`/collections`, `api/collections`), and federation docs MAY still say Collection.
-3. WHEN the NavRail renders THEN it MUST NOT list `/collections` as a primary capability peer of Mediathek / Upload / Analysen / Cuts.
-4. WHEN project context is shown in chrome THEN it MUST use a **project switcher** (Rail footer or dedicated fallback route) sourced from Access Model B Collections — aligning with PLEXON `videon-integration.md` § UX and `collection-projects.md` (user copy prefers „Projekt“).
-5. WHEN the Mediathek hub renders THEN it MUST present media **of the active project** only (label/deck MUST make that scope explicit).
-6. WHERE `/collections` remains THEN it MUST act as **project picker / switcher fallback** (gate CTA, deep link, Rail switcher target) — NOT as a second product hub competing with the library.
-7. Cross-project “all media” overview is optional later and MUST NOT ship as the default Mediathek.
+1. WHEN the operator works in VIDEON THEN each **Projekt** is one PLEXON Collection (`platformProjectId`) — NOT a nested “Projects contain Collections” model.
+2. WHEN user-facing copy names that entity THEN it MUST say **Projekt** / **Project** (DE/EN). Internal code, federation, and APIs MAY still say Collection / `platformProjectId`.
+3. WHEN the NavRail renders THEN PRIMARY MUST include **Projekte** and **Mediathek** as peers (Checkion/Audion-style project hub + media library) — NOT hide projects only in a footer switcher.
+4. WHEN the **Projekte** hub renders THEN it MUST list Access Model B accessible projects (same catalog as `/api/collections`) and set active project context on select.
+5. WHEN the **Mediathek** hub renders THEN it MUST list media across **all** accessible projects by default (fail-closed via Plexon directory ∩ local workspace membership). Optional `?platformProjectId=` MAY filter to one project.
+6. WHEN Upload / Analysen / Cuts / media detail / cut editor need a write or editor context THEN they MUST remain **project-gated** (`WorkspaceRouteGate` / `platformProjectId`).
+7. WHERE `/collections` remains THEN it MUST redirect or alias to the Projekte hub (`/projects`).
 
 ## Surfaces
 
 | Route | Role | DS composition |
 |-------|------|----------------|
-| `/` | Home magazine | Cover + `HubIndexCard` capabilities + activity columns |
-| `/collections` | Project switcher / Access Model B picker (fallback) | `HubIndexCard` grid |
-| `/library` | Project-scoped media hub | Header + `Input` search + cards/list + browse filters |
+| `/` | Home magazine | Cover + `HubIndexCard` (Projekte, Mediathek, …) + activity |
+| `/projects` | Projekte hub (Access Model B) | `HubIndexCard` grid |
+| `/collections` | Alias → `/projects` | redirect |
+| `/library` | Mediathek — all accessible projects (optional project filter) | Header + cards/list + browse filters |
 
 ## Mediathek browse (Wave A)
 

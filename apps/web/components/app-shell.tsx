@@ -14,7 +14,6 @@ import {
 } from '../lib/msqdx-ui-shell'
 import { Avatar } from '@msqdx/ui'
 import { useActiveCollection } from './collection-context'
-import { useAccessibleCollections } from './use-accessible-collections'
 import {
   NavIconAnalyses,
   NavIconCollection,
@@ -28,9 +27,15 @@ import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 import { useT, useUserPrefs } from '../lib/user-prefs'
 
-/** Capability rail — Collection switcher lives in the footer, not as a peer hub. */
+/** Checkion-style: Projekte + Mediathek peers; Upload/Analysen/Cuts stay project-gated. */
 const PRIMARY_NAV_IDS = [
   { id: 'home', route: paths.routes.home, labelKey: 'nav.home', icon: <NavIconOverview /> },
+  {
+    id: 'projects',
+    route: paths.routes.projects,
+    labelKey: 'nav.projects',
+    icon: <NavIconCollection />,
+  },
   { id: 'library', route: paths.routes.library, labelKey: 'nav.library', icon: <NavIconLibrary /> },
   { id: 'upload', route: paths.routes.upload, labelKey: 'nav.upload', icon: <NavIconUpload /> },
   {
@@ -57,7 +62,6 @@ export function AppShell({
   const router = useRouter()
   const { data: session } = useSession()
   const { platformProjectId } = useActiveCollection()
-  const { nameFor } = useAccessibleCollections()
   const { displayName: prefName } = useUserPrefs()
   const t = useT()
   const [railEdge, setRailEdge] = useState<RailDockEdge>(paths.railDockEdge)
@@ -65,8 +69,6 @@ export function AppShell({
     prefName.trim() && prefName !== paths.defaultDisplayName
       ? prefName
       : session?.user?.name?.trim() || session?.user?.email?.trim() || paths.defaultDisplayName
-  const collectionName = nameFor(platformProjectId)
-  const collectionSwitcherLabel = collectionName || t('nav.chooseCollection')
 
   const frameStyle = useMemo(
     () =>
@@ -81,28 +83,32 @@ export function AppShell({
 
   function isActive(route: string, href: string): boolean {
     if (route === paths.routes.home) return pathname === href
+    if (route === paths.routes.projects) {
+      return (
+        pathname.startsWith(paths.routes.projects) || pathname.startsWith(paths.routes.collections)
+      )
+    }
     return pathname === href.split('?')[0] || pathname.startsWith(href.split('?')[0])
   }
 
   const navItems = useMemo(
     () =>
       PRIMARY_NAV_IDS.map((item) => {
-        const href = workspaceHref(item.route, platformProjectId)
+        const href =
+          item.id === 'library' || item.id === 'projects' || item.id === 'home'
+            ? item.route
+            : workspaceHref(item.route, platformProjectId)
         const label = t(item.labelKey)
-        const ariaLabel =
-          item.id === 'library' && collectionName
-            ? t('nav.libraryAria', { collection: collectionName })
-            : label
         return {
           id: item.id,
           href,
           label,
-          ariaLabel,
+          ariaLabel: label,
           icon: item.icon,
           active: isActive(item.route, href),
         }
       }),
-    [pathname, platformProjectId, collectionName, t],
+    [pathname, platformProjectId, t],
   )
 
   return (
@@ -122,14 +128,6 @@ export function AppShell({
           linkComponent={Link}
           items={navItems}
           footerItems={[
-            {
-              id: 'collection',
-              label: collectionSwitcherLabel,
-              href: paths.routes.collections,
-              active: pathname.startsWith(paths.routes.collections),
-              ariaLabel: t('nav.switchCollectionAria', { name: collectionSwitcherLabel }),
-              icon: <NavIconCollection />,
-            },
             {
               id: 'settings',
               label: t('nav.settings'),

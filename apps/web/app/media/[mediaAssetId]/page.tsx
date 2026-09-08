@@ -26,7 +26,7 @@ export default async function MediaDetailPage({ params, searchParams }: MediaPag
             <Text role="body" as="p">
               Öffne ein Video aus der Mediathek oder wähle zuerst ein Projekt.
             </Text>
-            <Link href={paths.routes.collections}>
+            <Link href={paths.routes.projects}>
               <Button variant="primary">Projekt wählen</Button>
             </Link>
           </EmptyState>

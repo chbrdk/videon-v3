@@ -8,6 +8,7 @@
   },
   "nav": {
     "home": "Overview",
+    "projects": "Projects",
     "collections": "Projects",
     "collection": "Project",
     "chooseCollection": "Choose project",
@@ -23,8 +24,8 @@
     "homeAria": "{brand} overview"
   },
   "collections": {
-    "title": "Choose project",
-    "deck": "One project from PLEXON — then the library opens for that project. Only assigned projects (Access Model B).",
+    "title": "Projects",
+    "deck": "Accessible PLEXON projects (Access Model B). Selecting one sets context for upload, analyses, and cuts.",
     "loading": "Loading projects…",
     "loadError": "Projects could not be loaded",
     "directoryError": "Directory unavailable",
@@ -34,27 +35,42 @@
     "startUpload": "Start first upload"
   },
   "library": {
-    "deck": "Media for this project — not across all projects.",
+    "deck": "All videos from every project you can access.",
+    "deckScoped": "Media for this project.",
     "emptyBody": "Upload the first video into this project.",
-    "otherProject": "Other project",
-    "gridAria": "Media for this project"
+    "emptyBodyGlobal": "No media in your projects yet. Choose a project and start an upload.",
+    "emptyTitle": "No media yet",
+    "gridAria": "Media across accessible projects",
+    "loading": "Loading media…",
+    "loadError": "Library could not be loaded",
+    "unavailable": "Library unavailable",
+    "retry": "Try again",
+    "refresh": "Refresh",
+    "upload": "Upload video",
+    "uploadViaProject": "Upload via project",
+    "lifecycleAria": "Media status",
+    "analysisAria": "Analysis status",
+    "resetFilters": "Reset filters",
+    "noHits": "No matches",
+    "noHitsBody": "Reset filters or upload another asset.",
+    "open": "Open"
   },
   "upload": {
     "title": "Upload video",
-    "deck": "Uploads land in the active project.",
+    "deck": "Uploads land in the selected project.",
     "toLibrary": "Back to library"
   },
   "analyses": {
-    "deck": "Vision runs for the active project.",
+    "deck": "Vision runs for the selected project.",
     "upload": "Upload video"
   },
   "cuts": {
-    "deck": "Cuts for the active project.",
+    "deck": "Cuts for the selected project.",
     "toLibrary": "Back to library"
   },
   "gate": {
     "title": "Project required",
-    "body": "Library, upload, analyses, and cuts belong to an active project. Choose an accessible project first.",
+    "body": "Upload, analyses, and cuts need a selected project. The library shows all projects — pick one here for write context.",
     "choose": "Choose project",
     "loading": "Loading project…"
   },
@@ -99,24 +115,28 @@
   "home": {
     "kicker": "VIDEON",
     "title": "Video intelligence",
-    "lede": "Project-bound library, analyses, and cuts.",
-    "workspaceTitle": "Active project",
+    "lede": "Projects, library across all projects, analyses, and cuts.",
+    "workspaceTitle": "Workspace",
     "activeCollection": "Active project: {name}",
-    "noCollection": "Choose a project — library, analyses, and cuts stay bound to it.",
+    "noCollection": "Choose projects or open the library — all accessible videos.",
     "pickCollectionBody": "Access Model B: only projects explicitly assigned to you in PLEXON.",
     "capabilitiesAria": "VIDEON capabilities",
-    "libraryMeta": "Media for this project — upload and analysis start here.",
-    "uploadMeta": "Direct to object storage — analysis starts after ingest.",
-    "analysesMeta": "OpenRouter / Qwen with schema fallback and scene insights.",
-    "cutsMeta": "Edit compositions for this project.",
+    "projectsMeta": "Accessible PLEXON projects — context for upload and editor.",
+    "libraryMeta": "All videos from every project you can access.",
+    "uploadMeta": "Needs a project — direct to object storage.",
+    "analysesMeta": "Vision runs for a selected project.",
+    "cutsMeta": "Cuts for a selected project.",
     "recentTitle": "Recently in this project",
+    "recentTitleGlobal": "Recently in the library",
     "recentDeck": "Latest media and vision runs for this project.",
-    "recentEmpty": "Choose a project to see activity.",
+    "recentDeckGlobal": "Latest media across all accessible projects.",
+    "recentEmpty": "No activity yet.",
     "activityAria": "Recent activity",
     "mediaCol": "Media",
     "noMedia": "No assets yet.",
     "startUpload": "Start upload",
     "noAnalyses": "No vision runs yet.",
+    "analysesNeedProject": "Analyses are project-bound — choose a project first.",
     "openAnalyses": "Open analyses",
     "cutsHint": "Open the editor per asset from the library.",
     "openCuts": "Open cuts"

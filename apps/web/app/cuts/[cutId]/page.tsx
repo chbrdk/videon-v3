@@ -20,7 +20,7 @@ export default async function CutDetailPage({ params, searchParams }: CutPagePro
     return (
       <AppShell>
         <article className="videon-hub">
-          <Link href={paths.routes.collections}>
+          <Link href={paths.routes.projects}>
             <Button variant="primary">Projekt wählen</Button>
           </Link>
         </article>

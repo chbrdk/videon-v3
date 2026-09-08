@@ -1,6 +1,7 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import { listMediaForWorkspace } from '@/lib/db/media'
+import { listMediaForAccessibleProjects, listMediaForWorkspace } from '@/lib/db/media'
+import { fetchAccessibleCollections } from '@/lib/plexon-collections'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 
@@ -16,24 +17,51 @@ export async function GET(request: Request) {
   }
 
   const platformProjectId = new URL(request.url).searchParams.get('platformProjectId')?.trim() || ''
-  if (!platformProjectId) {
-    return apiError(request, 400, 'invalid_payload', 'platformProjectId is required')
-  }
 
   try {
-    const resolved = await resolveAccessibleWorkspace({ plexonUserId: userId, platformProjectId })
-    if (!resolved.ok) {
-      const status = resolved.code === 'collection_access_denied' ? 403 : resolved.code === 'not_found' ? 404 : 503
-      return apiError(request, status, resolved.code, 'Collection workspace unavailable', {
-        retryable: resolved.code === 'dependency_unavailable',
+    if (platformProjectId) {
+      const resolved = await resolveAccessibleWorkspace({ plexonUserId: userId, platformProjectId })
+      if (!resolved.ok) {
+        const status =
+          resolved.code === 'collection_access_denied' ? 403 : resolved.code === 'not_found' ? 404 : 503
+        return apiError(request, status, resolved.code, 'Collection workspace unavailable', {
+          retryable: resolved.code === 'dependency_unavailable',
+        })
+      }
+      const items = await listMediaForWorkspace(resolved.workspace.id)
+      return apiJson(request, {
+        scope: 'project',
+        platformProjectId,
+        workspaceId: resolved.workspace.id,
+        workspaceStatus: resolved.workspace.status,
+        items: items.map((item) => ({
+          ...item,
+          platformProjectId,
+          projectName: resolved.collection?.name ?? null,
+        })),
       })
     }
-    const items = await listMediaForWorkspace(resolved.workspace.id)
+
+    const directory = await fetchAccessibleCollections(userId)
+    if (!directory) {
+      return apiError(request, 503, 'dependency_unavailable', 'PLEXON project directory is unavailable', {
+        retryable: true,
+      })
+    }
+
+    const nameById = new Map(directory.items.map((item) => [item.id, item.name]))
+    const rows = await listMediaForAccessibleProjects({
+      platformProjectIds: directory.items.map((item) => item.id),
+      plexonUserId: userId,
+    })
+
     return apiJson(request, {
-      platformProjectId,
-      workspaceId: resolved.workspace.id,
-      workspaceStatus: resolved.workspace.status,
-      items,
+      scope: 'accessible',
+      truncated: directory.truncated ?? false,
+      items: rows.map((item) => ({
+        ...item,
+        projectName: nameById.get(item.platformProjectId) ?? null,
+      })),
     })
   } catch {
     return apiError(request, 503, 'dependency_unavailable', 'Media listing failed', { retryable: true })

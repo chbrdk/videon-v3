@@ -1,12 +1,9 @@
-import { AppShell } from '@/components/app-shell'
-import { CollectionsSwitcherHub } from '@/components/collections-switcher-hub'
+import { redirect } from 'next/navigation'
+import { paths } from '@/lib/paths'
 
 export const dynamic = 'force-dynamic'
 
-export default function CollectionsPage() {
-  return (
-    <AppShell>
-      <CollectionsSwitcherHub />
-    </AppShell>
-  )
+/** Legacy alias — Projekte hub lives at `/projects`. */
+export default function CollectionsAliasPage() {
+  redirect(paths.routes.projects)
 }

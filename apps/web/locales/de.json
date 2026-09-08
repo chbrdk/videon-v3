@@ -8,6 +8,7 @@
   },
   "nav": {
     "home": "Übersicht",
+    "projects": "Projekte",
     "collections": "Projekte",
     "collection": "Projekt",
     "chooseCollection": "Projekt wählen",
@@ -23,8 +24,8 @@
     "homeAria": "{brand} Übersicht"
   },
   "collections": {
-    "title": "Projekt wählen",
-    "deck": "Ein Projekt aus PLEXON — danach öffnet die Mediathek dieses Projekts. Nur zugewiesene Projekte (Access Model B).",
+    "title": "Projekte",
+    "deck": "Zugängliche PLEXON-Projekte (Access Model B). Auswahl setzt den Kontext für Upload, Analysen und Cuts.",
     "loading": "Projekte werden geladen …",
     "loadError": "Projekte konnten nicht geladen werden",
     "directoryError": "Verzeichnis nicht erreichbar",
@@ -34,27 +35,42 @@
     "startUpload": "Ersten Upload starten"
   },
   "library": {
-    "deck": "Medien dieses Projekts — nicht über alle Projekte hinweg.",
+    "deck": "Alle Videos aus allen Projekten, die dir zugänglich sind.",
+    "deckScoped": "Medien dieses Projekts.",
     "emptyBody": "Lade das erste Video in dieses Projekt hoch.",
-    "otherProject": "Anderes Projekt",
-    "gridAria": "Medien dieses Projekts"
+    "emptyBodyGlobal": "Noch keine Medien in deinen Projekten. Wähle ein Projekt und starte einen Upload.",
+    "emptyTitle": "Noch keine Medien",
+    "gridAria": "Medien aller zugänglichen Projekte",
+    "loading": "Medien werden geladen …",
+    "loadError": "Mediathek konnte nicht geladen werden",
+    "unavailable": "Mediathek nicht verfügbar",
+    "retry": "Erneut versuchen",
+    "refresh": "Aktualisieren",
+    "upload": "Video hochladen",
+    "uploadViaProject": "Upload über Projekt",
+    "lifecycleAria": "Medienstatus",
+    "analysisAria": "Analysestatus",
+    "resetFilters": "Filter zurücksetzen",
+    "noHits": "Keine Treffer",
+    "noHitsBody": "Filter zurücksetzen oder anderes Medium hochladen.",
+    "open": "Öffnen"
   },
   "upload": {
     "title": "Video hochladen",
-    "deck": "Upload landet im aktiven Projekt.",
+    "deck": "Upload landet im gewählten Projekt.",
     "toLibrary": "Zur Mediathek"
   },
   "analyses": {
-    "deck": "Vision-Runs des aktiven Projekts.",
+    "deck": "Vision-Runs des gewählten Projekts.",
     "upload": "Video hochladen"
   },
   "cuts": {
-    "deck": "Cuts des aktiven Projekts.",
+    "deck": "Cuts des gewählten Projekts.",
     "toLibrary": "Zur Mediathek"
   },
   "gate": {
     "title": "Projekt fehlt",
-    "body": "Mediathek, Upload, Analysen und Cuts gehören zu einem aktiven Projekt. Wähle zuerst ein zugängliches Projekt.",
+    "body": "Upload, Analysen und Cuts brauchen ein gewähltes Projekt. Die Mediathek zeigt alle Projekte — wähle hier eines für den Schreibkontext.",
     "choose": "Projekt wählen",
     "loading": "Projekt wird geladen …"
   },
@@ -99,24 +115,28 @@
   "home": {
     "kicker": "VIDEON",
     "title": "Video-Intelligence",
-    "lede": "Projektgebundene Mediathek, Analysen und Cuts.",
-    "workspaceTitle": "Aktives Projekt",
+    "lede": "Projekte, Mediathek über alle Projekte, Analysen und Cuts.",
+    "workspaceTitle": "Arbeitsfläche",
     "activeCollection": "Aktives Projekt: {name}",
-    "noCollection": "Wähle ein Projekt — Mediathek, Analysen und Cuts bleiben daran gebunden.",
+    "noCollection": "Projekte wählen oder direkt in die Mediathek — alle zugänglichen Videos.",
     "pickCollectionBody": "Access Model B: nur Projekte, die dir in PLEXON zugewiesen sind.",
     "capabilitiesAria": "VIDEON Kapazitäten",
-    "libraryMeta": "Medien dieses Projekts — Upload und Analyse starten hier.",
-    "uploadMeta": "Direkt in Object Storage — Analyse startet nach Abschluss.",
-    "analysesMeta": "OpenRouter / Qwen mit Schema-Fallback und Szenen-Insights.",
-    "cutsMeta": "Schnitt-Compositions dieses Projekts.",
+    "projectsMeta": "Zugängliche PLEXON-Projekte — Kontext für Upload und Editor.",
+    "libraryMeta": "Alle Videos aus allen dir zugänglichen Projekten.",
+    "uploadMeta": "Braucht ein Projekt — direkt in Object Storage.",
+    "analysesMeta": "Vision-Runs eines gewählten Projekts.",
+    "cutsMeta": "Cuts eines gewählten Projekts.",
     "recentTitle": "Zuletzt in diesem Projekt",
+    "recentTitleGlobal": "Zuletzt in der Mediathek",
     "recentDeck": "Die letzten Medien und Vision-Runs dieses Projekts.",
-    "recentEmpty": "Wähle ein Projekt, um Aktivität zu sehen.",
+    "recentDeckGlobal": "Die letzten Medien über alle zugänglichen Projekte.",
+    "recentEmpty": "Noch keine Aktivität.",
     "activityAria": "Letzte Aktivität",
     "mediaCol": "Medien",
     "noMedia": "Noch keine Assets.",
     "startUpload": "Upload starten",
     "noAnalyses": "Noch keine Vision-Runs.",
+    "analysesNeedProject": "Analysen sind projektgebunden — zuerst ein Projekt wählen.",
     "openAnalyses": "Analysen öffnen",
     "cutsHint": "Editor pro Medium in der Mediathek.",
     "openCuts": "Cuts öffnen"

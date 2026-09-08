@@ -86,11 +86,15 @@ export const paths = {
     cuts: '/cuts',
     settings: '/settings',
     login: '/login',
+    /** Projekte hub (Access Model B) — UI copy says Projekt. */
+    projects: '/projects',
+    /** @deprecated Alias — redirects to `/projects`. */
     collections: '/collections',
     apiCollections: '/api/collections',
     apiMedia: '/api/media',
     apiMediaList: (platformProjectId: string) =>
       `/api/media?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaListAccessible: '/api/media',
     apiAnalyses: '/api/analyses',
     apiMediaUploadIntent: '/api/media/upload-intent',
     apiMediaUpload: (mediaAssetId: string, platformProjectId: string) =>

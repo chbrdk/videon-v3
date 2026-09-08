@@ -36,7 +36,7 @@ export function WorkspaceRouteGate({
           <Text role="body" as="p">
             {t('gate.body')}
           </Text>
-          <Link href={paths.routes.collections}>
+          <Link href={paths.routes.projects}>
             <Button variant="primary">{t('gate.choose')}</Button>
           </Link>
         </EmptyState>

@@ -1,25 +1,22 @@
 'use client'
 
-import { CollectionScopedHubHeader } from '@/components/collection-scoped-hub-header'
+import { HubPageHeader } from '@/components/hub-page-header'
 import { MediaLibrary } from '@/components/media-library'
-import { WorkspaceRouteGate } from '@/components/workspace-route-gate'
 import { paths } from '@/lib/paths'
 import { useT } from '@/lib/user-prefs'
 
+/** Mediathek — all accessible projects by default; optional project filter via query. */
 export function LibraryWorkspace({ platformProjectId }: { platformProjectId?: string }) {
   const t = useT()
+  const scoped = Boolean(platformProjectId?.trim())
   return (
-    <WorkspaceRouteGate platformProjectId={platformProjectId} buildHref={paths.routes.libraryFor}>
-      {(collectionId) => (
-        <article className="videon-hub videon-hub--wide">
-          <CollectionScopedHubHeader
-            platformProjectId={collectionId}
-            title={t('nav.library')}
-            deck={t('library.deck')}
-          />
-          <MediaLibrary platformProjectId={collectionId} />
-        </article>
-      )}
-    </WorkspaceRouteGate>
+    <article className="videon-hub videon-hub--wide">
+      <HubPageHeader
+        eyebrow={scoped ? t('nav.collection') : t('nav.library')}
+        title={t('nav.library')}
+        deck={scoped ? t('library.deckScoped') : t('library.deck')}
+      />
+      <MediaLibrary platformProjectId={platformProjectId?.trim() || undefined} />
+    </article>
   )
 }

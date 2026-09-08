@@ -27,6 +27,7 @@ import {
 } from '@/lib/pipeline/pipeline-status'
 import { paths } from '@/lib/paths'
 import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
+import { useT } from '@/lib/user-prefs'
 
 type MediaItem = {
   id: string
@@ -37,6 +38,8 @@ type MediaItem = {
   createdAt: string
   durationMs?: number | null
   latestAnalysisStatus?: string | null
+  platformProjectId?: string
+  projectName?: string | null
 }
 
 type LifecycleFilter = 'all' | 'ready' | 'processing' | 'uploading' | 'failed'
@@ -91,7 +94,10 @@ function MediaCardThumb({
   )
 }
 
-export function MediaLibrary({ platformProjectId }: { platformProjectId: string }) {
+export function MediaLibrary({ platformProjectId }: { platformProjectId?: string }) {
+  const t = useT()
+  const scopedId = platformProjectId?.trim() || ''
+  const global = !scopedId
   const { layout, setLayout } = useHubIndexLayout()
   const [items, setItems] = useState<MediaItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -103,22 +109,22 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(
-        `${paths.routes.apiMedia}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
-        { cache: 'no-store' },
-      )
+      const url = scopedId
+        ? paths.routes.apiMediaList(scopedId)
+        : paths.routes.apiMediaListAccessible
+      const response = await fetch(url, { cache: 'no-store' })
       const body = (await response.json()) as {
         items?: MediaItem[]
         error?: { message?: string }
       }
-      if (!response.ok) throw new Error(body.error?.message || 'Mediathek konnte nicht geladen werden')
+      if (!response.ok) throw new Error(body.error?.message || t('library.loadError'))
       setItems(body.items ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler')
     } finally {
       setLoading(false)
     }
-  }, [platformProjectId])
+  }, [scopedId, t])
 
   useEffect(() => {
     void load()
@@ -132,11 +138,12 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
   }, [analysisFilter, items, lifecycleFilter])
 
   const filtersActive = lifecycleFilter !== 'all' || analysisFilter !== 'all'
+  const uploadHref = scopedId ? paths.routes.uploadFor(scopedId) : paths.routes.projects
 
   if (loading) {
     return (
       <EmptyState>
-        <LoadingText>Medien werden geladen …</LoadingText>
+        <LoadingText>{t('library.loading')}</LoadingText>
       </EmptyState>
     )
   }
@@ -144,10 +151,10 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
   if (error) {
     return (
       <EmptyState>
-        <Text role="title">Mediathek nicht verfügbar</Text>
+        <Text role="title">{t('library.unavailable')}</Text>
         <Text role="body">{error}</Text>
         <Button type="button" variant="ghost" onClick={() => void load()}>
-          Erneut versuchen
+          {t('library.retry')}
         </Button>
       </EmptyState>
     )
@@ -156,10 +163,12 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
   if (!items?.length) {
     return (
       <EmptyState className="videon-home-empty">
-        <Text role="title">Noch keine Medien</Text>
-        <Text role="body">Lade das erste Video in dieses Projekt hoch.</Text>
-        <Link href={paths.routes.uploadFor(platformProjectId)}>
-          <Button variant="primary">Upload starten</Button>
+        <Text role="title">{t('library.emptyTitle')}</Text>
+        <Text role="body">{global ? t('library.emptyBodyGlobal') : t('library.emptyBody')}</Text>
+        <Link href={uploadHref}>
+          <Button variant="primary">
+            {global ? t('nav.chooseCollection') : t('home.startUpload')}
+          </Button>
         </Link>
       </EmptyState>
     )
@@ -169,21 +178,23 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
     <div className="videon-hub-index videon-media-browse">
       <div className="videon-hub-index__toolbar">
         <div className="videon-hub__actions">
-          <Link href={paths.routes.uploadFor(platformProjectId)}>
-            <Button variant="primary">Video hochladen</Button>
+          <Link href={uploadHref}>
+            <Button variant="primary">
+              {global ? t('library.uploadViaProject') : t('library.upload')}
+            </Button>
           </Link>
           <Button type="button" variant="ghost" onClick={() => void load()}>
-            Aktualisieren
+            {t('library.refresh')}
           </Button>
-          <Link href={paths.routes.collections}>
-            <Button variant="ghost">Anderes Projekt</Button>
+          <Link href={paths.routes.projects}>
+            <Button variant="ghost">{t('nav.projects')}</Button>
           </Link>
         </div>
       </div>
 
       <div className="videon-media-browse__band">
-        <MediaSearch platformProjectId={platformProjectId} compact />
-        <FilterRow role="group" aria-label="Medienstatus" variant="toolbar">
+        {scopedId ? <MediaSearch platformProjectId={scopedId} compact /> : null}
+        <FilterRow role="group" aria-label={t('library.lifecycleAria')} variant="toolbar">
           {(
             [
               ['all', 'Alle'],
@@ -198,7 +209,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
             </Chip>
           ))}
         </FilterRow>
-        <FilterRow role="group" aria-label="Analysestatus" variant="toolbar">
+        <FilterRow role="group" aria-label={t('library.analysisAria')} variant="toolbar">
           {(
             [
               ['all', 'Analyse'],
@@ -223,7 +234,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                 setAnalysisFilter('all')
               }}
             >
-              Filter zurücksetzen
+              {t('library.resetFilters')}
             </button>
           ) : null}
           <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
@@ -232,8 +243,8 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
 
       {filtered.length === 0 ? (
         <EmptyState>
-          <Text role="title">Keine Treffer</Text>
-          <Text role="body">Filter zurücksetzen oder anderes Medium hochladen.</Text>
+          <Text role="title">{t('library.noHits')}</Text>
+          <Text role="body">{t('library.noHitsBody')}</Text>
           <Button
             type="button"
             variant="ghost"
@@ -242,25 +253,28 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
               setAnalysisFilter('all')
             }}
           >
-            Filter zurücksetzen
+            {t('library.resetFilters')}
           </Button>
         </EmptyState>
       ) : layout === 'cards' ? (
-        <ul className="videon-media-browse__grid" aria-label="Medien dieses Projekts">
+        <ul className="videon-media-browse__grid" aria-label={t('library.gridAria')}>
           {filtered.map((item) => {
+            const projectId = item.platformProjectId || scopedId
+            if (!projectId) return null
             const ready = item.lifecycleState === 'ready' || item.lifecycleState === 'processing'
             const duration =
               item.durationMs != null && item.durationMs > 0 ? formatClock(item.durationMs) : null
-            const mediaHref = paths.routes.mediaFor(item.id, platformProjectId)
+            const mediaHref = paths.routes.mediaFor(item.id, projectId)
+            const projectLabel = item.projectName || projectId
             return (
-              <li key={item.id}>
+              <li key={`${projectId}:${item.id}`}>
                 <Card
                   className="videon-media-card"
                   href={mediaHref}
                   media={
                     <MediaCardThumb
                       mediaAssetId={item.id}
-                      platformProjectId={platformProjectId}
+                      platformProjectId={projectId}
                       durationMs={item.durationMs}
                       ready={ready}
                     />
@@ -268,6 +282,9 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                   title={item.originalFilename}
                   meta={
                     <>
+                      {global ? (
+                        <Badge tone="neutral">{projectLabel}</Badge>
+                      ) : null}
                       <Badge tone={mediaLifecycleTone(item.lifecycleState)}>
                         {mediaLifecycleLabel(item.lifecycleState)}
                       </Badge>
@@ -285,17 +302,17 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                     <CardActions>
                       <Link href={mediaHref}>
                         <Button variant="ghost" size="sm">
-                          Öffnen
+                          {t('library.open')}
                         </Button>
                       </Link>
-                      <Link href={paths.routes.analysesFor(platformProjectId)}>
+                      <Link href={paths.routes.analysesFor(projectId)}>
                         <Button variant="ghost" size="sm">
-                          Analysen
+                          {t('nav.analyses')}
                         </Button>
                       </Link>
-                      <Link href={paths.routes.cutsFor(platformProjectId)}>
+                      <Link href={paths.routes.cutsFor(projectId)}>
                         <Button variant="ghost" size="sm">
-                          Cuts
+                          {t('nav.cuts')}
                         </Button>
                       </Link>
                     </CardActions>
@@ -308,15 +325,19 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
       ) : (
         <RankedList>
           {filtered.map((item, index) => {
+            const projectId = item.platformProjectId || scopedId
+            if (!projectId) return null
             const duration =
               item.durationMs != null && item.durationMs > 0 ? formatClock(item.durationMs) : '—'
+            const projectLabel = item.projectName || projectId
             return (
               <RankedRow
-                key={item.id}
+                key={`${projectId}:${item.id}`}
                 index={index + 1}
                 label={item.originalFilename}
                 value={
                   <span className="ds-chip-row" style={{ gap: '0.35rem' }}>
+                    {global ? <Badge tone="neutral">{projectLabel}</Badge> : null}
                     <Badge tone={mediaLifecycleTone(item.lifecycleState)}>
                       {mediaLifecycleLabel(item.lifecycleState)}
                     </Badge>
@@ -326,7 +347,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
                   </span>
                 }
                 secondary={`${duration} · ${formatBytes(item.bytes)}`}
-                href={paths.routes.mediaFor(item.id, platformProjectId)}
+                href={paths.routes.mediaFor(item.id, projectId)}
                 linkComponent={Link}
               />
             )

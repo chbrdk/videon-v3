@@ -42,18 +42,22 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 
 Details: [`brand-compliance.md`](./brand-compliance.md).
 
-## Media API (Collection-scoped)
-
-All require auth + `platformProjectId` (except noted).
+## Media API
 
 | Route helper | HTTP |
 |--------------|------|
-| `apiMediaDetail` | `GET`/`DELETE` media |
-| `apiMediaPlayback` / `apiMediaStream` | Playback |
+| `GET /api/media` | Mediathek across accessible projects (`scope: accessible`) |
+| `GET /api/media?platformProjectId=` | Project-scoped list |
+| `apiMediaDetail` | `GET`/`DELETE` media (project-scoped) |
+| `apiMediaPlayback` / `apiMediaStream` | Playback (project-scoped) |
 | `apiMediaStemStream(id, voice\|music, projectId, { download? })` | Stem WAV stream; `download: true` → attachment (`?download=1`) |
 | `apiMediaAnalysis` | `POST` full analysis re-run |
 | `apiMediaBrandCheck` | `POST` brand compliance only |
-| `apiMediaSearch` | Search |
+| `apiMediaSearch` | Search (project-scoped) |
+
+UI routes: `/projects` Projekte hub; `/library` global Mediathek; `/collections` → `/projects`.
+
+Writes, detail, stream, search, upload remain auth + `platformProjectId`.
 
 ## Jobs
 

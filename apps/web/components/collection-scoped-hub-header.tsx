@@ -24,7 +24,7 @@ export function CollectionScopedHubHeader({
   const { nameFor } = useAccessibleCollections()
   const name = nameFor(platformProjectId)
   const switcher = (
-    <Link href={paths.routes.collections}>
+    <Link href={paths.routes.projects}>
       <Button variant="ghost">{t('nav.switchCollection')}</Button>
     </Link>
   )
