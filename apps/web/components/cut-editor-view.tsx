@@ -844,18 +844,6 @@ export function CutEditorView({
             frameMs={frameDurationMs(cut.frameRate)}
             disabled={!playbackUrl || busy}
             onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
-            hud={
-              activeClip ? (
-                <div className="videon-nle__monitor-scene">
-                  <span className="videon-nle__monitor-scene-time">
-                    V1 · {formatClock(activeClip.scene.startMs)} – {formatClock(activeClip.scene.endMs)}
-                  </span>
-                  <p className="videon-nle__monitor-scene-text">
-                    {activeClip.media?.originalFilename ?? `Clip ${activeIndex + 1}`}
-                  </p>
-                </div>
-              ) : null
-            }
           >
             {playbackUrl ? (
               <video

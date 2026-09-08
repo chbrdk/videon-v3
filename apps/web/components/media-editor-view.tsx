@@ -806,21 +806,11 @@ export function MediaEditorView({
             disabled={!playbackUrl || Boolean(busy)}
             onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
             hud={
-              <>
-                {activeScene ? (
-                  <div className="videon-nle__monitor-scene">
-                    <span className="videon-nle__monitor-scene-time">
-                      {formatClock(activeScene.startMs)} – {formatClock(activeScene.endMs)}
-                    </span>
-                    <p className="videon-nle__monitor-scene-text">{activeScene.insight.summary}</p>
-                  </div>
-                ) : null}
-                {markedRange ? (
-                  <div className="videon-nle__monitor-mark">
-                    In {formatClock(markedRange.startMs)} · Out {formatClock(markedRange.endMs)}
-                  </div>
-                ) : null}
-              </>
+              markedRange ? (
+                <div className="videon-nle__monitor-mark">
+                  In {formatClock(markedRange.startMs)} · Out {formatClock(markedRange.endMs)}
+                </div>
+              ) : null
             }
           >
             {playbackUrl ? (
