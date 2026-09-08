@@ -46,6 +46,10 @@ export const VIDEON_TOOL_NAMES = [
   'videon.analysis_get',
   'videon.cuts_list',
   'videon.cut_get',
+  'videon.analysis_run',
+  'videon.brand_check_run',
+  'videon.cut_create',
+  'videon.export_run',
 ] as const
 
 export function registerVideonTools(server: ToolServer) {
@@ -305,6 +309,124 @@ export function registerVideonTools(server: ToolServer) {
           },
         ],
       }
+    },
+  )
+
+  server.registerTool(
+    'videon.analysis_run',
+    {
+      title: 'Start media analysis',
+      description:
+        'POST /api/media/:id/analysis — enqueue analysis job; poll with videon.analysis_get / media_get. Write tool — confirm with user.',
+      inputSchema: z.object({
+        mediaAssetId: z.string(),
+        platformProjectId: z.string(),
+        capabilities: z.array(z.string()).optional(),
+        stemMethod: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      const { mediaAssetId, platformProjectId, capabilities, stemMethod } = args as {
+        mediaAssetId: string
+        platformProjectId: string
+        capabilities?: string[]
+        stemMethod?: string
+      }
+      const body: Record<string, unknown> = {}
+      if (capabilities?.length) body.capabilities = capabilities
+      if (stemMethod?.trim()) body.stemMethod = stemMethod.trim()
+      return textResult(
+        `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      )
+    },
+  )
+
+  server.registerTool(
+    'videon.brand_check_run',
+    {
+      title: 'Start brand compliance check',
+      description:
+        'POST /api/media/:id/brand-check — requires prior succeeded analysis. Write tool — confirm with user.',
+      inputSchema: z.object({
+        mediaAssetId: z.string(),
+        platformProjectId: z.string(),
+      }),
+    },
+    async (args) => {
+      const { mediaAssetId, platformProjectId } = args as {
+        mediaAssetId: string
+        platformProjectId: string
+      }
+      return textResult(
+        `/api/media/${encodeURIComponent(mediaAssetId)}/brand-check?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        },
+      )
+    },
+  )
+
+  server.registerTool(
+    'videon.cut_create',
+    {
+      title: 'Create cut',
+      description:
+        'POST /api/cuts — create a Cut from media/scenes. Write tool — confirm with user. Prefer Collection Flow for complex exports.',
+      inputSchema: z.object({
+        platformProjectId: z.string(),
+        name: z.string(),
+        mediaAssetId: z.string().optional(),
+        startMs: z.number().optional(),
+        endMs: z.number().optional(),
+        scenes: z
+          .array(
+            z.object({
+              sceneKey: z.string().optional(),
+              startMs: z.number().optional(),
+              endMs: z.number().optional(),
+            }),
+          )
+          .optional(),
+      }),
+    },
+    async (args) => {
+      const body = args as Record<string, unknown>
+      return textResult('/api/cuts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    },
+  )
+
+  server.registerTool(
+    'videon.export_run',
+    {
+      title: 'Start cut export',
+      description:
+        'POST /api/cuts/:id/exports — enqueue export job. Prefer Collection Flow when available. Write tool — confirm.',
+      inputSchema: z.object({
+        cutId: z.string(),
+        platformProjectId: z.string(),
+      }),
+    },
+    async (args) => {
+      const { cutId, platformProjectId } = args as { cutId: string; platformProjectId: string }
+      return textResult(
+        `/api/cuts/${encodeURIComponent(cutId)}/exports?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        },
+      )
     },
   )
 }

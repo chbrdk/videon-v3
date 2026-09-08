@@ -78,12 +78,12 @@ Every hit/detail that can open the product MUST include stable deep links:
 
 Hard limits (initial): `media_search` ≤ 20 hits; `media_get` scene list ≤ 40 entries with truncated `searchText` (≤ 200 chars each).
 
-### Phase 2 — Write / jobs (deferred implement)
+### Phase 2 — Write / jobs
 
 | Tool | Maps to | Notes |
 |------|---------|--------|
 | `videon.analysis_run` | `POST /api/media/:id/analysis` | Returns job/run ref; poll via `analysis_get` |
-| `videon.brand_check_run` | `POST /api/media/:id/brand-check` | Optional |
+| `videon.brand_check_run` | `POST /api/media/:id/brand-check` | Requires succeeded analysis |
 | `videon.cut_create` | `POST /api/cuts` | Chat confirmation required (Plexon write policy) |
 | `videon.export_run` | `POST /api/cuts/:id/exports` | Prefer Collection Flow first |
 
