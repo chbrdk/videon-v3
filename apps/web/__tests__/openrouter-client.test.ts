@@ -170,4 +170,46 @@ describe('OpenRouter scene gateway', () => {
     expect(attempts).toBeGreaterThan(1)
     expect(result.insight.summary).toBe('Recovered after routing fallback.')
   })
+
+  it('marks upstream 503 as retryable (V7 E5 provider outage)', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key'
+    process.env.OPENROUTER_API_BASE_URL = 'https://router.invalid/api/v1'
+    process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
+    process.env.VIDEON_OPENROUTER_DATA_COLLECTION = 'deny'
+    const fetcher: typeof fetch = async () => new Response('unavailable', { status: 503 })
+
+    await expect(
+      analyzeSceneWithOpenRouter(
+        {
+          locale: 'de',
+          startMs: 0,
+          endMs: 1000,
+          frames: [{ id: 'frame-1', timestampMs: 500, dataUrl: 'data:image/jpeg;base64,AA==' }],
+          userPseudonym: 'u_hash',
+        },
+        { fetcher },
+      ),
+    ).rejects.toMatchObject({ code: 'upstream', retryable: true })
+  })
+
+  it('marks auth/config failures as non-retryable', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key'
+    process.env.OPENROUTER_API_BASE_URL = 'https://router.invalid/api/v1'
+    process.env.VIDEON_VISION_DEFAULT_MODEL = 'qwen/qwen3.7-flash'
+    process.env.VIDEON_OPENROUTER_DATA_COLLECTION = 'deny'
+    const fetcher: typeof fetch = async () => new Response('unauthorized', { status: 401 })
+
+    await expect(
+      analyzeSceneWithOpenRouter(
+        {
+          locale: 'de',
+          startMs: 0,
+          endMs: 1000,
+          frames: [{ id: 'frame-1', timestampMs: 500, dataUrl: 'data:image/jpeg;base64,AA==' }],
+          userPseudonym: 'u_hash',
+        },
+        { fetcher },
+      ),
+    ).rejects.toMatchObject({ code: 'upstream', retryable: false })
+  })
 })

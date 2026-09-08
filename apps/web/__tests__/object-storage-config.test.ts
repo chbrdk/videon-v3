@@ -42,4 +42,21 @@ describe('private object storage configuration', () => {
     expect(target.uploadUrl).toContain('objects.example.test')
     expect(target.headers).toMatchObject({ 'content-type': 'video/mp4' })
   })
+
+  it('rejects signed download targets outside the workspace prefix (E2)', async () => {
+    process.env.VIDEON_OBJECT_STORAGE_REGION = 'auto'
+    process.env.VIDEON_OBJECT_STORAGE_BUCKET = 'videon-private'
+    process.env.VIDEON_OBJECT_STORAGE_ENDPOINT = 'https://objects.example.test'
+    process.env.VIDEON_OBJECT_STORAGE_ACCESS_KEY_ID = 'test-key'
+    process.env.VIDEON_OBJECT_STORAGE_SECRET_ACCESS_KEY = 'test-secret'
+    process.env.VIDEON_OBJECT_STORAGE_FORCE_PATH_STYLE = 'true'
+
+    await expect(
+      new S3ObjectStore().createDownloadTarget({
+        workspaceId: 'workspace-1',
+        mediaAssetId: 'media-1',
+        storageKey: 'workspace-other/media/media-1/source',
+      }),
+    ).rejects.toThrow(/outside the requested workspace/)
+  })
 })

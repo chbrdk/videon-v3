@@ -82,3 +82,18 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | `ANALYSIS_JOB_NAME` | `videon.media.analysis` |
 | `BRAND_COMPLIANCE_JOB_NAME` | `videon.media.brand_compliance` |
 | `EXPORT_JOB_NAME` | `videon.cut.export` |
+
+## V7 production rollout
+
+| Doc | Role |
+|-----|------|
+| `specs/domain/v7-production-rollout.md` | Domain acceptance / EARS |
+| `knowledge/v7-production-runbook.md` | Operator SoT (deploy, canary, rollback, retention) |
+| `knowledge/legacy-migration-opt-in.md` | Mapping report `videon.legacy-migration.v1` |
+| `knowledge/v7-staging-exercise-log.md` | Exercise evidence (E1–E6) |
+| Coolify main-app | `mi0j3pyjrel80jodebwvhgvi` |
+| Coolify MCP | `pjupngbkompeyfjqocgsi0jy` |
+| Coolify stem-worker | `nodc0dxwwwnpjc2uvk0snrff` |
+| Coolify Postgres | `qvh3hghdbjggzs8bysk9qrqc` |
+| Legacy v2 app (freeze) | `q8c8gwwck404k04okkkwskgk` |
+| Staging exercise runner | `node scripts/v7-staging-exercises.mjs` |

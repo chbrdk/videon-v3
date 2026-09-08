@@ -649,7 +649,7 @@ export function MediaEditorView({
   }
 
   const deleteMedia = async () => {
-    if (!window.confirm('Video und alle Analysen endgültig löschen?')) return
+    if (!window.confirm('Video archivieren? Es verschwindet aus der Mediathek; Daten bleiben bis zur Retention-Purge.')) return
     setBusy('delete')
     setError(null)
     try {

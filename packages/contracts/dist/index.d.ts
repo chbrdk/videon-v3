@@ -57,7 +57,17 @@ export type ApiError = {
         details?: Record<string, unknown>;
     };
 };
+/** Settings API token list stub (no secret). Spec: settings-api-tokens.md */
+export type ApiTokenStub = {
+    id: string;
+    label: string;
+    prefix: string;
+    createdAt: string;
+    lastUsedAt: string | null;
+};
 export declare function relativeWorkspaceLinks(platformProjectId: string): {
     home: string;
     upload: string;
 };
+export { LEGACY_MIGRATION_DECISIONS, LEGACY_MIGRATION_SCHEMA_VERSION, parseLegacyMigrationMappingReport, } from './legacy-migration.js';
+export type { LegacyMigrationDecision, LegacyMigrationEntry, LegacyMigrationIssue, LegacyMigrationMappingReport, LegacyMigrationParseResult, } from './legacy-migration.js';

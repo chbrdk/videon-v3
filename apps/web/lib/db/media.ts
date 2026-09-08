@@ -197,7 +197,11 @@ export async function findMediaAssetDetail(mediaAssetId: string): Promise<MediaA
   return result.rows[0] ? mapMediaDetail(result.rows[0]) : null
 }
 
-export async function deleteMediaAssetForWorkspace(
+/**
+ * Soft-archive media (V7 E4). Hides from default lists; keeps object bytes until retention purge.
+ * Cancels in-flight analysis; does not remove cut_scenes (Cuts may still reference time ranges).
+ */
+export async function archiveMediaAssetForWorkspace(
   mediaAssetId: string,
   workspaceId: string,
 ): Promise<{ storageKey: string } | null> {
@@ -210,6 +214,57 @@ export async function deleteMediaAssetForWorkspace(
         where id = $1
           and workspace_id = $2
           and lifecycle_state <> 'archived'
+        for update`,
+      [mediaAssetId, workspaceId],
+    )
+    if (!media.rows[0]) {
+      await client.query('rollback')
+      return null
+    }
+
+    await client.query(
+      `update analysis_runs
+          set status = 'cancelled',
+              finished_at = coalesce(finished_at, now()),
+              updated_at = now()
+        where media_asset_id = $1
+          and status in ('queued', 'running')`,
+      [mediaAssetId],
+    )
+    await client.query(
+      `update media_assets
+          set lifecycle_state = 'archived',
+              updated_at = now()
+        where id = $1
+          and workspace_id = $2`,
+      [mediaAssetId, workspaceId],
+    )
+    await client.query('commit')
+    return { storageKey: media.rows[0].storage_key }
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+/**
+ * Hard purge after retention window (operator/job only — not the default DELETE API).
+ * Archives empty cuts that lose all scenes; removes analysis + media rows.
+ */
+export async function purgeMediaAssetForWorkspace(
+  mediaAssetId: string,
+  workspaceId: string,
+): Promise<{ storageKey: string } | null> {
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    const media = await client.query<Pick<MediaRow, 'storage_key' | 'lifecycle_state'>>(
+      `select storage_key, lifecycle_state
+         from media_assets
+        where id = $1
+          and workspace_id = $2
         for update`,
       [mediaAssetId, workspaceId],
     )
@@ -249,6 +304,14 @@ export async function deleteMediaAssetForWorkspace(
   } finally {
     client.release()
   }
+}
+
+/** @deprecated Prefer archiveMediaAssetForWorkspace; kept as alias for purge during transition. */
+export async function deleteMediaAssetForWorkspace(
+  mediaAssetId: string,
+  workspaceId: string,
+): Promise<{ storageKey: string } | null> {
+  return purgeMediaAssetForWorkspace(mediaAssetId, workspaceId)
 }
 
 export async function createUploadingMediaAsset(input: {

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VIDEON_WORKSPACE_MEMBER_ROLES = exports.VIDEON_WORKSPACE_STATUSES = exports.PLEXON_USER_HEADER = exports.PLEXON_SERVICE_SECRET_HEADER = exports.PLEXON_CONTRACT_VERSION_HEADER = exports.PLEXON_FEDERATION_CONTRACT_VERSION = void 0;
+exports.parseLegacyMigrationMappingReport = exports.LEGACY_MIGRATION_SCHEMA_VERSION = exports.LEGACY_MIGRATION_DECISIONS = exports.VIDEON_WORKSPACE_MEMBER_ROLES = exports.VIDEON_WORKSPACE_STATUSES = exports.PLEXON_USER_HEADER = exports.PLEXON_SERVICE_SECRET_HEADER = exports.PLEXON_CONTRACT_VERSION_HEADER = exports.PLEXON_FEDERATION_CONTRACT_VERSION = void 0;
 exports.parseProvisionWorkspaceRequest = parseProvisionWorkspaceRequest;
 exports.relativeWorkspaceLinks = relativeWorkspaceLinks;
 exports.PLEXON_FEDERATION_CONTRACT_VERSION = '2026-05-plexon-federation-v3';
@@ -96,3 +96,7 @@ function relativeWorkspaceLinks(platformProjectId) {
         upload: `/upload?platformProjectId=${id}`,
     };
 }
+var legacy_migration_js_1 = require("./legacy-migration.js");
+Object.defineProperty(exports, "LEGACY_MIGRATION_DECISIONS", { enumerable: true, get: function () { return legacy_migration_js_1.LEGACY_MIGRATION_DECISIONS; } });
+Object.defineProperty(exports, "LEGACY_MIGRATION_SCHEMA_VERSION", { enumerable: true, get: function () { return legacy_migration_js_1.LEGACY_MIGRATION_SCHEMA_VERSION; } });
+Object.defineProperty(exports, "parseLegacyMigrationMappingReport", { enumerable: true, get: function () { return legacy_migration_js_1.parseLegacyMigrationMappingReport; } });

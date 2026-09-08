@@ -1,19 +1,17 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
-import { deleteMediaAssetForWorkspace } from '@/lib/db/media'
+import { archiveMediaAssetForWorkspace } from '@/lib/db/media'
 import {
   findLatestAnalysisForMedia,
   listSceneInsightsForAnalysis,
   listStagesForAnalysis,
 } from '@/lib/db/analysis'
-import { objectStorageConfig } from '@/lib/runtime-config'
 import { resolveMediaInWorkspace, resolveWorkspaceForMediaRequest } from '@/lib/media-access'
 import { requireSessionUserId } from '@/lib/session-user'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMedia } from '@/lib/db/media-stems'
 import { listBrandChecksForAnalysis } from '@/lib/db/brand-checks'
 import { toBrandCheckView } from '@/lib/brand-findings'
-import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,29 +109,24 @@ export async function DELETE(request: Request, context: RouteContext) {
 
   const { mediaAssetId } = await context.params
   try {
-    const deleted = await deleteMediaAssetForWorkspace(mediaAssetId.trim(), workspace.workspace.id)
-    if (!deleted) {
+    // V7 E4: soft-archive only. Object bytes + provenance remain until retention purge.
+    const archived = await archiveMediaAssetForWorkspace(mediaAssetId.trim(), workspace.workspace.id)
+    if (!archived) {
       return apiError(request, 404, 'not_found', 'Media asset not found')
     }
 
-    if (objectStorageConfig()) {
-      const store = new S3ObjectStore()
-      await store
-        .removeObject({
-          workspaceId: workspace.workspace.id,
-          storageKey: deleted.storageKey,
-        })
-        .catch(() => {})
-    }
-
-    return apiJson(request, { deleted: true, mediaAssetId: mediaAssetId.trim() })
+    return apiJson(request, {
+      archived: true,
+      deleted: true,
+      mediaAssetId: mediaAssetId.trim(),
+    })
   } catch (error) {
-    console.error('[VIDEON] media DELETE failed', error)
+    console.error('[VIDEON] media DELETE (archive) failed', error)
     return apiError(
       request,
       500,
       'dependency_unavailable',
-      error instanceof Error ? error.message : 'Media delete failed',
+      error instanceof Error ? error.message : 'Media archive failed',
       { retryable: true },
     )
   }

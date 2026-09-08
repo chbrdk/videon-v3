@@ -55,3 +55,48 @@ const index_js_1 = require("./index.js");
         strict_1.default.equal(result.issues[0]?.field, 'members');
     }
 });
+(0, node_test_1.default)('accepts a valid legacy migration mapping report', () => {
+    const result = (0, index_js_1.parseLegacyMigrationMappingReport)({
+        schemaVersion: index_js_1.LEGACY_MIGRATION_SCHEMA_VERSION,
+        source: 'chbrdk/videon',
+        generatedAt: '2026-09-08T18:00:00.000Z',
+        entries: [
+            {
+                legacyWorkspaceId: 'ws-1',
+                legacyCutIds: ['cut-1'],
+                targetPlatformProjectId: 'collection-1',
+                ownerPlexonUserId: 'user-1',
+                decision: 'migrate',
+                evidence: 'TICKET-1',
+            },
+            {
+                legacyWorkspaceId: 'ws-orphan',
+                decision: 'quarantine',
+                quarantineReason: 'ownerless',
+            },
+        ],
+    });
+    strict_1.default.equal(result.ok, true);
+    if (result.ok) {
+        strict_1.default.equal(result.value.entries.length, 2);
+        strict_1.default.equal(result.value.entries[0]?.decision, 'migrate');
+    }
+});
+(0, node_test_1.default)('rejects migrate without Collection owner and quarantine without reason', () => {
+    const result = (0, index_js_1.parseLegacyMigrationMappingReport)({
+        schemaVersion: index_js_1.LEGACY_MIGRATION_SCHEMA_VERSION,
+        source: 'chbrdk/videon',
+        generatedAt: '2026-09-08T18:00:00.000Z',
+        entries: [
+            { legacyWorkspaceId: 'ws-1', decision: 'migrate' },
+            { legacyWorkspaceId: 'ws-2', decision: 'quarantine' },
+        ],
+    });
+    strict_1.default.equal(result.ok, false);
+    if (!result.ok) {
+        const fields = result.issues.map((issue) => issue.field);
+        strict_1.default.ok(fields.includes('entries[0].targetPlatformProjectId'));
+        strict_1.default.ok(fields.includes('entries[0].ownerPlexonUserId'));
+        strict_1.default.ok(fields.includes('entries[1].quarantineReason'));
+    }
+});

@@ -9,7 +9,8 @@
     "dev": "npm run dev -w web",
     "build": "npm run build -w @videon-v3/contracts && npm run build -w web",
     "typecheck": "npm run typecheck -w @videon-v3/contracts && npm run typecheck -w web",
-    "test": "npm run test -w @videon-v3/contracts && npm run test -w web"
+    "test": "npm run test -w @videon-v3/contracts && npm run test -w web",
+    "v7:exercises": "node scripts/v7-staging-exercises.mjs"
   },
   "engines": {
     "node": ">=22"
