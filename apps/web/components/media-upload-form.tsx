@@ -37,6 +37,9 @@ function putFileWithProgress(
       } catch {
         // ignore non-JSON error bodies
       }
+      if (xhr.status === 408 || xhr.status === 413) {
+        message = `Upload fehlgeschlagen (${xhr.status}) — Datei zu groß für Proxy oder Timeout. Direct-Upload/CORS prüfen.`
+      }
       reject(new Error(message))
     }
     xhr.onerror = () =>

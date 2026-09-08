@@ -5,8 +5,15 @@ const workspaceRoot = path.resolve(__dirname, '../..')
 const workspaceNodeModules = path.resolve(workspaceRoot, 'node_modules')
 const webNodeModules = path.resolve(__dirname, 'node_modules')
 
+/** Match `paths.maxUploadBytes` (2 GiB) for same-origin proxy fallback uploads. */
+const UPLOAD_BODY_LIMIT = '2gb'
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ['pg', 'pg-boss'],
+  experimental: {
+    // Next 16 proxy truncates bodies above the default (~10MB) unless raised.
+    proxyClientMaxBodySize: UPLOAD_BODY_LIMIT,
+  },
   webpack: (config) => {
     config.resolve = config.resolve || {}
     config.resolve.alias = {

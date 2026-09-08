@@ -9,6 +9,8 @@ import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+/** Large proxy uploads (fallback when direct S3 CORS fails). */
+export const maxDuration = 3600
 
 const UPLOAD_TTL_MS = 15 * 60 * 1000
 

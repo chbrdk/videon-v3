@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { browserUploadCorsRule, uploadAllowedOrigins } from '@/lib/storage/bucket-cors'
+import {
+  browserUploadCorsRule,
+  isMissingCorsConfigurationError,
+  uploadAllowedOrigins,
+} from '@/lib/storage/bucket-cors'
 
 const savedEnv = { ...process.env }
 
@@ -34,5 +38,16 @@ describe('browserUploadCorsRule', () => {
     expect(rule.AllowedMethods).toContain('PUT')
     expect(rule.AllowedOrigins).toEqual(['https://videon.projects-a.plygrnd.tech'])
     expect(rule.AllowedHeaders).toEqual(['*'])
+  })
+})
+
+describe('isMissingCorsConfigurationError', () => {
+  it('treats MinIO/Garage missing-CORS phrasing as empty config', () => {
+    expect(isMissingCorsConfigurationError(new Error('The CORS configuration does not exist'))).toBe(true)
+    expect(isMissingCorsConfigurationError(new Error('NoSuchCORSConfiguration'))).toBe(true)
+    expect(
+      isMissingCorsConfigurationError(Object.assign(new Error('x'), { name: 'NoSuchCORSConfiguration' })),
+    ).toBe(true)
+    expect(isMissingCorsConfigurationError(new Error('AccessDenied'))).toBe(false)
   })
 })

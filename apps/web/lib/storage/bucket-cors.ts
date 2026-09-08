@@ -12,6 +12,23 @@ function corsRulesEqual(left: CORSRule[], right: CORSRule[]): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+/** Providers phrase missing CORS differently (AWS / MinIO / Garage). */
+export function isMissingCorsConfigurationError(error: unknown): boolean {
+  const name =
+    error && typeof error === 'object' && 'name' in error ? String((error as { name: unknown }).name) : ''
+  const code =
+    error && typeof error === 'object' && 'Code' in error ? String((error as { Code: unknown }).Code) : ''
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return (
+    name === 'NoSuchCORSConfiguration' ||
+    code === 'NoSuchCORSConfiguration' ||
+    message.includes('nosuchcorsconfiguration') ||
+    message.includes('cors configuration does not exist') ||
+    message.includes('no such cors') ||
+    message.includes('not found')
+  )
+}
+
 export function uploadAllowedOrigins(): string[] {
   const origins = new Set<string>()
   const publicUrl = process.env.NEXT_PUBLIC_VIDEON_URL?.trim()
@@ -49,10 +66,7 @@ export async function ensureBrowserUploadCors(client: S3Client, bucket: string):
     const current = await client.send(new GetBucketCorsCommand({ Bucket: bucket }))
     existingRules = current.CORSRules ?? []
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (!message.includes('NoSuchCORSConfiguration') && !message.includes('not found')) {
-      throw error
-    }
+    if (!isMissingCorsConfigurationError(error)) throw error
   }
 
   if (corsRulesEqual(existingRules, desiredRules)) return
