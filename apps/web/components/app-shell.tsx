@@ -18,14 +18,25 @@ import { NavIconAnalyses, NavIconCuts, NavIconLibrary, NavIconOverview, NavIconU
 import { paths } from '../lib/paths'
 import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
+import { useT, useUserPrefs } from '../lib/user-prefs'
 
-const PRIMARY_NAV = [
-  { id: 'home', route: paths.routes.home, label: 'Übersicht', icon: <NavIconOverview /> },
-  { id: 'collections', route: paths.routes.collections, label: 'Collections', icon: <NavIconOverview /> },
-  { id: 'library', route: paths.routes.library, label: 'Mediathek', icon: <NavIconLibrary /> },
-  { id: 'upload', route: paths.routes.upload, label: 'Upload', icon: <NavIconUpload /> },
-  { id: 'analyses', route: paths.routes.analyses, label: 'Analysen', icon: <NavIconAnalyses /> },
-  { id: 'cuts', route: paths.routes.cuts, label: 'Cuts', icon: <NavIconCuts /> },
+const PRIMARY_NAV_IDS = [
+  { id: 'home', route: paths.routes.home, labelKey: 'nav.home', icon: <NavIconOverview /> },
+  {
+    id: 'collections',
+    route: paths.routes.collections,
+    labelKey: 'nav.collections',
+    icon: <NavIconOverview />,
+  },
+  { id: 'library', route: paths.routes.library, labelKey: 'nav.library', icon: <NavIconLibrary /> },
+  { id: 'upload', route: paths.routes.upload, labelKey: 'nav.upload', icon: <NavIconUpload /> },
+  {
+    id: 'analyses',
+    route: paths.routes.analyses,
+    labelKey: 'nav.analyses',
+    icon: <NavIconAnalyses />,
+  },
+  { id: 'cuts', route: paths.routes.cuts, labelKey: 'nav.cuts', icon: <NavIconCuts /> },
 ] as const
 
 export function AppShell({
@@ -43,8 +54,13 @@ export function AppShell({
   const router = useRouter()
   const { data: session } = useSession()
   const { platformProjectId } = useActiveCollection()
+  const { displayName: prefName } = useUserPrefs()
+  const t = useT()
   const [railEdge, setRailEdge] = useState<RailDockEdge>(paths.railDockEdge)
-  const displayName = session?.user?.name?.trim() || session?.user?.email?.trim() || 'VIDEON'
+  const displayName =
+    prefName.trim() && prefName !== paths.defaultDisplayName
+      ? prefName
+      : session?.user?.name?.trim() || session?.user?.email?.trim() || paths.defaultDisplayName
 
   const frameStyle = useMemo(
     () =>
@@ -64,24 +80,24 @@ export function AppShell({
 
   const navItems = useMemo(
     () =>
-      PRIMARY_NAV.map((item) => {
+      PRIMARY_NAV_IDS.map((item) => {
         const href = workspaceHref(item.route, platformProjectId)
         return {
           id: item.id,
           href,
-          label: item.label,
+          label: t(item.labelKey),
           icon: item.icon,
           active: isActive(item.route, href),
         }
       }),
-    [pathname, platformProjectId],
+    [pathname, platformProjectId, t],
   )
 
   return (
     <AppFrame
       railEdge={railEdge}
       style={frameStyle}
-      backCorner={<ShellBackButton label="Zurück" onClick={() => router.back()} />}
+      backCorner={<ShellBackButton label={t('common.back')} onClick={() => router.back()} />}
       brandCorner={<ShellBrandCorner />}
       rail={
         <NavRail
@@ -90,16 +106,16 @@ export function AppShell({
           defaultDockEdge={paths.railDockEdge}
           onDockEdgeChange={setRailEdge}
           logo={<MsqdxLogoMark size={26} title="MSQ DX" />}
-          logoLabel={`${paths.brandLabel} Übersicht`}
+          logoLabel={t('nav.homeAria', { brand: paths.brandLabel })}
           linkComponent={Link}
           items={navItems}
           footerItems={[
             {
               id: 'settings',
-              label: 'Einstellungen',
+              label: t('nav.settings'),
               href: paths.routes.settings,
               active: pathname.startsWith(paths.routes.settings),
-              ariaLabel: 'Einstellungen',
+              ariaLabel: t('nav.settingsAria'),
               icon: <Avatar name={displayName} size="sm" className="rail-avatar" />,
             },
           ]}

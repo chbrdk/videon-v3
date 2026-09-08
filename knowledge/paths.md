@@ -19,6 +19,10 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | `apps/web/lib/msqdx-ui-shell.ts` | AppFrame / NavRail barrel |
 | `apps/web/lib/msqdx-ui-client.ts` | Client overlays barrel |
 | `hubIndexLayoutKey` | Session storage for cards/list hub layout |
+| `defaultTheme` | `light` → SSR `data-theme=msqdx` via `resolveThemeId` |
+| `themeStorageKey` / `localeStorageKey` / `accentStorageKey` | `videon.v3.*` prefs |
+| `knowledge/i18n.md` | DE/EN UI dictionaries |
+| `specs/domain/settings.md` | SettingsShell + prefs sync |
 | `specs/domain/videon-ui-surfaces.md` | Hub + editor IA |
 | `knowledge/ui-rebuild-reuse.md` | Keep/reshape import map |
 | Docker `MSQDX_UI_REF` | Pinned `chbrdk/msqdx-ui` commit for Coolify sibling fetch |

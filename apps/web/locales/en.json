@@ -1,0 +1,63 @@
+{
+  "common": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "back": "Back",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "home": "Overview",
+    "collections": "Collections",
+    "library": "Library",
+    "upload": "Upload",
+    "analyses": "Analyses",
+    "cuts": "Cuts",
+    "settings": "Settings",
+    "settingsAria": "Settings",
+    "homeAria": "{brand} overview"
+  },
+  "pages": {
+    "settings": {
+      "title": "Settings",
+      "lead": "Profile, appearance, and language."
+    }
+  },
+  "settings": {
+    "hint": "Device-local preferences — theme, language, and how you appear in the rail.",
+    "account": "Account",
+    "accountSignedIn": "Signed in via Plexon. Identity is owned by the platform control plane.",
+    "accountSignedOut": "No Plexon session.",
+    "name": "Name",
+    "email": "Email",
+    "profile": "Profile",
+    "displayName": "Display name",
+    "appearance": "Appearance",
+    "appearanceHelp": "Theme applies across the shell.",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "Auto",
+    "language": "Language",
+    "languageHelp": "Interface language for shell and settings (en/de).",
+    "english": "English",
+    "deutsch": "Deutsch",
+    "federation": "Federation",
+    "federationHelp": "Live federation requires PLEXON_SERVICE_SECRET and a non-dummy mode.",
+    "federationMode": "Mode: {mode} · Contract: {contract}",
+    "collection": "Collection",
+    "collectionHelp": "VIDEON is Collection-bound — no second project model.",
+    "collectionBody": "Workspaces and media are always bound to platformProjectId (Access Model B).",
+    "product": "Product",
+    "productHelp": "Product identity of the VIDEON island."
+  },
+  "login": {
+    "title": "Sign in",
+    "lead": "Use your Plexon account. Identity lives on the platform control plane."
+  },
+  "home": {
+    "kicker": "VIDEON",
+    "title": "Video intelligence",
+    "lede": "Collection-bound library, analyses, and cuts."
+  }
+}

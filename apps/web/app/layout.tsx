@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { resolveThemeId } from '@msqdx/ui'
 import './globals.css'
 import { paths } from '@/lib/paths'
 import { AppProviders } from '@/components/app-providers'
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang={paths.defaultLocale} data-theme={paths.defaultTheme} suppressHydrationWarning>
+    <html
+      lang={paths.defaultLocale}
+      data-theme={resolveThemeId(paths.defaultTheme)}
+      suppressHydrationWarning
+    >
       <body suppressHydrationWarning>
         <AppProviders>{children}</AppProviders>
       </body>

@@ -34,7 +34,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 | `/upload` | Ingest | `Field` + native file input + `Button` |
 | `/analyses` | Vision runs | `StepStrip` / `Meter` / `Chip` rows |
 | `/cuts` | Cut index | `HubIndexCard` / `RankedList` |
-| `/settings` | Runtime | `SettingsShell` |
+| `/settings` | Account / appearance / language | `SettingsShell` per `settings.md` (theme default light, en/de) |
 | `/media/:id`, `/cuts/:id` | NLE | `MediaMonitor`, `TransportBar`, `Timeline*`, `FloatingPanel` / `InspectTabs`, `Toast` |
 
 ## Editor IA (Wave B)

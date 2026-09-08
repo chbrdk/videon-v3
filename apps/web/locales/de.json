@@ -1,0 +1,63 @@
+{
+  "common": {
+    "signIn": "Anmelden",
+    "signOut": "Abmelden",
+    "signingOut": "Wird abgemeldet…",
+    "back": "Zurück",
+    "loading": "Laden…"
+  },
+  "nav": {
+    "home": "Übersicht",
+    "collections": "Collections",
+    "library": "Mediathek",
+    "upload": "Upload",
+    "analyses": "Analysen",
+    "cuts": "Cuts",
+    "settings": "Einstellungen",
+    "settingsAria": "Einstellungen",
+    "homeAria": "{brand} Übersicht"
+  },
+  "pages": {
+    "settings": {
+      "title": "Einstellungen",
+      "lead": "Profil, Erscheinungsbild und Sprache."
+    }
+  },
+  "settings": {
+    "hint": "Gerätebezogene Einstellungen — Theme, Sprache und Anzeige in der Rail.",
+    "account": "Konto",
+    "accountSignedIn": "Angemeldet über Plexon. Identität liegt in der Control Plane.",
+    "accountSignedOut": "Keine Plexon-Session.",
+    "name": "Name",
+    "email": "E-Mail",
+    "profile": "Profil",
+    "displayName": "Anzeigename",
+    "appearance": "Erscheinungsbild",
+    "appearanceHelp": "Theme gilt für die gesamte Shell.",
+    "theme": "Theme",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel",
+    "themeAuto": "Auto",
+    "language": "Sprache",
+    "languageHelp": "Oberflächensprache für Shell und Einstellungen (de/en).",
+    "english": "English",
+    "deutsch": "Deutsch",
+    "federation": "Federation",
+    "federationHelp": "Live-Federation braucht PLEXON_SERVICE_SECRET und einen Non-Dummy-Modus.",
+    "federationMode": "Modus: {mode} · Contract: {contract}",
+    "collection": "Collection",
+    "collectionHelp": "VIDEON ist Collection-bound — kein zweites Projektmodell.",
+    "collectionBody": "Workspaces und Medien sind immer an platformProjectId gebunden (Access Model B).",
+    "product": "Produkt",
+    "productHelp": "Produktidentität der VIDEON-Insel."
+  },
+  "login": {
+    "title": "Anmelden",
+    "lead": "Mit deinem Plexon-Konto. Identität liegt in der Control Plane."
+  },
+  "home": {
+    "kicker": "VIDEON",
+    "title": "Video-Intelligence",
+    "lede": "Collection-gebundene Mediathek, Analysen und Cuts."
+  }
+}

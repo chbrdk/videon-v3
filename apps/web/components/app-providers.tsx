@@ -5,15 +5,18 @@ import { SessionProvider } from 'next-auth/react'
 import { Suspense } from 'react'
 import { CollectionContextProvider } from '@/components/collection-context'
 import { ToastProvider } from '@msqdx/ui-client'
+import { UserPrefsProvider } from '@/lib/user-prefs'
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <SessionProvider>
-      <ToastProvider>
-        <Suspense fallback={children}>
-          <CollectionContextProvider>{children}</CollectionContextProvider>
-        </Suspense>
-      </ToastProvider>
+      <UserPrefsProvider>
+        <ToastProvider>
+          <Suspense fallback={children}>
+            <CollectionContextProvider>{children}</CollectionContextProvider>
+          </Suspense>
+        </ToastProvider>
+      </UserPrefsProvider>
     </SessionProvider>
   )
 }
