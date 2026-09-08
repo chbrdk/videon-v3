@@ -7,6 +7,7 @@ import { Button, EmptyState, LoadingText, Text } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
 import { HubPageHeader } from '@/components/hub-page-header'
 import { paths } from '@/lib/paths'
+import { useT } from '@/lib/user-prefs'
 
 export function WorkspaceRouteGate({
   platformProjectId,
@@ -17,6 +18,7 @@ export function WorkspaceRouteGate({
   buildHref: (id: string) => string
   children: (id: string) => ReactNode
 }) {
+  const t = useT()
   const router = useRouter()
   const { platformProjectId: storedId } = useActiveCollection()
   const resolvedId = platformProjectId || storedId || null
@@ -29,14 +31,13 @@ export function WorkspaceRouteGate({
   if (!resolvedId) {
     return (
       <article className="videon-hub">
-        <HubPageHeader eyebrow="Projekt" title="Collection fehlt" />
+        <HubPageHeader eyebrow={t('nav.collection')} title={t('gate.title')} />
         <EmptyState>
           <Text role="body" as="p">
-            Mediathek, Upload, Analysen und Cuts gehören zu einer aktiven Collection (PLEXON-Projekt).
-            Wähle zuerst eine zugängliche Collection.
+            {t('gate.body')}
           </Text>
           <Link href={paths.routes.collections}>
-            <Button variant="primary">Projekt wählen</Button>
+            <Button variant="primary">{t('gate.choose')}</Button>
           </Link>
         </EmptyState>
       </article>
@@ -44,7 +45,7 @@ export function WorkspaceRouteGate({
   }
 
   if (!platformProjectId && storedId) {
-    return <LoadingText>Collection wird geladen …</LoadingText>
+    return <LoadingText>{t('gate.loading')}</LoadingText>
   }
 
   return <>{children(resolvedId)}</>

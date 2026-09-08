@@ -114,7 +114,7 @@ describe('toBrandCheckView', () => {
       brandionRequestId: null,
       provenance: {
         reason: 'no_active_guideline',
-        hint: 'In Brandion ein Active-Pack für diese Collection setzen.',
+        hint: 'In Brandion ein Active-Pack für dieses Projekt setzen.',
       },
       result: {},
     })

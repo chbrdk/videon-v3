@@ -9,10 +9,10 @@
   "nav": {
     "home": "Übersicht",
     "collections": "Projekte",
-    "collection": "Collection",
+    "collection": "Projekt",
     "chooseCollection": "Projekt wählen",
-    "switchCollection": "Collection wechseln",
-    "switchCollectionAria": "Aktive Collection wechseln — {name}",
+    "switchCollection": "Projekt wechseln",
+    "switchCollectionAria": "Aktives Projekt wechseln — {name}",
     "library": "Mediathek",
     "libraryAria": "Mediathek · {collection}",
     "upload": "Upload",
@@ -24,23 +24,39 @@
   },
   "collections": {
     "title": "Projekt wählen",
-    "deck": "Collection = aktives Projekt. Nur zugewiesene Collections (Access Model B) — danach öffnet die Mediathek dieser Collection."
+    "deck": "Ein Projekt aus PLEXON — danach öffnet die Mediathek dieses Projekts. Nur zugewiesene Projekte (Access Model B).",
+    "loading": "Projekte werden geladen …",
+    "loadError": "Projekte konnten nicht geladen werden",
+    "directoryError": "Verzeichnis nicht erreichbar",
+    "emptyTitle": "Keine zugänglichen Projekte",
+    "emptyBody": "Access Model B: VIDEON zeigt nur Projekte, die dir in PLEXON explizit zugewiesen sind.",
+    "listAria": "Zugängliche Projekte",
+    "startUpload": "Ersten Upload starten"
   },
   "library": {
-    "deck": "Medien dieser Collection — nicht über alle Projekte hinweg."
+    "deck": "Medien dieses Projekts — nicht über alle Projekte hinweg.",
+    "emptyBody": "Lade das erste Video in dieses Projekt hoch.",
+    "otherProject": "Anderes Projekt",
+    "gridAria": "Medien dieses Projekts"
   },
   "upload": {
     "title": "Video hochladen",
-    "deck": "Upload landet in der aktiven Collection.",
+    "deck": "Upload landet im aktiven Projekt.",
     "toLibrary": "Zur Mediathek"
   },
   "analyses": {
-    "deck": "Vision-Runs der aktiven Collection.",
+    "deck": "Vision-Runs des aktiven Projekts.",
     "upload": "Video hochladen"
   },
   "cuts": {
-    "deck": "Cuts der aktiven Collection.",
+    "deck": "Cuts des aktiven Projekts.",
     "toLibrary": "Zur Mediathek"
+  },
+  "gate": {
+    "title": "Projekt fehlt",
+    "body": "Mediathek, Upload, Analysen und Cuts gehören zu einem aktiven Projekt. Wähle zuerst ein zugängliches Projekt.",
+    "choose": "Projekt wählen",
+    "loading": "Projekt wird geladen …"
   },
   "pages": {
     "settings": {
@@ -70,9 +86,9 @@
     "federation": "Federation",
     "federationHelp": "Live-Federation braucht PLEXON_SERVICE_SECRET und einen Non-Dummy-Modus.",
     "federationMode": "Modus: {mode} · Contract: {contract}",
-    "collection": "Collection",
-    "collectionHelp": "VIDEON ist Collection-bound — kein zweites Projektmodell.",
-    "collectionBody": "Workspaces und Medien sind immer an platformProjectId gebunden (Access Model B).",
+    "collection": "Projekt",
+    "collectionHelp": "VIDEON ist projektgebunden — kein zweites Projektmodell unter dem Projekt.",
+    "collectionBody": "Workspaces und Medien sind immer an ein PLEXON-Projekt gebunden (Access Model B).",
     "product": "Produkt",
     "productHelp": "Produktidentität der VIDEON-Insel."
   },
@@ -83,19 +99,19 @@
   "home": {
     "kicker": "VIDEON",
     "title": "Video-Intelligence",
-    "lede": "Collection-gebundene Mediathek, Analysen und Cuts.",
+    "lede": "Projektgebundene Mediathek, Analysen und Cuts.",
     "workspaceTitle": "Aktives Projekt",
-    "activeCollection": "Aktive Collection: {name}",
-    "noCollection": "Wähle eine Collection — Mediathek, Analysen und Cuts bleiben daran gebunden.",
-    "pickCollectionBody": "Access Model B: nur Collections, die dir in PLEXON zugewiesen sind.",
+    "activeCollection": "Aktives Projekt: {name}",
+    "noCollection": "Wähle ein Projekt — Mediathek, Analysen und Cuts bleiben daran gebunden.",
+    "pickCollectionBody": "Access Model B: nur Projekte, die dir in PLEXON zugewiesen sind.",
     "capabilitiesAria": "VIDEON Kapazitäten",
-    "libraryMeta": "Medien dieser Collection — Upload und Analyse starten hier.",
+    "libraryMeta": "Medien dieses Projekts — Upload und Analyse starten hier.",
     "uploadMeta": "Direkt in Object Storage — Analyse startet nach Abschluss.",
     "analysesMeta": "OpenRouter / Qwen mit Schema-Fallback und Szenen-Insights.",
-    "cutsMeta": "Schnitt-Compositions dieser Collection.",
-    "recentTitle": "Zuletzt in der Collection",
-    "recentDeck": "Die letzten Medien und Vision-Runs dieser Collection.",
-    "recentEmpty": "Wähle eine Collection, um Aktivität zu sehen.",
+    "cutsMeta": "Schnitt-Compositions dieses Projekts.",
+    "recentTitle": "Zuletzt in diesem Projekt",
+    "recentDeck": "Die letzten Medien und Vision-Runs dieses Projekts.",
+    "recentEmpty": "Wähle ein Projekt, um Aktivität zu sehen.",
     "activityAria": "Letzte Aktivität",
     "mediaCol": "Medien",
     "noMedia": "Noch keine Assets.",

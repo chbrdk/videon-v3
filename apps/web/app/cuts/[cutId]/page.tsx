@@ -18,10 +18,10 @@ export default async function CutDetailPage({ params, searchParams }: CutPagePro
 
   if (!platformProjectId) {
     return (
-      <AppShell description="Cut-Editor benötigt einen Collection-Kontext.">
+      <AppShell>
         <article className="videon-hub">
           <Link href={paths.routes.collections}>
-            <Button variant="primary">Collection wählen</Button>
+            <Button variant="primary">Projekt wählen</Button>
           </Link>
         </article>
       </AppShell>

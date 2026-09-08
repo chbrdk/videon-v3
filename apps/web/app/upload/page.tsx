@@ -12,7 +12,7 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   const platformProjectId = params.platformProjectId?.trim()
 
   return (
-    <AppShell description={platformProjectId ? `Signierter Upload in Collection ${platformProjectId}` : 'Upload'}>
+    <AppShell>
       <UploadWorkspace platformProjectId={platformProjectId} />
     </AppShell>
   )

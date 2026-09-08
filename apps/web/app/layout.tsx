@@ -6,7 +6,7 @@ import { AppProviders } from '@/components/app-providers'
 
 export const metadata: Metadata = {
   title: 'VIDEON v3',
-  description: 'Collection-bound video intelligence for PLEXON',
+  description: 'Project-bound video intelligence for PLEXON',
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

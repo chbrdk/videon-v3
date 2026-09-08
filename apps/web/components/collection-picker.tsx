@@ -14,6 +14,7 @@ import {
 import { useActiveCollection } from '@/components/collection-context'
 import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { paths } from '@/lib/paths'
+import { useT } from '@/lib/user-prefs'
 
 type CollectionItem = {
   id: string
@@ -24,6 +25,7 @@ type CollectionItem = {
 }
 
 export function CollectionPicker() {
+  const t = useT()
   const { setPlatformProjectId } = useActiveCollection()
   const { layout, setLayout } = useHubIndexLayout()
   const [items, setItems] = useState<CollectionItem[] | null>(null)
@@ -42,7 +44,7 @@ export function CollectionPicker() {
           error?: { message?: string }
         }
         if (!response.ok) {
-          throw new Error(body.error?.message || 'Collections konnten nicht geladen werden')
+          throw new Error(body.error?.message || t('collections.loadError'))
         }
         if (!cancelled) setItems(body.items ?? [])
       } catch (err) {
@@ -54,12 +56,12 @@ export function CollectionPicker() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [t])
 
   if (loading) {
     return (
       <EmptyState>
-        <LoadingText>Collections werden geladen …</LoadingText>
+        <LoadingText>{t('collections.loading')}</LoadingText>
       </EmptyState>
     )
   }
@@ -67,7 +69,7 @@ export function CollectionPicker() {
   if (error) {
     return (
       <EmptyState>
-        <Text role="title">Directory nicht erreichbar</Text>
+        <Text role="title">{t('collections.directoryError')}</Text>
         <Text role="body">{error}</Text>
       </EmptyState>
     )
@@ -76,10 +78,8 @@ export function CollectionPicker() {
   if (!items?.length) {
     return (
       <EmptyState>
-        <Text role="title">Keine zugänglichen Collections</Text>
-        <Text role="body">
-          Access Model B: VIDEON zeigt nur Collections, die dir in PLEXON explizit zugewiesen sind.
-        </Text>
+        <Text role="title">{t('collections.emptyTitle')}</Text>
+        <Text role="body">{t('collections.emptyBody')}</Text>
       </EmptyState>
     )
   }
@@ -90,7 +90,7 @@ export function CollectionPicker() {
         <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
       </div>
       {layout === 'cards' ? (
-        <ul className="ds-hub-index-grid" aria-label="Zugängliche Collections">
+        <ul className="ds-hub-index-grid" aria-label={t('collections.listAria')}>
           {items.map((item) => (
             <li key={item.id}>
               <HubIndexCard
@@ -130,7 +130,7 @@ export function CollectionPicker() {
             href={paths.routes.uploadFor(item.id)}
             onClick={() => setPlatformProjectId(item.id)}
           >
-            <Button variant="ghost">Ersten Upload starten</Button>
+            <Button variant="ghost">{t('collections.startUpload')}</Button>
           </Link>
         ))}
       </div>

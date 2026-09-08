@@ -104,7 +104,7 @@ export async function executeBrandCompliance(input: {
           schemaVersion: entry.insight.schemaVersion,
           evidenceFrameCount: evidenceRefs.length,
           evidenceTimestampsMs: evidenceRefs.map((frame) => frame.timestampMs),
-          hint: 'In Brandion ein Active-Pack für diese Collection setzen.',
+          hint: 'In Brandion ein Active-Pack für dieses Projekt setzen.',
         },
       })
     } else {

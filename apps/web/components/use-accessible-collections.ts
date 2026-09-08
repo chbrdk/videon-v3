@@ -31,7 +31,7 @@ export function useAccessibleCollections() {
           error?: { message?: string }
         }
         if (!response.ok) {
-          throw new Error(body.error?.message || 'Collections konnten nicht geladen werden')
+          throw new Error(body.error?.message || 'Projekte konnten nicht geladen werden')
         }
         if (!cancelled) setItems(body.items ?? [])
       } catch (err) {

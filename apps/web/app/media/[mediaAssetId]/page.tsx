@@ -19,15 +19,15 @@ export default async function MediaDetailPage({ params, searchParams }: MediaPag
 
   if (!platformProjectId) {
     return (
-      <AppShell description="Medien-Editor benötigt einen Collection-Kontext.">
+      <AppShell>
         <article className="videon-hub">
           <HubPageHeader eyebrow="Editor" title="Video" />
           <EmptyState>
             <Text role="body" as="p">
-              Öffne ein Video aus der Mediathek oder wähle zuerst eine Collection.
+              Öffne ein Video aus der Mediathek oder wähle zuerst ein Projekt.
             </Text>
             <Link href={paths.routes.collections}>
-              <Button variant="primary">Collection wählen</Button>
+              <Button variant="primary">Projekt wählen</Button>
             </Link>
           </EmptyState>
         </article>

@@ -12,7 +12,7 @@ export default async function AnalysesPage({ searchParams }: AnalysesPageProps) 
   const platformProjectId = params.platformProjectId?.trim()
 
   return (
-    <AppShell description={platformProjectId ? `Vision-Runs für Collection ${platformProjectId}` : 'Analysen'}>
+    <AppShell>
       <AnalysesWorkspace platformProjectId={platformProjectId} />
     </AppShell>
   )

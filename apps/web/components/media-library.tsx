@@ -157,7 +157,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
     return (
       <EmptyState className="videon-home-empty">
         <Text role="title">Noch keine Medien</Text>
-        <Text role="body">Lade das erste Video in diese Collection hoch.</Text>
+        <Text role="body">Lade das erste Video in dieses Projekt hoch.</Text>
         <Link href={paths.routes.uploadFor(platformProjectId)}>
           <Button variant="primary">Upload starten</Button>
         </Link>
@@ -176,7 +176,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
             Aktualisieren
           </Button>
           <Link href={paths.routes.collections}>
-            <Button variant="ghost">Andere Collection</Button>
+            <Button variant="ghost">Anderes Projekt</Button>
           </Link>
         </div>
       </div>
@@ -246,7 +246,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
           </Button>
         </EmptyState>
       ) : layout === 'cards' ? (
-        <ul className="videon-media-browse__grid" aria-label="Medien dieser Collection">
+        <ul className="videon-media-browse__grid" aria-label="Medien dieses Projekts">
           {filtered.map((item) => {
             const ready = item.lifecycleState === 'ready' || item.lifecycleState === 'processing'
             const duration =

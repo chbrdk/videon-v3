@@ -18,19 +18,20 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 ## Information architecture
 
 1. WHEN the operator works in VIDEON THEN the **active Collection** (`platformProjectId`) MUST be the sole user-facing project — NOT a nested “Projects contain Collections” model.
-2. WHEN the NavRail renders THEN it MUST NOT list `/collections` as a primary capability peer of Mediathek / Upload / Analysen / Cuts.
-3. WHEN Collection context is shown in chrome THEN it MUST use a **Collection switcher** (Rail footer or dedicated fallback route) sourced from Access Model B — aligning with PLEXON `videon-integration.md` § UX.
-4. WHEN the Mediathek hub renders THEN it MUST present media **of the active Collection** only (label/deck MUST make that scope explicit).
-5. WHERE `/collections` remains THEN it MUST act as **picker / switcher fallback** (gate CTA, deep link, Rail switcher target) — NOT as a second product hub competing with the library.
-6. Cross-Collection “all media” overview is optional later and MUST NOT ship as the default Mediathek.
+2. WHEN user-facing copy names that entity THEN it MUST say **Projekt** / **Project** (DE/EN) — NOT mix “Collection” and “Projekt” in the same surface. Internal code, routes (`/collections`, `api/collections`), and federation docs MAY still say Collection.
+3. WHEN the NavRail renders THEN it MUST NOT list `/collections` as a primary capability peer of Mediathek / Upload / Analysen / Cuts.
+4. WHEN project context is shown in chrome THEN it MUST use a **project switcher** (Rail footer or dedicated fallback route) sourced from Access Model B Collections — aligning with PLEXON `videon-integration.md` § UX and `collection-projects.md` (user copy prefers „Projekt“).
+5. WHEN the Mediathek hub renders THEN it MUST present media **of the active project** only (label/deck MUST make that scope explicit).
+6. WHERE `/collections` remains THEN it MUST act as **project picker / switcher fallback** (gate CTA, deep link, Rail switcher target) — NOT as a second product hub competing with the library.
+7. Cross-project “all media” overview is optional later and MUST NOT ship as the default Mediathek.
 
 ## Surfaces
 
 | Route | Role | DS composition |
 |-------|------|----------------|
 | `/` | Home magazine | Cover + `HubIndexCard` capabilities + activity columns |
-| `/collections` | Collection switcher / Access Model B picker (fallback) | `HubIndexCard` grid |
-| `/library` | Collection-scoped media hub | Header + `Input` search + cards/list + browse filters |
+| `/collections` | Project switcher / Access Model B picker (fallback) | `HubIndexCard` grid |
+| `/library` | Project-scoped media hub | Header + `Input` search + cards/list + browse filters |
 
 ## Mediathek browse (Wave A)
 

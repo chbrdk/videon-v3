@@ -19,8 +19,12 @@ describe('i18n', () => {
     expect(en('nav.settings')).toBe('Settings')
     expect(de('nav.library')).toBe('Mediathek')
     expect(de('nav.chooseCollection')).toBe('Projekt wählen')
-    expect(de('library.deck')).toContain('dieser Collection')
+    expect(de('nav.switchCollection')).toBe('Projekt wechseln')
+    expect(de('nav.collection')).toBe('Projekt')
+    expect(de('library.deck')).toContain('dieses Projekts')
+    expect(de('gate.title')).toBe('Projekt fehlt')
     expect(en('nav.libraryAria', { collection: 'Acme' })).toBe('Library · Acme')
+    expect(en('nav.switchCollection')).toBe('Switch project')
   })
 })
 
