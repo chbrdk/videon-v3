@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { databasePool } from './client'
+import { buildSceneSearchPlan } from '@/lib/scene-search-query'
 
 export type SearchHit = {
   id: string
@@ -71,32 +72,72 @@ export async function replaceSearchEntriesForAnalysis(input: {
   }
 }
 
+type SearchRow = {
+  id: string
+  media_asset_id: string
+  analysis_run_id: string
+  scene_key: string | null
+  search_text: string
+  original_filename: string
+  rank: number
+  start_ms: number | null
+  end_ms: number | null
+  platform_project_id?: string
+}
+
+function mapHit(row: SearchRow): SearchHit {
+  return {
+    id: row.id,
+    mediaAssetId: row.media_asset_id,
+    analysisRunId: row.analysis_run_id,
+    sceneKey: row.scene_key,
+    searchText: row.search_text,
+    mediaFilename: row.original_filename,
+    rank: Number(row.rank) || 0,
+    startMs: row.start_ms,
+    endMs: row.end_ms,
+    platformProjectId: row.platform_project_id,
+  }
+}
+
+/**
+ * Match via OR-prefix tsquery and/or ILIKE patterns (NL chat + typos).
+ */
+const MATCH_SQL = `
+  (
+    ($ts::text is not null and to_tsvector('simple', mse.search_text) @@ to_tsquery('simple', $ts))
+    or ($likes::text[] is not null and cardinality($likes::text[]) > 0 and mse.search_text ilike any ($likes))
+  )
+`
+
+const RANK_SQL = `
+  (
+    case
+      when $ts::text is not null and to_tsvector('simple', mse.search_text) @@ to_tsquery('simple', $ts)
+        then ts_rank(to_tsvector('simple', mse.search_text), to_tsquery('simple', $ts))
+      else 0
+    end
+    + case
+        when $likes::text[] is not null and mse.search_text ilike any ($likes) then 0.15
+        else 0
+      end
+  )
+`
+
 export async function searchMediaInWorkspace(input: {
   workspaceId: string
   query: string
   limit?: number
 }): Promise<SearchHit[]> {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50)
-  const query = input.query.trim()
-  if (!query) return []
+  const plan = buildSceneSearchPlan(input.query)
+  if (!plan.tsQuery && plan.likePatterns.length === 0) return []
 
-  const result = await databasePool().query<
-    {
-      id: string
-      media_asset_id: string
-      analysis_run_id: string
-      scene_key: string | null
-      search_text: string
-      original_filename: string
-      rank: number
-      start_ms: number | null
-      end_ms: number | null
-    }
-  >(
+  const result = await databasePool().query<SearchRow>(
     `select mse.id, mse.media_asset_id, mse.analysis_run_id, mse.scene_key, mse.search_text,
             ma.original_filename,
             si.start_ms, si.end_ms,
-            ts_rank(to_tsvector('simple', mse.search_text), plainto_tsquery('simple', $2)) as rank
+            ${RANK_SQL.replaceAll('$ts', '$2').replaceAll('$likes', '$3')} as rank
        from media_search_entries mse
        join media_assets ma on ma.id = mse.media_asset_id
        left join scene_insights si
@@ -104,23 +145,13 @@ export async function searchMediaInWorkspace(input: {
         and si.scene_key = mse.scene_key
       where mse.workspace_id = $1
         and ma.lifecycle_state <> 'archived'
-        and to_tsvector('simple', mse.search_text) @@ plainto_tsquery('simple', $2)
+        and ${MATCH_SQL.replaceAll('$ts', '$2').replaceAll('$likes', '$3')}
       order by rank desc, mse.created_at desc
-      limit $3`,
-    [input.workspaceId, query, limit],
+      limit $4`,
+    [input.workspaceId, plan.tsQuery, plan.likePatterns.length ? plan.likePatterns : null, limit],
   )
 
-  return result.rows.map((row) => ({
-    id: row.id,
-    mediaAssetId: row.media_asset_id,
-    analysisRunId: row.analysis_run_id,
-    sceneKey: row.scene_key,
-    searchText: row.search_text,
-    mediaFilename: row.original_filename,
-    rank: row.rank,
-    startMs: row.start_ms,
-    endMs: row.end_ms,
-  }))
+  return result.rows.map(mapHit)
 }
 
 const PLATFORM_PROJECT_UUID_RE =
@@ -132,10 +163,12 @@ export async function searchMediaForAccessibleProjects(input: {
   plexonUserId: string
   query: string
   limit?: number
-}): Promise<SearchHit[]> {
+}): Promise<{ hits: SearchHit[]; planTerms: string[] }> {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 50)
-  const query = input.query.trim()
-  if (!query) return []
+  const plan = buildSceneSearchPlan(input.query)
+  if (!plan.tsQuery && plan.likePatterns.length === 0) {
+    return { hits: [], planTerms: [] }
+  }
   const ids = [
     ...new Set(
       input.platformProjectIds
@@ -143,26 +176,17 @@ export async function searchMediaForAccessibleProjects(input: {
         .filter((id) => PLATFORM_PROJECT_UUID_RE.test(id)),
     ),
   ]
-  if (!ids.length) return []
-  if (!PLATFORM_PROJECT_UUID_RE.test(input.plexonUserId.trim())) return []
+  if (!ids.length) return { hits: [], planTerms: plan.terms }
+  if (!PLATFORM_PROJECT_UUID_RE.test(input.plexonUserId.trim())) {
+    return { hits: [], planTerms: plan.terms }
+  }
 
-  const result = await databasePool().query<{
-    id: string
-    media_asset_id: string
-    analysis_run_id: string
-    scene_key: string | null
-    search_text: string
-    original_filename: string
-    rank: number
-    start_ms: number | null
-    end_ms: number | null
-    platform_project_id: string
-  }>(
+  const result = await databasePool().query<SearchRow>(
     `select mse.id, mse.media_asset_id, mse.analysis_run_id, mse.scene_key, mse.search_text,
             ma.original_filename,
             si.start_ms, si.end_ms,
             w.platform_project_id::text as platform_project_id,
-            ts_rank(to_tsvector('simple', mse.search_text), plainto_tsquery('simple', $2)) as rank
+            ${RANK_SQL.replaceAll('$ts', '$2').replaceAll('$likes', '$3')} as rank
        from media_search_entries mse
        join media_assets ma on ma.id = mse.media_asset_id
        join videon_workspaces w on w.id = mse.workspace_id
@@ -172,28 +196,23 @@ export async function searchMediaForAccessibleProjects(input: {
       where w.platform_project_id = any($1::uuid[])
         and ma.lifecycle_state <> 'archived'
         and (
-              w.owner_plexon_user_id = $3::uuid
+              w.owner_plexon_user_id = $4::uuid
            or exists (
                 select 1 from videon_workspace_members mem
-                 where mem.workspace_id = w.id and mem.plexon_user_id = $3::uuid
+                 where mem.workspace_id = w.id and mem.plexon_user_id = $4::uuid
               )
             )
-        and to_tsvector('simple', mse.search_text) @@ plainto_tsquery('simple', $2)
+        and ${MATCH_SQL.replaceAll('$ts', '$2').replaceAll('$likes', '$3')}
       order by rank desc, mse.created_at desc
-      limit $4`,
-    [ids, query, input.plexonUserId, limit],
+      limit $5`,
+    [
+      ids,
+      plan.tsQuery,
+      plan.likePatterns.length ? plan.likePatterns : null,
+      input.plexonUserId,
+      limit,
+    ],
   )
 
-  return result.rows.map((row) => ({
-    id: row.id,
-    mediaAssetId: row.media_asset_id,
-    analysisRunId: row.analysis_run_id,
-    sceneKey: row.scene_key,
-    searchText: row.search_text,
-    mediaFilename: row.original_filename,
-    rank: row.rank,
-    startMs: row.start_ms,
-    endMs: row.end_ms,
-    platformProjectId: row.platform_project_id,
-  }))
+  return { hits: result.rows.map(mapHit), planTerms: plan.terms }
 }

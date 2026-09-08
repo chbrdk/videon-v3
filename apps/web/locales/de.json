@@ -34,6 +34,7 @@
     "searching": "Suche läuft …",
     "searchFailed": "Suche fehlgeschlagen",
     "noHits": "Keine Szenen für „{query}“.",
+    "triedTerms": "Gesucht nach: {terms}.",
     "hitCount": "{count} Treffer für „{query}“."
   },
   "collections": {

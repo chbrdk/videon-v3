@@ -34,6 +34,7 @@
     "searching": "Searching…",
     "searchFailed": "Search failed",
     "noHits": "No scenes for “{query}”.",
+    "triedTerms": "Searched for: {terms}.",
     "hitCount": "{count} hits for “{query}”."
   },
   "collections": {

@@ -1,6 +1,7 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { searchMediaForAccessibleProjects, searchMediaInWorkspace } from '@/lib/db/search'
+import { buildSceneSearchPlan } from '@/lib/scene-search-query'
 import { fetchAccessibleCollections } from '@/lib/plexon-collections'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
@@ -23,6 +24,8 @@ export async function GET(request: Request) {
     return apiError(request, 400, 'invalid_payload', 'q is required')
   }
 
+  const plan = buildSceneSearchPlan(query)
+
   try {
     if (platformProjectId) {
       const workspace = await resolveWorkspaceForMediaRequest({
@@ -41,6 +44,7 @@ export async function GET(request: Request) {
       return apiJson(request, {
         scope: 'project',
         query,
+        terms: plan.terms,
         items: items.map((item) => ({ ...item, platformProjectId })),
       })
     }
@@ -52,7 +56,7 @@ export async function GET(request: Request) {
       })
     }
 
-    const items = await searchMediaForAccessibleProjects({
+    const { hits, planTerms } = await searchMediaForAccessibleProjects({
       platformProjectIds: directory.items.map((item) => item.id),
       plexonUserId: userId,
       query,
@@ -62,8 +66,9 @@ export async function GET(request: Request) {
     return apiJson(request, {
       scope: 'accessible',
       query,
+      terms: planTerms.length ? planTerms : plan.terms,
       truncated: directory.truncated,
-      items: items.map((item) => ({
+      items: hits.map((item) => ({
         ...item,
         projectName: item.platformProjectId ? nameById.get(item.platformProjectId) ?? null : null,
       })),

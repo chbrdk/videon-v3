@@ -65,16 +65,20 @@ export function SceneChatWorkspace() {
       const response = await fetch(paths.routes.apiMediaSearchAccessible(trimmed), { cache: 'no-store' })
       const body = (await response.json()) as {
         items?: SearchHit[]
+        terms?: string[]
         error?: { message?: string }
       }
       if (!response.ok) throw new Error(body.error?.message || t('chat.searchFailed'))
       const hits = body.items ?? []
+      const terms = body.terms?.slice(0, 8) ?? []
+      const termsHint = terms.length ? ` (${terms.join(', ')})` : ''
       const assistant: ChatTurn = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         text:
           hits.length === 0
-            ? t('chat.noHits', { query: trimmed })
+            ? t('chat.noHits', { query: trimmed }) +
+              (termsHint ? ` ${t('chat.triedTerms', { terms: terms.join(', ') })}` : '')
             : t('chat.hitCount', { count: hits.length, query: trimmed }),
         hits: hits.length > 0 ? hits : undefined,
       }
