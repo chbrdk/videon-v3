@@ -8,6 +8,7 @@
   },
   "nav": {
     "home": "Overview",
+    "chat": "Chat",
     "projects": "Projects",
     "collections": "Projects",
     "collection": "Project",
@@ -22,6 +23,18 @@
     "settings": "Settings",
     "settingsAria": "Settings",
     "homeAria": "{brand} overview"
+  },
+  "chat": {
+    "aria": "Scene chat",
+    "emptyTitle": "Search scenes",
+    "emptyBody": "Ask about mood, people, objects, or filenames — hits open the editor.",
+    "placeholder": "e.g. logo in office, interview, product close-up …",
+    "composerLabel": "Question",
+    "send": "Search",
+    "searching": "Searching…",
+    "searchFailed": "Search failed",
+    "noHits": "No scenes for “{query}”.",
+    "hitCount": "{count} hits for “{query}”."
   },
   "collections": {
     "title": "Projects",
@@ -121,11 +134,14 @@
     "noCollection": "Choose projects or open the library — all accessible videos.",
     "pickCollectionBody": "Access Model B: only projects explicitly assigned to you in PLEXON.",
     "capabilitiesAria": "VIDEON capabilities",
+    "chatMeta": "Find scenes across all accessible projects.",
     "projectsMeta": "Accessible PLEXON projects — context for upload and editor.",
     "libraryMeta": "All videos from every project you can access.",
     "uploadMeta": "Needs a project — direct to object storage.",
     "analysesMeta": "Vision runs for a selected project.",
     "cutsMeta": "Cuts for a selected project.",
+    "chatHint": "Search individual scenes, moods, or objects.",
+    "openChat": "Open chat",
     "recentTitle": "Recently in this project",
     "recentTitleGlobal": "Recently in the library",
     "recentDeck": "Latest media and vision runs for this project.",

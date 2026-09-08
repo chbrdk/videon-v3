@@ -44,6 +44,32 @@ main {
   padding-block-start: clamp(2.25rem, 5vw, 3.75rem);
 }
 
+/* Scene chat — Audion-style full-stage panel using @msqdx/ui chat.css */
+.videon-stage:has(.videon-chat-panel) {
+  padding-block-start: 0;
+  min-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.videon-chat-panel.chat-panel-open {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.videon-chat-panel.chat-panel-open .chat-turns {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-block: 1rem 6rem;
+}
+
+.videon-chat-panel.chat-panel-open .chat-turn-assistant .ds-rank-block {
+  margin-block-start: 0.75rem;
+}
+
 .videon-page-lead {
   margin: 0 0 1.25rem;
   color: var(--muted);

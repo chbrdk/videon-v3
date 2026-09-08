@@ -16,35 +16,33 @@ import { Avatar } from '@msqdx/ui'
 import { useActiveCollection } from './collection-context'
 import {
   NavIconAnalyses,
-  NavIconCollection,
-  NavIconCuts,
+  NavIconChat,
   NavIconLibrary,
   NavIconOverview,
-  NavIconUpload,
+  NavIconProjects,
 } from './nav-icons'
 import { paths } from '../lib/paths'
 import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 import { useT, useUserPrefs } from '../lib/user-prefs'
 
-/** Checkion-style: Projekte + Mediathek peers; Upload/Analysen/Cuts stay project-gated. */
+/** Chat · Home · Projekte · Mediathek · Analysen — Upload/Cuts via deep links only. */
 const PRIMARY_NAV_IDS = [
+  { id: 'chat', route: paths.routes.chat, labelKey: 'nav.chat', icon: <NavIconChat /> },
   { id: 'home', route: paths.routes.home, labelKey: 'nav.home', icon: <NavIconOverview /> },
   {
     id: 'projects',
     route: paths.routes.projects,
     labelKey: 'nav.projects',
-    icon: <NavIconCollection />,
+    icon: <NavIconProjects />,
   },
   { id: 'library', route: paths.routes.library, labelKey: 'nav.library', icon: <NavIconLibrary /> },
-  { id: 'upload', route: paths.routes.upload, labelKey: 'nav.upload', icon: <NavIconUpload /> },
   {
     id: 'analyses',
     route: paths.routes.analyses,
     labelKey: 'nav.analyses',
     icon: <NavIconAnalyses />,
   },
-  { id: 'cuts', route: paths.routes.cuts, labelKey: 'nav.cuts', icon: <NavIconCuts /> },
 ] as const
 
 export function AppShell({
@@ -95,7 +93,10 @@ export function AppShell({
     () =>
       PRIMARY_NAV_IDS.map((item) => {
         const href =
-          item.id === 'library' || item.id === 'projects' || item.id === 'home'
+          item.id === 'library' ||
+          item.id === 'projects' ||
+          item.id === 'home' ||
+          item.id === 'chat'
             ? item.route
             : workspaceHref(item.route, platformProjectId)
         const label = t(item.labelKey)

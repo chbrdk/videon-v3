@@ -19,20 +19,22 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 1. WHEN the operator works in VIDEON THEN each **Projekt** is one PLEXON Collection (`platformProjectId`) — NOT a nested “Projects contain Collections” model.
 2. WHEN user-facing copy names that entity THEN it MUST say **Projekt** / **Project** (DE/EN). Internal code, federation, and APIs MAY still say Collection / `platformProjectId`.
-3. WHEN the NavRail renders THEN PRIMARY MUST include **Projekte** and **Mediathek** as peers (Checkion/Audion-style project hub + media library) — NOT hide projects only in a footer switcher.
-4. WHEN the **Projekte** hub renders THEN it MUST list Access Model B accessible projects (same catalog as `/api/collections`) and set active project context on select.
-5. WHEN the **Mediathek** hub renders THEN it MUST list media across **all** accessible projects by default (fail-closed via Plexon directory ∩ local workspace membership). Optional `?platformProjectId=` MAY filter to one project.
-6. WHEN Upload / Analysen / Cuts / media detail / cut editor need a write or editor context THEN they MUST remain **project-gated** (`WorkspaceRouteGate` / `platformProjectId`).
-7. WHERE `/collections` remains THEN it MUST redirect or alias to the Projekte hub (`/projects`).
+3. WHEN the NavRail renders THEN PRIMARY MUST be **Chat · Übersicht · Projekte · Mediathek · Analysen** (Audion/Checkion-aligned). Upload and Cuts MUST NOT be primary rail peers (deep links / editor remain). See `scene-chat.md`.
+4. WHEN the Projekte rail item renders THEN it MUST use the shared folder **Projects** icon (`NavIconProjects`).
+5. WHEN the **Projekte** hub renders THEN it MUST list Access Model B accessible projects and set active project context on select.
+6. WHEN the **Mediathek** hub renders THEN it MUST list media across **all** accessible projects by default. Optional `?platformProjectId=` MAY filter to one project.
+7. WHEN Analysen / Upload / Cuts / media detail / cut editor need a write or editor context THEN they MUST remain **project-gated**.
+8. WHERE `/collections` remains THEN it MUST redirect or alias to `/projects`.
 
 ## Surfaces
 
 | Route | Role | DS composition |
 |-------|------|----------------|
-| `/` | Home magazine | Cover + `HubIndexCard` (Projekte, Mediathek, …) + activity |
+| `/` | Home magazine | Cover + `HubIndexCard` (Chat, Projekte, Mediathek, Analysen) |
+| `/chat` | Scene search chat (Phase 1) | `@msqdx/ui` chat chrome + hit list — `scene-chat.md` |
 | `/projects` | Projekte hub (Access Model B) | `HubIndexCard` grid |
 | `/collections` | Alias → `/projects` | redirect |
-| `/library` | Mediathek — all accessible projects (optional project filter) | Header + cards/list + browse filters |
+| `/library` | Mediathek — all accessible projects | Header + cards/list + browse filters |
 
 ## Mediathek browse (Wave A)
 

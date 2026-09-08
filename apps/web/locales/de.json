@@ -8,6 +8,7 @@
   },
   "nav": {
     "home": "Übersicht",
+    "chat": "Chat",
     "projects": "Projekte",
     "collections": "Projekte",
     "collection": "Projekt",
@@ -22,6 +23,18 @@
     "settings": "Einstellungen",
     "settingsAria": "Einstellungen",
     "homeAria": "{brand} Übersicht"
+  },
+  "chat": {
+    "aria": "Szenen-Chat",
+    "emptyTitle": "Szenen suchen",
+    "emptyBody": "Frag nach Stimmung, Personen, Objekten oder Dateinamen — Treffer öffnen den Editor.",
+    "placeholder": "z. B. Logo im Büro, Interview, Produktclose-up …",
+    "composerLabel": "Frage",
+    "send": "Suchen",
+    "searching": "Suche läuft …",
+    "searchFailed": "Suche fehlgeschlagen",
+    "noHits": "Keine Szenen für „{query}“.",
+    "hitCount": "{count} Treffer für „{query}“."
   },
   "collections": {
     "title": "Projekte",
@@ -121,11 +134,14 @@
     "noCollection": "Projekte wählen oder direkt in die Mediathek — alle zugänglichen Videos.",
     "pickCollectionBody": "Access Model B: nur Projekte, die dir in PLEXON zugewiesen sind.",
     "capabilitiesAria": "VIDEON Kapazitäten",
+    "chatMeta": "Szenen über alle zugänglichen Projekte finden.",
     "projectsMeta": "Zugängliche PLEXON-Projekte — Kontext für Upload und Editor.",
     "libraryMeta": "Alle Videos aus allen dir zugänglichen Projekten.",
     "uploadMeta": "Braucht ein Projekt — direkt in Object Storage.",
     "analysesMeta": "Vision-Runs eines gewählten Projekts.",
     "cutsMeta": "Cuts eines gewählten Projekts.",
+    "chatHint": "Nach einzelnen Szenen, Stimmungen oder Objekten suchen.",
+    "openChat": "Chat öffnen",
     "recentTitle": "Zuletzt in diesem Projekt",
     "recentTitleGlobal": "Zuletzt in der Mediathek",
     "recentDeck": "Die letzten Medien und Vision-Runs dieses Projekts.",

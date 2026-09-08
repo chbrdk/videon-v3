@@ -33,6 +33,8 @@ export type {
   HubIndexLayoutSwitchProps,
 } from '../../../../msqdx-ui/packages/ui/src/components/HubIndexLayoutSwitch'
 export { Input } from '../../../../msqdx-ui/packages/ui/src/components/Input'
+export { Textarea } from '../../../../msqdx-ui/packages/ui/src/components/Textarea'
+export type { TextareaProps } from '../../../../msqdx-ui/packages/ui/src/components/Textarea'
 export { Panel } from '../../../../msqdx-ui/packages/ui/src/components/Panel'
 export { RankedList, RankedRow } from '../../../../msqdx-ui/packages/ui/src/components/RankedList'
 export { Text } from '../../../../msqdx-ui/packages/ui/src/components/Text'

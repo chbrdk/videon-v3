@@ -55,9 +55,11 @@ Details: [`brand-compliance.md`](./brand-compliance.md).
 | `apiMediaBrandCheck` | `POST` brand compliance only |
 | `apiMediaSearch` | Search (project-scoped) |
 
-UI routes: `/projects` Projekte hub; `/library` global Mediathek; `/collections` → `/projects`.
+UI routes: `/chat` scene search; `/projects` Projekte hub; `/library` global Mediathek; `/collections` → `/projects`.
 
-Writes, detail, stream, search, upload remain auth + `platformProjectId`.
+`GET /api/media/search?q=` — accessible scene search (optional `platformProjectId` scopes to one project).
+
+Writes, detail, stream, upload remain auth + `platformProjectId`.
 
 ## Jobs
 

@@ -30,15 +30,27 @@ export function NavIconOverview() {
   )
 }
 
-/** Active Collection / project switcher in the Rail footer. */
-export function NavIconCollection() {
+/** Projects — shared folder glyph (Checkion/Audion/Brandion). */
+export function NavIconProjects() {
   return (
     <NavSvg>
-      <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" />
-      <path d="M12 12v9" />
-      <path d="m4 7.5 8 4.5 8-4.5" />
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9l-.81-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
     </NavSvg>
   )
+}
+
+/** Chat — message bubble (Audion). */
+export function NavIconChat() {
+  return (
+    <NavSvg>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+    </NavSvg>
+  )
+}
+
+/** @deprecated Prefer NavIconProjects for the Projekte rail item. */
+export function NavIconCollection() {
+  return <NavIconProjects />
 }
 
 export function NavIconLibrary() {

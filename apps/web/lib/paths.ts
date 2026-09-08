@@ -80,6 +80,7 @@ export const paths = {
   envStemServiceUrl: 'VIDEON_STEM_SERVICE_URL',
   routes: {
     home: '/',
+    chat: '/chat',
     library: '/library',
     upload: '/upload',
     analyses: '/analyses',
@@ -95,6 +96,8 @@ export const paths = {
     apiMediaList: (platformProjectId: string) =>
       `/api/media?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaListAccessible: '/api/media',
+    apiMediaSearchAccessible: (query: string) =>
+      `/api/media/search?q=${encodeURIComponent(query)}`,
     apiAnalyses: '/api/analyses',
     apiMediaUploadIntent: '/api/media/upload-intent',
     apiMediaUpload: (mediaAssetId: string, platformProjectId: string) =>

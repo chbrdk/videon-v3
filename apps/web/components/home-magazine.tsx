@@ -98,7 +98,6 @@ export function HomeMagazine() {
   const analysesHref = platformProjectId
     ? paths.routes.analysesFor(platformProjectId)
     : paths.routes.projects
-  const cutsHref = platformProjectId ? paths.routes.cutsFor(platformProjectId) : paths.routes.projects
 
   return (
     <article className="videon-magazine videon-magazine--home" data-section="home-magazine">
@@ -118,6 +117,9 @@ export function HomeMagazine() {
       >
         <ul className="ds-hub-index-grid videon-home-cta-row" aria-label={t('home.capabilitiesAria')}>
           <li>
+            <HubIndexCard href={paths.routes.chat} title={t('nav.chat')} meta={t('home.chatMeta')} />
+          </li>
+          <li>
             <HubIndexCard
               href={paths.routes.projects}
               title={t('nav.projects')}
@@ -132,17 +134,11 @@ export function HomeMagazine() {
             />
           </li>
           <li>
-            <HubIndexCard href={uploadHref} title={t('nav.upload')} meta={t('home.uploadMeta')} />
-          </li>
-          <li>
             <HubIndexCard
               href={analysesHref}
               title={t('nav.analyses')}
               meta={t('home.analysesMeta')}
             />
-          </li>
-          <li>
-            <HubIndexCard href={cutsHref} title={t('nav.cuts')} meta={t('home.cutsMeta')} />
           </li>
         </ul>
       </HomeChapter>
@@ -220,11 +216,11 @@ export function HomeMagazine() {
             )}
           </div>
           <div className="videon-home-run-col">
-            <SectionChrome title={t('nav.cuts')} quiet as="h3" />
+            <SectionChrome title={t('nav.chat')} quiet as="h3" />
             <EmptyState className="videon-home-empty">
-              <Text role="body">{t('home.cutsHint')}</Text>
-              <Link href={cutsHref}>
-                <Button variant="ghost">{t('home.openCuts')}</Button>
+              <Text role="body">{t('home.chatHint')}</Text>
+              <Link href={paths.routes.chat}>
+                <Button variant="ghost">{t('home.openChat')}</Button>
               </Link>
             </EmptyState>
           </div>
