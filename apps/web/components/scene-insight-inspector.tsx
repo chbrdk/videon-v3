@@ -7,12 +7,18 @@ import {
   Divider,
   EmptyState,
   IconBox,
+  IconCamera,
   IconCar,
+  IconClock,
+  IconFill,
   IconImage,
+  IconJourneys,
   IconPackage,
   IconPaw,
+  IconScroll,
   IconText,
   IconUser,
+  IconVideo,
   IconZap,
   InspectSection,
   ScrollArea,
@@ -204,21 +210,55 @@ export function SceneInsightInspector(props: {
   const orderedFindings = [...failedFindings, ...warnFindings, ...passFindings].slice(0, 24)
 
   const settingItems = [
-    { label: 'Ort', value: insight.setting.location },
-    { label: 'Tageszeit', value: insight.setting.timeOfDay },
+    {
+      label: 'Ort',
+      value: insight.setting.location,
+      icon: <IconJourneys size={14} strokeWidth={2} />,
+    },
+    {
+      label: 'Tageszeit',
+      value: insight.setting.timeOfDay,
+      icon: <IconClock size={14} strokeWidth={2} />,
+    },
     ...(insight.setting.environment.length
-      ? [{ label: 'Umgebung', value: insight.setting.environment.join(', ') }]
+      ? [
+          {
+            label: 'Umgebung',
+            value: insight.setting.environment.join(', '),
+            icon: <IconImage size={14} strokeWidth={2} />,
+          },
+        ]
       : []),
     ...(insight.setting.details.length
-      ? [{ label: 'Details', value: insight.setting.details.join(' · ') }]
+      ? [
+          {
+            label: 'Details',
+            value: insight.setting.details.join(' · '),
+            icon: <IconScroll size={14} strokeWidth={2} />,
+          },
+        ]
       : []),
   ]
 
   const compositionItems = [
-    { label: 'Shot', value: insight.composition.shotType },
-    { label: 'Kamera', value: insight.composition.cameraMotion },
+    {
+      label: 'Shot',
+      value: insight.composition.shotType,
+      icon: <IconVideo size={14} strokeWidth={2} />,
+    },
+    {
+      label: 'Kamera',
+      value: insight.composition.cameraMotion,
+      icon: <IconCamera size={14} strokeWidth={2} />,
+    },
     ...(insight.composition.dominantColors.length
-      ? [{ label: 'Farben', value: insight.composition.dominantColors.join(', ') }]
+      ? [
+          {
+            label: 'Farben',
+            value: insight.composition.dominantColors.join(', '),
+            icon: <IconFill size={14} strokeWidth={2} />,
+          },
+        ]
       : []),
   ]
 

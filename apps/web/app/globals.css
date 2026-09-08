@@ -1398,9 +1398,21 @@ main {
   margin-inline: 0;
 }
 
-.videon-scene-inspect .ds-chat-collapsible--compact {
-  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-  background: color-mix(in srgb, var(--fg) 2.5%, transparent);
+.videon-scene-inspect .ds-chat-kv__icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--accent, #ff6b00);
+  background: color-mix(in srgb, var(--accent, #ff6b00) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #ff6b00) 35%, transparent);
+}
+
+.videon-scene-inspect .ds-chat-kv__item {
+  padding: 0.35rem 0.45rem;
+  border-radius: 0;
+}
+
+.videon-scene-inspect .ds-chat-kv {
+  gap: 0.25rem;
 }
 
 .videon-scene-inspect__nav {

@@ -58,6 +58,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 7. WHEN Brand findings exist THEN the Brand section MUST surface status counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses when stored, Vision `brandCandidates`, measured Brandion observations when stored, and rule **plus token-coverage** findings (severity + message + subject→target) — not only a single `pass` chip and an evidence count. Token coverage MUST be merged like Brandion `FindingsWorkspace` (`tokenCoverage` → findings).
 8. WHEN secondary facts use `ChatCollapsible` in the scenes drawer THEN it MUST use `density="compact"` (sm trigger + padded chrome) — not the flush chat default / `title xl` trigger.
 9. WHEN InspectSection titles render in the scenes drawer THEN they MUST use full `--fg` color (not muted grey).
+10. WHEN Setting / Komposition key-value rows render THEN each row MUST include a leading brand-accent icon via `ChatKeyValueItem.icon` (Ort/Map, Tageszeit/Clock, Umgebung/Image, Details/Scroll, Shot/Video, Kamera/Camera, Farben/Fill).
 
 ## Editor chrome (DS consistency)
 
