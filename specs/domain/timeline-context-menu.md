@@ -13,7 +13,7 @@ Right-click on the source timeline opens an editor context menu so operators can
 
 | Target | When |
 |--------|------|
-| `scene` | Right-click SI scene clip (track not muted/hidden) |
+| `scene` | Right-click SI scene clip **or** SI track at a time inside a scene (full clip hit area, not label-only; track not muted/hidden) |
 | `transcript` | Right-click TX segment (track not muted/hidden) |
 | `lane` | Right-click empty lane / source filmstrip / ruler area (time from pointer) |
 
