@@ -45,6 +45,40 @@ async function extractFrame(sourcePath: string, timestampMs: number, frameId: st
   }
 }
 
+/** JPEG bytes for Product API posters (assistant / thumbnails). Scaled for chat. */
+export async function extractFrameJpegBytes(
+  sourcePath: string,
+  timestampMs: number,
+  options?: { maxWidth?: number },
+): Promise<Buffer | null> {
+  const outputPath = join(tmpdir(), `videon-frame-bytes-${randomUUID()}.jpg`)
+  const maxWidth = options?.maxWidth && options.maxWidth > 0 ? Math.floor(options.maxWidth) : 480
+  try {
+    await execFileAsync('ffmpeg', [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-ss',
+      timestampForMs(timestampMs),
+      '-i',
+      sourcePath,
+      '-frames:v',
+      '1',
+      '-vf',
+      `scale=${maxWidth}:-2`,
+      '-q:v',
+      '5',
+      '-y',
+      outputPath,
+    ])
+    return await readFile(outputPath)
+  } catch {
+    return null
+  } finally {
+    await unlink(outputPath).catch(() => {})
+  }
+}
+
 /** JPEG base64 (no data-URL prefix) for Brandion analysis-runs image input. */
 export async function extractFrameJpegBase64(
   sourcePath: string,

@@ -31,6 +31,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | MCP | Coolify `videon-mcp` `pjupngbkompeyfjqocgsi0jy` · FQDN `https://pjupngbkompeyfjqocgsi0jy.projects-a.plygrnd.tech` · port **3103**; Plexon `VIDEON_MCP_URL`; specs `mcp-server.md` / `assistant-videon-mcp.md` |
 | Platform Assistant FAB | `PlatformAssistantHost` in AppShell → `{NEXT_PUBLIC_PLEXON_URL}/assistant/embed?product=videon`; paths `pathAssistantEmbed` / `pathAssistantExpand`; spec `platform-assistant-host.md` |
 | `envPlexonPublicUrl` | `NEXT_PUBLIC_PLEXON_URL` (browser iframe origin; fallback `NEXT_PLEXON_BASE_URL` / `PLEXON_AUTH_URL`) |
+| Media frame (assistant poster) | `GET /api/media/:id/frame?platformProjectId=&t=` → `image/jpeg`; spec `specs/api/media-frame.md` |
 
 ## Brandion seam
 
