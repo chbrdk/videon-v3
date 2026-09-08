@@ -66,6 +66,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 2. WHEN a form control is shown in the editor THEN it MUST use `Field` + `Select`/`Input` — NOT native OS `<select>`.
 3. WHEN a control is an icon tool THEN it MUST use `ToolButton`; text actions MUST use `Button` (ghost/sm or primary).
 4. `ContextMenu` is for pointer-positioned menus only — not toolbar overflow.
+5. WHEN the operator right-clicks the source timeline THEN the editor MUST open `@msqdx/ui` `ContextMenu` per `timeline-context-menu.md` — NOT the browser default menu and NOT a Flyout.
 
 ## Editor layout
 
@@ -83,6 +84,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 1. WHEN the cut timeline renders ticks THEN it MUST compose `TimelineRuler` (percent offsets); seek/trim math MAY stay pixel-based in app code.
 2. WHEN video/transcript/audio clips render THEN they MUST use `TimelineClip` (and `Waveform` for audio peaks) — edit handlers stay app-local.
 3. `TimelineTrack` dual-column chrome is optional while VIDEON keeps the two-column header + lanes layout.
+4. WHEN timeline clips/lanes support authoring actions THEN right-click MUST use `ContextMenu` (`timeline-context-menu.md`).
 
 ## Acceptance
 
@@ -92,3 +94,4 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 - Editor drawer uses `InspectTabs`; timeline shell uses `TimelineRuler` / `TimelineClip` / `Waveform`.
 - Scenes inspect: truncated navigator + `InspectSection` / `ChatCollapsible` detail (Wave D).
 - Toolbar overflow uses Flyout pattern; editor selects use `Select`.
+- Timeline right-click uses `ContextMenu` (`timeline-context-menu.md`).

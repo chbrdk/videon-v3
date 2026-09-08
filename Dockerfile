@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Bump MSQDX_UI_REF whenever videon needs a newer primitive from chbrdk/msqdx-ui.
 FROM base AS ds
 ARG MSQDX_UI_REPO=https://github.com/chbrdk/msqdx-ui.git
-ARG MSQDX_UI_REF=9e14cf760de54f91ad43167343d59e9f02efdb96
+ARG MSQDX_UI_REF=acce12494afa2e6d5dde55f01403d29173c6a6b5
 RUN git init /workspace/msqdx-ui \
     && cd /workspace/msqdx-ui \
     && git remote add origin "${MSQDX_UI_REPO}" \

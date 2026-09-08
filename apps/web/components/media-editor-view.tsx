@@ -1,16 +1,28 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Text, ToolButton } from '@msqdx/ui'
-import { useToast } from '@msqdx/ui-client'
+import {
+  Button,
+  IconArrowRight,
+  IconEdit,
+  IconInfo,
+  IconScroll,
+  IconShare,
+  IconTrash,
+  IconVideo,
+  Text,
+  ToolButton,
+} from '@msqdx/ui'
+import { ContextMenu, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AnalysisOptionsDialog } from '@/components/analysis-options-dialog'
 import { useActiveCollection } from '@/components/collection-context'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { EditorStatusStrip, analysisStatusLevel } from '@/components/editor-status-strip'
 import { EditorOverflowItem, EditorOverflowMenu } from '@/components/editor-overflow-menu'
+import { IconMarkIn, IconMarkOut } from '@/components/editor-icons'
 import { MediaSearch } from '@/components/media-search'
 import { SourceMediaTimeline } from '@/components/source-media-timeline'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
@@ -30,6 +42,13 @@ import type { PipelineStageSnapshot } from '@/lib/pipeline/pipeline-status'
 import type { BrandCheckView } from '@/lib/brand-findings'
 import type { SceneInsight } from '@/lib/vision-schema'
 import { paths } from '@/lib/paths'
+import {
+  buildTimelineContextMenuDraft,
+  clampContextMenuPosition,
+  type TimelineContextIconKey,
+  type TimelineContextMenuRequest,
+  type TimelineContextTarget,
+} from '@/lib/timeline-context-menu'
 
 type SceneFrameRef = { id: string; timestampMs: number }
 
@@ -71,6 +90,32 @@ type TranscriptState = {
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function timelineContextIcon(key: TimelineContextIconKey | undefined): ReactNode {
+  const size = 14
+  switch (key) {
+    case 'inspect':
+      return <IconInfo size={size} />
+    case 'seek':
+      return <IconArrowRight size={size} />
+    case 'markIn':
+      return <IconMarkIn size={size} />
+    case 'markOut':
+      return <IconMarkOut size={size} />
+    case 'clearMarks':
+      return <IconTrash size={size} />
+    case 'cut':
+      return <IconVideo size={size} />
+    case 'transcript':
+      return <IconScroll size={size} />
+    case 'export':
+      return <IconShare size={size} />
+    case 'comment':
+      return <IconEdit size={size} />
+    default:
+      return null
+  }
 }
 
 export function MediaEditorView({
@@ -117,6 +162,11 @@ export function MediaEditorView({
   const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>('scenes')
   const [inspectOpen, setInspectOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [timelineMenu, setTimelineMenu] = useState<{
+    x: number
+    y: number
+    target: TimelineContextTarget
+  } | null>(null)
 
   const notifyOk = useCallback(
     (message: string) => {
@@ -407,13 +457,18 @@ export function MediaEditorView({
     }
   }
 
-  const saveAsCut = async (allScenes = false) => {
+  const saveAsCut = async (
+    allScenes = false,
+    rangeOverride?: { startMs: number; endMs: number },
+  ) => {
     if (!media) return
     const defaultName = media.originalFilename.replace(/\.[^.]+$/, '')
     const name = window.prompt('Name für den Cut', defaultName)
     if (!name?.trim()) return
     const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey)
-    const inOutRange = markedRange
+    const inOutRange =
+      rangeOverride ??
+      markedRange
     setBusy('cut')
     setError(null)
     try {
@@ -458,6 +513,76 @@ export function MediaEditorView({
     }
   }
 
+  const openTimelineContextMenu = useCallback((request: TimelineContextMenuRequest) => {
+    const { clientX, clientY, ...target } = request
+    const pos = clampContextMenuPosition(clientX, clientY)
+    setTimelineMenu({ x: pos.x, y: pos.y, target })
+  }, [])
+
+  const closeTimelineContextMenu = useCallback(() => setTimelineMenu(null), [])
+
+  const runTimelineContextAction = (actionId: string, target: TimelineContextTarget) => {
+    if (target.kind === 'scene') {
+      if (actionId === 'open-scene-inspect') {
+        seekTo(target.startMs)
+        setActiveSceneKey(target.sceneKey)
+        setSidePanel('scenes')
+        setInspectOpen(true)
+        return
+      }
+      if (actionId === 'seek-scene') {
+        seekTo(target.startMs)
+        setActiveSceneKey(target.sceneKey)
+        return
+      }
+      if (actionId === 'marks-from-scene') {
+        setMarkInMs(target.startMs)
+        setMarkOutMs(target.endMs)
+        setActiveSceneKey(target.sceneKey)
+        return
+      }
+      if (actionId === 'cut-from-scene') {
+        setActiveSceneKey(target.sceneKey)
+        setMarkInMs(target.startMs)
+        setMarkOutMs(target.endMs)
+        void saveAsCut(false, { startMs: target.startMs, endMs: target.endMs })
+        return
+      }
+      return
+    }
+
+    if (target.kind === 'transcript') {
+      if (actionId === 'seek-transcript') {
+        seekTo(target.startMs)
+        return
+      }
+      if (actionId === 'open-transcript') {
+        seekTo(target.startMs)
+        setSidePanel('transcript')
+        setInspectOpen(true)
+        return
+      }
+      return
+    }
+
+    if (actionId === 'seek-here') {
+      seekTo(target.atMs)
+      return
+    }
+    if (actionId === 'mark-in-here') {
+      setMarkInMs(target.atMs)
+      return
+    }
+    if (actionId === 'mark-out-here') {
+      setMarkOutMs(target.atMs)
+      return
+    }
+    if (actionId === 'clear-marks') {
+      setMarkInMs(null)
+      setMarkOutMs(null)
+    }
+  }
+
   const deleteMedia = async () => {
     if (!window.confirm('Video und alle Analysen endgültig löschen?')) return
     setBusy('delete')
@@ -497,6 +622,23 @@ export function MediaEditorView({
 
   const timelineDuration = media.durationMs ?? durationMs ?? Math.max(...scenes.map((s) => s.endMs), 1)
   const activeScene = scenes.find((scene) => scene.sceneKey === activeSceneKey) ?? null
+  const timelineContextItems: ContextMenuItem[] = timelineMenu
+    ? buildTimelineContextMenuDraft(timelineMenu.target, {
+        hasMarks: markInMs !== null || markOutMs !== null,
+      }).map((draft) => ({
+        id: draft.id,
+        label: draft.label,
+        disabled: Boolean(draft.disabled) || (draft.id === 'cut-from-scene' && Boolean(busy)),
+        danger: draft.danger,
+        separator: draft.separator,
+        section: draft.section,
+        icon: timelineContextIcon(draft.iconKey),
+        onSelect: () => {
+          if (draft.section || draft.disabled) return
+          runTimelineContextAction(draft.id, timelineMenu.target)
+        },
+      }))
+    : []
   const analysisBusy = analysis?.status === 'running' || analysis?.status === 'queued'
   const analysisAttention =
     analysisBusy ||
@@ -747,6 +889,7 @@ export function MediaEditorView({
           markOutMs={markOutMs}
           disabled={!playbackUrl || Boolean(busy)}
           onSeek={seekTo}
+          onContextMenuRequest={openTimelineContextMenu}
           onTrackMutesChange={setTrackMutes}
           hasStemAudio={hasStemAudio}
           stemMethodLabel={stemMethodUsed}
@@ -757,6 +900,14 @@ export function MediaEditorView({
 
 
       <div className="videon-nle__layer">
+      <ContextMenu
+        open={Boolean(timelineMenu)}
+        x={timelineMenu?.x ?? 0}
+        y={timelineMenu?.y ?? 0}
+        onClose={closeTimelineContextMenu}
+        items={timelineContextItems}
+        label="Timeline-Kontextmenü"
+      />
       <EditorSideDrawer
         open={inspectOpen}
         title={sidePanelTitle}

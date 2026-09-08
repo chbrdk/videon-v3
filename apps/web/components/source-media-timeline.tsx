@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Text, TimelineRuler, ToolButton } from '@msqdx/ui'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
@@ -21,6 +21,10 @@ import {
   timelineMsPerPixel,
   timelineWidthPx,
 } from '@/lib/timeline-layout'
+import {
+  timelineMsFromClientX,
+  type TimelineContextMenuRequest,
+} from '@/lib/timeline-context-menu'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 
@@ -55,6 +59,8 @@ type SourceMediaTimelineProps = {
   markOutMs?: number | null
   disabled?: boolean
   onSeek: (ms: number) => void
+  /** Right-click targets for the editor context menu (Phase 1). */
+  onContextMenuRequest?: (request: TimelineContextMenuRequest) => void
   /** Per-track mute for the program audio mixer (V1 bus / A1 voice / A2 music). */
   onTrackMutesChange?: (mutes: ProgramTrackMutes) => void
   /** When true, V1 starts muted (original bus split out to stems). */
@@ -119,6 +125,7 @@ export function SourceMediaTimeline({
   markOutMs = null,
   disabled = false,
   onSeek,
+  onContextMenuRequest,
   onTrackMutesChange,
   hasStemAudio = false,
   stemMethodLabel = null,
@@ -190,12 +197,41 @@ export function SourceMediaTimeline({
     paintSourcePeaks(musicCanvasRef.current, resolvedMusicPeaks, durationMs, msPerPixel, '#8a6a2d')
   }, [durationMs, msPerPixel, resolvedMusicPeaks, tracks.a2.hidden])
 
-  const onTrackPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const msAtClientX = useCallback(
+    (clientX: number) => {
+      if (!lanesRef.current || durationMs <= 0) return 0
+      const rect = lanesRef.current.getBoundingClientRect()
+      return timelineMsFromClientX({
+        clientX,
+        lanesLeft: rect.left,
+        contentWidthPx,
+        msPerPixel,
+        durationMs,
+      })
+    },
+    [contentWidthPx, durationMs, msPerPixel],
+  )
+
+  const emitLaneContextMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      if (disabled || !onContextMenuRequest) return
+      event.preventDefault()
+      onContextMenuRequest({
+        kind: 'lane',
+        atMs: msAtClientX(event.clientX),
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [disabled, msAtClientX, onContextMenuRequest],
+  )
+
+  const onTrackPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (disabled) return
     seekFromPointer(event.clientX)
   }
 
-  const startPlayheadDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+  const startPlayheadDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
     if (disabled) return
     const onMove = (moveEvent: PointerEvent) => seekFromPointer(moveEvent.clientX)
@@ -317,7 +353,7 @@ export function SourceMediaTimeline({
                 ))}
               </div>
 
-              <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown}>
+              <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown} onContextMenu={emitLaneContextMenu}>
                 <TimelineRuler
                   className="videon-cut-timeline__ruler-ds"
                   marks={ticks
@@ -333,6 +369,10 @@ export function SourceMediaTimeline({
               <div
                 className={`videon-cut-timeline__track videon-cut-timeline__track--video${tracks.v1.hidden ? ' is-collapsed' : ''}${tracks.v1.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
+                onContextMenu={(event) => {
+                  if (tracks.v1.hidden || tracks.v1.muted) return
+                  emitLaneContextMenu(event)
+                }}
               >
                 {!tracks.v1.hidden ? (
                   <>
@@ -381,6 +421,10 @@ export function SourceMediaTimeline({
               <div
                 className={`videon-cut-timeline__track videon-cut-timeline__track--insight${tracks.si.hidden ? ' is-collapsed' : ''}${tracks.si.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
+                onContextMenu={(event) => {
+                  if (tracks.si.hidden || tracks.si.muted) return
+                  emitLaneContextMenu(event)
+                }}
               >
                 {!tracks.si.hidden
                   ? scenes.map((scene, index) => {
@@ -398,6 +442,19 @@ export function SourceMediaTimeline({
                           onClick={(event) => {
                             event.stopPropagation()
                             onSeek(scene.startMs)
+                          }}
+                          onContextMenu={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            if (disabled || tracks.si.muted || !onContextMenuRequest) return
+                            onContextMenuRequest({
+                              kind: 'scene',
+                              sceneKey: scene.sceneKey,
+                              startMs: scene.startMs,
+                              endMs: scene.endMs,
+                              clientX: event.clientX,
+                              clientY: event.clientY,
+                            })
                           }}
                           title={[scene.summary, meta].filter(Boolean).join('\n')}
                           disabled={tracks.si.muted}
@@ -436,6 +493,10 @@ export function SourceMediaTimeline({
 
               <div
                 className={`videon-cut-timeline__track videon-cut-timeline__track--transcript${tracks.tx.hidden ? ' is-collapsed' : ''}${tracks.tx.muted ? ' is-muted' : ''}`}
+                onContextMenu={(event) => {
+                  if (tracks.tx.hidden || tracks.tx.muted) return
+                  emitLaneContextMenu(event)
+                }}
               >
                 {!tracks.tx.hidden
                   ? transcriptSegments.map((segment, index) => (
@@ -449,6 +510,19 @@ export function SourceMediaTimeline({
                         }}
                         title={segment.text}
                         onClick={() => onSeek(segment.startMs)}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          if (disabled || tracks.tx.muted || !onContextMenuRequest) return
+                          onContextMenuRequest({
+                            kind: 'transcript',
+                            startMs: segment.startMs,
+                            endMs: segment.endMs,
+                            index,
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                          })
+                        }}
                         disabled={tracks.tx.muted}
                       >
                         {timelineClipLabel(segment.text, 28)}
