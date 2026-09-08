@@ -19,11 +19,10 @@ body {
   font-family: var(--font-body);
 }
 
-/* Stage next to the rail uses brand paper (--bg0), not a forced gray wash. */
+/* Stage next to the rail — no column cap; paper comes from html/body --bg0. */
 .app-main {
   max-width: none;
   width: 100%;
-  background: var(--bg0);
 }
 
 a {
