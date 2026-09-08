@@ -227,6 +227,8 @@ main {
 .videon-media-browse__band .ds-filter-row {
   margin: 0;
   flex: 0 1 auto;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .videon-media-browse__band-end {

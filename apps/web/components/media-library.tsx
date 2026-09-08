@@ -180,7 +180,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
 
       <div className="videon-media-browse__band">
         <MediaSearch platformProjectId={platformProjectId} compact />
-        <FilterRow role="group" aria-label="Medienstatus" variant="magazine">
+        <FilterRow role="group" aria-label="Medienstatus" variant="toolbar">
           {(
             [
               ['all', 'Alle'],
@@ -195,7 +195,7 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
             </Chip>
           ))}
         </FilterRow>
-        <FilterRow role="group" aria-label="Analysestatus" variant="magazine">
+        <FilterRow role="group" aria-label="Analysestatus" variant="toolbar">
           {(
             [
               ['all', 'Analyse'],
