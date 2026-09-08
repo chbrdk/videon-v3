@@ -27,7 +27,7 @@
   "chat": {
     "aria": "Scene chat",
     "emptyTitle": "Search scenes",
-    "emptyBody": "Ask about mood, people, objects, or filenames — hits open the editor.",
+    "emptyBody": "Ask about mood, people, objects, or filenames — hits show the scene, timing, and seek the editor.",
     "placeholder": "e.g. logo in office, interview, product close-up …",
     "composerLabel": "Question",
     "send": "Search",
@@ -35,7 +35,8 @@
     "searchFailed": "Search failed",
     "noHits": "No scenes for “{query}”.",
     "triedTerms": "Searched for: {terms}.",
-    "hitCount": "{count} hits for “{query}”."
+    "hitCount": "{count} hits for “{query}”.",
+    "hitsAria": "Scene hits"
   },
   "collections": {
     "title": "Projects",

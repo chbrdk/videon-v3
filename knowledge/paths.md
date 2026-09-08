@@ -55,7 +55,12 @@ Details: [`brand-compliance.md`](./brand-compliance.md).
 | `apiMediaBrandCheck` | `POST` brand compliance only |
 | `apiMediaSearch` | Search (project-scoped) |
 
-UI routes: `/chat` scene search; `/projects` Projekte hub; `/library` global Mediathek; `/collections` → `/projects`.
+UI routes: `/chat` scene search (Card grid + deep-link `?t=`/`?scene=`); `/projects` Projekte hub; `/library` global Mediathek; `/collections` → `/projects`.
+
+| Route helper | Meaning |
+|--------------|---------|
+| `mediaFor(id, projectId)` | `/media/:id?platformProjectId=` |
+| `mediaFor(id, projectId, { tMs, sceneKey })` | same + optional `t` (ms) and `scene` for editor seek |
 
 `GET /api/media/search?q=` — accessible scene search (optional `platformProjectId` scopes to one project).
 

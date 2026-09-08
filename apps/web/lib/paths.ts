@@ -136,8 +136,22 @@ export const paths = {
       `/cuts/${encodeURIComponent(cutId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     cutExportFor: (cutId: string, exportId: string, platformProjectId: string) =>
       `/cuts/${encodeURIComponent(cutId)}/exports/${encodeURIComponent(exportId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
-    mediaFor: (mediaAssetId: string, platformProjectId: string) =>
-      `/media/${encodeURIComponent(mediaAssetId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    mediaFor: (
+      mediaAssetId: string,
+      platformProjectId: string,
+      opts?: { tMs?: number | null; sceneKey?: string | null },
+    ) => {
+      const params = new URLSearchParams({
+        platformProjectId,
+      })
+      if (opts?.tMs != null && Number.isFinite(opts.tMs) && opts.tMs >= 0) {
+        params.set('t', String(Math.floor(opts.tMs)))
+      }
+      if (opts?.sceneKey?.trim()) {
+        params.set('scene', opts.sceneKey.trim())
+      }
+      return `/media/${encodeURIComponent(mediaAssetId)}?${params.toString()}`
+    },
     libraryFor: (platformProjectId: string) =>
       `/library?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     uploadFor: (platformProjectId: string) =>

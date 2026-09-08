@@ -27,7 +27,7 @@
   "chat": {
     "aria": "Szenen-Chat",
     "emptyTitle": "Szenen suchen",
-    "emptyBody": "Frag nach Stimmung, Personen, Objekten oder Dateinamen — Treffer öffnen den Editor.",
+    "emptyBody": "Frag nach Stimmung, Personen, Objekten oder Dateinamen — Treffer zeigen Szene, Timing und springen im Editor hin.",
     "placeholder": "z. B. Logo im Büro, Interview, Produktclose-up …",
     "composerLabel": "Frage",
     "send": "Suchen",
@@ -35,7 +35,8 @@
     "searchFailed": "Suche fehlgeschlagen",
     "noHits": "Keine Szenen für „{query}“.",
     "triedTerms": "Gesucht nach: {terms}.",
-    "hitCount": "{count} Treffer für „{query}“."
+    "hitCount": "{count} Treffer für „{query}“.",
+    "hitsAria": "Szenen-Treffer"
   },
   "collections": {
     "title": "Projekte",

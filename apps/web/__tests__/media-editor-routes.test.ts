@@ -7,6 +7,9 @@ describe('media workspace routes', () => {
     expect(paths.routes.mediaFor('media-1', 'proj-1')).toBe(
       '/media/media-1?platformProjectId=proj-1',
     )
+    expect(paths.routes.mediaFor('media-1', 'proj-1', { tMs: 12500, sceneKey: 'sc_03' })).toBe(
+      '/media/media-1?platformProjectId=proj-1&t=12500&scene=sc_03',
+    )
     expect(paths.routes.apiMediaPlayback('media-1', 'proj-1')).toBe(
       '/api/media/media-1/playback?platformProjectId=proj-1',
     )

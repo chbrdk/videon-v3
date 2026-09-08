@@ -1,19 +1,16 @@
 'use client'
 
 import { useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react'
-import Link from 'next/link'
 import {
   Alert,
   Button,
   EmptyState,
   Field,
   LoadingText,
-  RankedList,
-  RankedRow,
   Text,
   Textarea,
 } from '@msqdx/ui'
-import { formatClock } from '@/lib/editor-time'
+import { SceneSearchHitCard } from '@/components/scene-search-hit-card'
 import { paths } from '@/lib/paths'
 import { useT } from '@/lib/user-prefs'
 
@@ -32,18 +29,6 @@ type SearchHit = {
 type ChatTurn =
   | { id: string; role: 'user'; text: string }
   | { id: string; role: 'assistant'; text: string; hits?: SearchHit[] }
-
-function hitSecondary(hit: SearchHit): string {
-  const parts: string[] = []
-  if (hit.projectName) parts.push(hit.projectName)
-  if (hit.sceneKey) parts.push(hit.sceneKey)
-  if (hit.startMs != null && hit.endMs != null) {
-    parts.push(`${formatClock(hit.startMs)}–${formatClock(hit.endMs)}`)
-  }
-  const snippet = hit.searchText.trim().slice(0, 120)
-  if (snippet) parts.push(snippet)
-  return parts.join(' · ')
-}
 
 export function SceneChatWorkspace() {
   const t = useT()
@@ -125,22 +110,22 @@ export function SceneChatWorkspace() {
                   {turn.text}
                 </Text>
                 {turn.hits?.length ? (
-                  <RankedList>
-                    {turn.hits.map((hit, index) => {
+                  <ul className="videon-media-browse__grid videon-scene-hit-grid" aria-label={t('chat.hitsAria')}>
+                    {turn.hits.map((hit) => {
                       const projectId = hit.platformProjectId
                       if (!projectId) return null
                       return (
-                        <RankedRow
-                          key={hit.id}
-                          index={index + 1}
-                          label={hit.mediaFilename}
-                          secondary={hitSecondary(hit)}
-                          href={paths.routes.mediaFor(hit.mediaAssetId, projectId)}
-                          linkComponent={Link}
-                        />
+                        <li key={hit.id}>
+                          <SceneSearchHitCard
+                            hit={{
+                              ...hit,
+                              platformProjectId: projectId,
+                            }}
+                          />
+                        </li>
                       )
                     })}
-                  </RankedList>
+                  </ul>
                 ) : null}
               </div>
             ),

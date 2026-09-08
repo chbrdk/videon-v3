@@ -122,15 +122,22 @@ export function MediaEditorView({
   platformProjectId,
   mediaAssetId,
   libraryHref,
+  initialSeekMs = null,
+  initialSceneKey = null,
 }: {
   platformProjectId: string
   mediaAssetId: string
   libraryHref?: string
+  /** Deep-link playhead from chat / search (`?t=` ms). */
+  initialSeekMs?: number | null
+  /** Prefer scene start when scenes are loaded (`?scene=`). */
+  initialSceneKey?: string | null
 }) {
   const router = useRouter()
   const toast = useToast()
   const { setPlatformProjectId } = useActiveCollection()
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const initialSeekAppliedRef = useRef(false)
   const [media, setMedia] = useState<MediaDetail | null>(null)
   const [analysis, setAnalysis] = useState<AnalysisState>(null)
   const [stages, setStages] = useState<StageState[]>([])
@@ -292,6 +299,64 @@ export function MediaEditorView({
       video.removeEventListener('pause', onPause)
     }
   }, [scenes, playbackUrl])
+
+  /** Chat / search deep-link: land playhead on scene (`?t=` / `?scene=`). */
+  useEffect(() => {
+    if (initialSeekAppliedRef.current) return
+    if (loading || !playbackUrl) return
+
+    let targetMs: number | null = null
+    let resolvedSceneKey: string | null = initialSceneKey
+
+    if (initialSceneKey && scenes.length > 0) {
+      const match = scenes.find((entry) => entry.sceneKey === initialSceneKey)
+      if (match) {
+        targetMs = match.startMs
+        resolvedSceneKey = match.sceneKey
+      }
+    }
+
+    if (
+      targetMs == null &&
+      initialSeekMs != null &&
+      Number.isFinite(initialSeekMs) &&
+      initialSeekMs >= 0
+    ) {
+      targetMs = Math.floor(initialSeekMs)
+    }
+
+    if (targetMs == null) {
+      // Only scene key, scenes not loaded yet — wait.
+      if (initialSceneKey && scenes.length === 0) return
+      return
+    }
+
+    const ms = targetMs
+    const video = videoRef.current
+    if (!video) return
+
+    const apply = () => {
+      if (initialSeekAppliedRef.current) return
+      video.currentTime = ms / 1000
+      setCurrentMs(ms)
+      if (resolvedSceneKey) {
+        setActiveSceneKey(resolvedSceneKey)
+      } else if (scenes.length > 0) {
+        const scene = scenes.find((entry) => ms >= entry.startMs && ms < entry.endMs)
+        setActiveSceneKey(scene?.sceneKey ?? null)
+      }
+      setSidePanel('scenes')
+      initialSeekAppliedRef.current = true
+    }
+
+    if (video.readyState >= 1) {
+      apply()
+      return
+    }
+
+    video.addEventListener('loadedmetadata', apply, { once: true })
+    return () => video.removeEventListener('loadedmetadata', apply)
+  }, [loading, playbackUrl, scenes, initialSeekMs, initialSceneKey])
 
   const voiceStemUrl = hasVoiceStem
     ? paths.routes.apiMediaStemStream(mediaAssetId, 'voice', platformProjectId)
