@@ -4,6 +4,7 @@ import {
   ANALYSIS_JOB_NAME,
   BRAND_COMPLIANCE_JOB_NAME,
   EXPORT_JOB_NAME,
+  REFRAME_JOB_NAME,
 } from '@/lib/pipeline/constants'
 
 export type MediaAnalysisJobPayload = {
@@ -19,6 +20,11 @@ export type BrandComplianceJobPayload = {
 export type CutExportJobPayload = {
   exportId: string
   cutId: string
+}
+
+export type MediaReframeJobPayload = {
+  reframeId: string
+  mediaAssetId: string
 }
 
 let boss: PgBoss | null = null
@@ -49,6 +55,7 @@ async function getBoss(): Promise<PgBoss> {
       await ensureQueue(boss as PgBoss, ANALYSIS_JOB_NAME)
       await ensureQueue(boss as PgBoss, BRAND_COMPLIANCE_JOB_NAME)
       await ensureQueue(boss as PgBoss, EXPORT_JOB_NAME)
+      await ensureQueue(boss as PgBoss, REFRAME_JOB_NAME)
       return boss as PgBoss
     })
   }
@@ -87,6 +94,17 @@ export async function enqueueCutExportJob(payload: CutExportJobPayload): Promise
     retryDelay: 30,
     retryBackoff: true,
     expireInSeconds: 120 * 60,
+  })
+}
+
+export async function enqueueMediaReframeJob(payload: MediaReframeJobPayload): Promise<string | null> {
+  const queue = await getBoss()
+  return queue.send(REFRAME_JOB_NAME, payload, {
+    singletonKey: payload.reframeId,
+    retryLimit: 2,
+    retryDelay: 30,
+    retryBackoff: true,
+    expireInSeconds: 180 * 60,
   })
 }
 
@@ -157,6 +175,34 @@ export async function registerCutExportHandler(
         throw new Error('Invalid cut export job payload')
       }
       await handler(payload)
+    }
+  })
+}
+
+export async function registerMediaReframeHandler(
+  handler: (payload: MediaReframeJobPayload) => Promise<void>,
+): Promise<void> {
+  const queue = await getBoss()
+  await queue.work(REFRAME_JOB_NAME, { localConcurrency: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      const payload = job.data as MediaReframeJobPayload
+      if (!payload?.reframeId || !payload?.mediaAssetId) {
+        throw new Error('Invalid media reframe job payload')
+      }
+      try {
+        await handler(payload)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(
+          '[VIDEON-v3] Media reframe job failed',
+          JSON.stringify({
+            reframeId: payload.reframeId,
+            mediaAssetId: payload.mediaAssetId,
+            message,
+          }),
+        )
+        throw error
+      }
     }
   })
 }

@@ -34,6 +34,7 @@ export async function resolveMediaInWorkspace(input: {
   platformProjectId: string
   mediaAssetId: string
   detailed?: boolean
+  writable?: boolean
 }): Promise<
   | { ok: true; workspace: ProvisionedWorkspace; media: MediaAsset | MediaAssetDetail }
   | WorkspaceDenied
@@ -42,6 +43,7 @@ export async function resolveMediaInWorkspace(input: {
   const workspace = await resolveWorkspaceForMediaRequest({
     plexonUserId: input.plexonUserId,
     platformProjectId: input.platformProjectId,
+    writable: input.writable,
   })
   if (!workspace.ok) return workspace
 

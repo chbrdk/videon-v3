@@ -82,6 +82,8 @@ export const paths = {
   envWhisperLanguage: 'VIDEON_WHISPER_LANGUAGE',
   /** Always-on stem worker base URL (no trailing slash), e.g. http://videon-stem-worker:8091 */
   envStemServiceUrl: 'VIDEON_STEM_SERVICE_URL',
+  /** Always-on reframe worker base URL (no trailing slash), e.g. http://videon-reframe-worker:8092 */
+  envReframeServiceUrl: 'VIDEON_REFRAME_SERVICE_URL',
   /** Settings API tokens for MCP / machine clients (`videon_` + 64 hex). */
   apiTokenPrefix: 'videon_' as const,
   apiTokenBytes: 32,
@@ -152,6 +154,14 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/analysis?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaBrandCheck: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/brand-check?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaReframe: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/reframe?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaReframes: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/reframes?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaReframeDetail: (mediaAssetId: string, reframeId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/reframes/${encodeURIComponent(reframeId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaReframeDownload: (mediaAssetId: string, reframeId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/reframes/${encodeURIComponent(reframeId)}/download?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaSearch: (platformProjectId: string, query: string) =>
       `/api/media/search?platformProjectId=${encodeURIComponent(platformProjectId)}&q=${encodeURIComponent(query)}`,
     apiCuts: (platformProjectId: string) =>

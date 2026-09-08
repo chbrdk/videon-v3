@@ -157,3 +157,9 @@ export function stemServiceUrl(): string | null {
   const url = env(paths.envStemServiceUrl).replace(/\/$/, '')
   return url || null
 }
+
+/** Persistent reframe worker (Robust saliency + smooth crop). Required for reframe jobs. */
+export function reframeServiceUrl(): string | null {
+  const url = env(paths.envReframeServiceUrl).replace(/\/$/, '')
+  return url || null
+}

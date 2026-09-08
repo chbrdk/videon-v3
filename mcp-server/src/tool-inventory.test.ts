@@ -26,6 +26,7 @@ describe('videon MCP tool inventory', () => {
       'videon.brand_check_run',
       'videon.cut_create',
       'videon.export_run',
+      'videon.reframe_run',
     ] as const) {
       assert.ok(VIDEON_TOOL_NAMES.includes(required), required)
     }

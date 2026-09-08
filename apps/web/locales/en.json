@@ -145,6 +145,27 @@
     "title": "Sign in",
     "lead": "Use your Plexon account. Identity lives on the platform control plane."
   },
+  "reframe": {
+    "action": "Reframe",
+    "busy": "Reframing…",
+    "title": "Start reframe",
+    "lead": "Creates an aspect-ratio derivative with robust CPU saliency (not SAM).",
+    "aspect": "Aspect ratio",
+    "smoothing": "Smoothing",
+    "custom": "Custom",
+    "customWidth": "Width",
+    "customHeight": "Height",
+    "cancel": "Cancel",
+    "confirm": "Start reframe",
+    "starting": "Starting…",
+    "started": "Reframe started",
+    "failed": "Could not start reframe",
+    "download": "Download",
+    "statusQueued": "Queued",
+    "statusRunning": "Running",
+    "statusSucceeded": "Done",
+    "statusFailed": "Failed"
+  },
   "home": {
     "kicker": "VIDEON",
     "title": "Video intelligence",

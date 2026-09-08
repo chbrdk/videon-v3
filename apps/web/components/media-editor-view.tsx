@@ -17,7 +17,9 @@ import {
 } from '@msqdx/ui'
 import { ContextMenu, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AnalysisOptionsDialog } from '@/components/analysis-options-dialog'
+import { ReframeOptionsDialog, type ReframeOptions } from '@/components/reframe-options-dialog'
 import { useActiveCollection } from '@/components/collection-context'
+import { useT } from '@/lib/user-prefs'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { EditorStatusStrip, analysisStatusLevel } from '@/components/editor-status-strip'
@@ -135,6 +137,7 @@ export function MediaEditorView({
 }) {
   const router = useRouter()
   const toast = useToast()
+  const t = useT()
   const { setPlatformProjectId } = useActiveCollection()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const initialSeekAppliedRef = useRef(false)
@@ -148,6 +151,10 @@ export function MediaEditorView({
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
   const [stemMethodUsed, setStemMethodUsed] = useState<string | null>(null)
   const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false)
+  const [reframeDialogOpen, setReframeDialogOpen] = useState(false)
+  const [reframes, setReframes] = useState<
+    Array<{ id: string; status: string; aspectRatio: string; progressPercent: number | null }>
+  >([])
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -242,17 +249,29 @@ export function MediaEditorView({
     setPlaybackUrl(normalizeMediaPlaybackUrl(body.playbackUrl))
   }, [mediaAssetId, platformProjectId])
 
+  const loadReframes = useCallback(async () => {
+    const response = await fetch(paths.routes.apiMediaReframes(mediaAssetId, platformProjectId), {
+      cache: 'no-store',
+    })
+    if (!response.ok) return
+    const body = (await response.json()) as {
+      reframes?: Array<{ id: string; status: string; aspectRatio: string; progressPercent: number | null }>
+    }
+    setReframes(body.reframes ?? [])
+  }, [mediaAssetId, platformProjectId])
+
   const refresh = useCallback(async () => {
     setError(null)
     try {
       await loadDetail()
       await loadPlayback()
+      await loadReframes()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler')
     } finally {
       setLoading(false)
     }
-  }, [loadDetail, loadPlayback])
+  }, [loadDetail, loadPlayback, loadReframes])
 
   useEffect(() => {
     setPlatformProjectId(platformProjectId)
@@ -269,12 +288,14 @@ export function MediaEditorView({
 
   useEffect(() => {
     const analysisBusy = analysis?.status === 'queued' || analysis?.status === 'running'
-    if (!analysisBusy && !brandStageBusy) return
+    const reframeBusy = reframes.some((row) => row.status === 'queued' || row.status === 'running')
+    if (!analysisBusy && !brandStageBusy && !reframeBusy) return
     const timer = window.setInterval(() => {
       void loadDetail()
+      void loadReframes()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [analysis, brandStageBusy, loadDetail])
+  }, [analysis, brandStageBusy, reframes, loadDetail, loadReframes])
 
   useEffect(() => {
     const video = videoRef.current
@@ -517,6 +538,27 @@ export function MediaEditorView({
       await loadDetail()
     } catch (err) {
       notifyError(err instanceof Error ? err.message : 'Brand-Check konnte nicht gestartet werden')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const startReframe = async (options: ReframeOptions) => {
+    setBusy('reframe')
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiMediaReframe(mediaAssetId, platformProjectId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      })
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || t('reframe.failed'))
+      setReframeDialogOpen(false)
+      notifyOk(t('reframe.started'))
+      await loadReframes()
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('reframe.failed'))
     } finally {
       setBusy(null)
     }
@@ -822,6 +864,30 @@ export function MediaEditorView({
                   >
                     {busy === 'brand' || brandStageBusy ? 'Brand …' : 'Brand-Check'}
                   </EditorOverflowItem>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+                    onClick={() => setReframeDialogOpen(true)}
+                  >
+                    {busy === 'reframe' ? t('reframe.busy') : t('reframe.action')}
+                  </EditorOverflowItem>
+                  {reframes.slice(0, 5).map((row) => (
+                    <EditorOverflowItem
+                      key={row.id}
+                      close={close}
+                      disabled={row.status !== 'succeeded'}
+                      href={
+                        row.status === 'succeeded'
+                          ? paths.routes.apiMediaReframeDownload(mediaAssetId, row.id, platformProjectId)
+                          : undefined
+                      }
+                    >
+                      {row.status === 'succeeded' ? `${row.aspectRatio} · ${t('reframe.download')}` : `${row.aspectRatio} · ${row.status}`}
+                      {row.progressPercent != null && row.status === 'running'
+                        ? ` ${row.progressPercent}%`
+                        : ''}
+                    </EditorOverflowItem>
+                  ))}
                   <EditorOverflowItem close={close} disabled={Boolean(busy)} onClick={() => void refresh()}>
                     Aktualisieren
                   </EditorOverflowItem>
@@ -1137,6 +1203,12 @@ export function MediaEditorView({
         busy={busy === 'analysis'}
         onClose={() => setAnalysisDialogOpen(false)}
         onConfirm={(capabilities) => void rerunAnalysis(capabilities)}
+      />
+      <ReframeOptionsDialog
+        open={reframeDialogOpen}
+        busy={busy === 'reframe'}
+        onClose={() => setReframeDialogOpen(false)}
+        onConfirm={(options) => void startReframe(options)}
       />
       </div>
     </div>

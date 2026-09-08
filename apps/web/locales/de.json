@@ -145,6 +145,27 @@
     "title": "Anmelden",
     "lead": "Mit deinem Plexon-Konto. Identität liegt in der Control Plane."
   },
+  "reframe": {
+    "action": "Reframe",
+    "busy": "Reframe …",
+    "title": "Reframe starten",
+    "lead": "Erzeugt ein Derivat im Ziel-Seitenverhältnis mit robuster CPU-Saliency (kein SAM).",
+    "aspect": "Seitenverhältnis",
+    "smoothing": "Glättung",
+    "custom": "Benutzerdefiniert",
+    "customWidth": "Breite",
+    "customHeight": "Höhe",
+    "cancel": "Abbrechen",
+    "confirm": "Reframe starten",
+    "starting": "Startet …",
+    "started": "Reframe gestartet",
+    "failed": "Reframe konnte nicht gestartet werden",
+    "download": "Download",
+    "statusQueued": "Warteschlange",
+    "statusRunning": "Läuft",
+    "statusSucceeded": "Fertig",
+    "statusFailed": "Fehlgeschlagen"
+  },
   "home": {
     "kicker": "VIDEON",
     "title": "Video-Intelligence",

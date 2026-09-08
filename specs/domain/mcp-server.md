@@ -48,7 +48,7 @@ The in-app `/chat` hub (Phase 1 scene retrieval UI) remains independent. MCP is 
 | `videon.analysis.run` | `videon.analysis_run` (P2) |
 | `videon.cut.create` | `videon.cut_create` (P2) |
 | `videon.export.run` | `videon.export_run` (P2 / Flow-first) |
-| `videon.reframe.run` | deferred |
+| `videon.reframe.run` | `videon.reframe_run` (Accepted — Robust CPU) |
 
 ## Tool surface
 
@@ -88,6 +88,7 @@ Hard limits (initial): `media_search` ≤ 20 hits; `media_get` scene list ≤ 40
 | `videon.brand_check_run` | `POST /api/media/:id/brand-check` | Requires succeeded analysis |
 | `videon.cut_create` | `POST /api/cuts` | Chat confirmation required (Plexon write policy) |
 | `videon.export_run` | `POST /api/cuts/:id/exports` | Prefer Collection Flow first |
+| `videon.reframe_run` | `POST /api/media/:id/reframe` | Confirm/job; no Hit-Card; no Flow node yet |
 
 Writes require writable membership + idempotency keys where the Product API supports them.
 

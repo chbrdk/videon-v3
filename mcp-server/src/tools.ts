@@ -58,6 +58,7 @@ export const VIDEON_TOOL_NAMES = [
   'videon.brand_check_run',
   'videon.cut_create',
   'videon.export_run',
+  'videon.reframe_run',
 ] as const
 
 export function registerVideonTools(server: ToolServer) {
@@ -495,6 +496,62 @@ export function registerVideonTools(server: ToolServer) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{}',
+          videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
+        },
+      )
+    },
+  )
+
+  server.registerTool(
+    'videon.reframe_run',
+    {
+      title: 'Start media reframe',
+      description:
+        'POST /api/media/:id/reframe — enqueue Robust-saliency aspect crop job. Returns job ref + deep link (no binary). Write tool — confirm with user. No Hit-Card / no Flow node yet. Access Model B via actorUserId + service auth.',
+      inputSchema: z.object({
+        actorUserId,
+        mediaAssetId: z.string(),
+        platformProjectId: z.string(),
+        aspectRatio: z.enum(['9:16', '16:9', '1:1', 'custom']).optional(),
+        smoothingFactor: z.number().min(0).max(1).optional(),
+        customWidth: z.number().int().positive().optional(),
+        customHeight: z.number().int().positive().optional(),
+        idempotencyKey: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      const {
+        mediaAssetId,
+        platformProjectId,
+        aspectRatio,
+        smoothingFactor,
+        customWidth,
+        customHeight,
+        idempotencyKey,
+      } = args as {
+        actorUserId?: string
+        mediaAssetId: string
+        platformProjectId: string
+        aspectRatio?: string
+        smoothingFactor?: number
+        customWidth?: number
+        customHeight?: number
+        idempotencyKey?: string
+      }
+      const body: Record<string, unknown> = {
+        aspectRatio: aspectRatio ?? '9:16',
+        saliencyModel: 'robust_v1',
+      }
+      if (smoothingFactor != null) body.smoothingFactor = smoothingFactor
+      if (customWidth != null) body.customWidth = customWidth
+      if (customHeight != null) body.customHeight = customHeight
+      if (idempotencyKey != null) body.idempotencyKey = idempotencyKey
+      return textResult(
+        `/api/media/${encodeURIComponent(mediaAssetId)}/reframe?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
           videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
         },
       )
