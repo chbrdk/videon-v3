@@ -12,7 +12,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const platformProjectId = params.platformProjectId?.trim()
 
   return (
-    <AppShell description={platformProjectId ? `Collection-Kontext: ${platformProjectId}` : 'Mediathek'}>
+    <AppShell>
       <LibraryWorkspace platformProjectId={platformProjectId} />
     </AppShell>
   )

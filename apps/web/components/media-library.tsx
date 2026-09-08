@@ -175,6 +175,9 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId: string 
           <Button type="button" variant="ghost" onClick={() => void load()}>
             Aktualisieren
           </Button>
+          <Link href={paths.routes.collections}>
+            <Button variant="ghost">Andere Collection</Button>
+          </Link>
         </div>
       </div>
 

@@ -1,7 +1,5 @@
 'use client'
 
-import Link from 'next/link'
-import { Button } from '@msqdx/ui'
 import { HubPageHeader } from '@/components/hub-page-header'
 import { MediaLibrary } from '@/components/media-library'
 import { WorkspaceRouteGate } from '@/components/workspace-route-gate'
@@ -12,20 +10,7 @@ export function LibraryWorkspace({ platformProjectId }: { platformProjectId?: st
     <WorkspaceRouteGate platformProjectId={platformProjectId} buildHref={paths.routes.libraryFor}>
       {(collectionId) => (
         <article className="videon-hub videon-hub--wide">
-          <HubPageHeader
-            eyebrow="Medien"
-            title="Mediathek"
-            actions={
-              <>
-                <Link href={paths.routes.uploadFor(collectionId)}>
-                  <Button variant="primary">Video hochladen</Button>
-                </Link>
-                <Link href={paths.routes.collections}>
-                  <Button variant="ghost">Andere Collection</Button>
-                </Link>
-              </>
-            }
-          />
+          <HubPageHeader title="Mediathek" />
           <MediaLibrary platformProjectId={collectionId} />
         </article>
       )}

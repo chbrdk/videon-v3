@@ -8,7 +8,7 @@ export function HubPageHeader({
   deck,
   actions,
 }: {
-  eyebrow: string
+  eyebrow?: string
   title: string
   deck?: ReactNode
   actions?: ReactNode
@@ -16,9 +16,11 @@ export function HubPageHeader({
   return (
     <header className="videon-hub__header-row">
       <div>
-        <Text role="meta" as="p" className="videon-hub__eyebrow">
-          {eyebrow}
-        </Text>
+        {eyebrow ? (
+          <Text role="meta" as="p" className="videon-hub__eyebrow">
+            {eyebrow}
+          </Text>
+        ) : null}
         <Text role="display" as="h1" className="videon-hub__title">
           {title}
         </Text>
