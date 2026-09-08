@@ -32,6 +32,8 @@ export type BrandCheckView = {
   failed: number
   skipped: number
   findings: BrandFinding[]
+  /** Slim measured observations from Brandion (colors/text), when stored. */
+  observations: Array<{ tokenPath: string; observedValue: string; field?: string; source?: string }>
   detail?: string | null
 }
 
@@ -53,6 +55,96 @@ function asFinding(value: unknown): BrandFinding | null {
     subjectValue: typeof value.subjectValue === 'string' ? value.subjectValue : null,
     targetValue: typeof value.targetValue === 'string' ? value.targetValue : null,
   }
+}
+
+const TOKEN_COVERAGE_RULE_PREFIX = 'tcov:'
+
+/** Brandion UI filters absent tokens out of findings (not a compliance failure). */
+function isTokenAbsentFromDocument(item: Record<string, unknown>): boolean {
+  return (
+    item.status === 'not_found' &&
+    typeof item.detectedValue !== 'string' &&
+    typeof item.observationRef !== 'string'
+  )
+}
+
+function humanTokenLabel(tokenPath: string): string {
+  const leaf = tokenPath.split('.').filter(Boolean).at(-1)
+  return leaf && leaf.length > 0 ? leaf : tokenPath
+}
+
+/**
+ * Brandion FindingsWorkspace merges `tokenCoverage` into rule results
+ * (`mergeResultsWithTokenCoverage`). VIDEON must do the same — otherwise
+ * color/logo matches never appear in the inspect drawer.
+ */
+export function tokenCoverageToFindings(coverage: unknown): BrandFinding[] {
+  if (!isRecord(coverage) || !Array.isArray(coverage.items)) return []
+  const findings: BrandFinding[] = []
+  for (const raw of coverage.items) {
+    if (!isRecord(raw) || typeof raw.tokenPath !== 'string' || typeof raw.status !== 'string') continue
+    if (raw.status === 'skipped' || isTokenAbsentFromDocument(raw)) continue
+    if (raw.status !== 'matched' && raw.status !== 'partial' && raw.status !== 'not_found') continue
+
+    const label = humanTokenLabel(raw.tokenPath)
+    const detected = typeof raw.detectedValue === 'string' ? raw.detectedValue : null
+    const expected = typeof raw.expectedValue === 'string' ? raw.expectedValue : null
+    const passed = raw.status === 'matched'
+    const severity =
+      raw.status === 'partial' ? 'warning' : raw.status === 'not_found' ? 'error' : 'info'
+
+    let message: string
+    if (raw.status === 'matched') {
+      message = detected ? `${label} stimmt (${detected})` : `${label} im Frame gefunden`
+    } else if (raw.status === 'partial') {
+      const delta =
+        typeof raw.delta === 'number' && Number.isFinite(raw.delta)
+          ? ` · ΔE ${raw.delta.toFixed(1)}`
+          : ''
+      message = `${label} teilweise — erwartet ${expected ?? '?'}, gemessen ${detected ?? '?'}${delta}`
+    } else if (detected) {
+      message = `${label} weicht ab — erwartet ${expected ?? '?'}, gemessen ${detected}`
+    } else {
+      message = `${label} nicht im Frame gefunden (erwartet ${expected ?? '?'})`
+    }
+
+    findings.push({
+      ruleId: `${TOKEN_COVERAGE_RULE_PREFIX}${raw.tokenPath}`,
+      name: label,
+      passed,
+      skipped: false,
+      severity,
+      message,
+      subjectValue: detected,
+      targetValue: expected,
+    })
+  }
+  return findings
+}
+
+function tallyFindings(findings: BrandFinding[]): { passed: number; failed: number; skipped: number } {
+  return {
+    passed: findings.filter((f) => f.passed && !f.skipped).length,
+    failed: findings.filter((f) => !f.passed && !f.skipped).length,
+    skipped: findings.filter((f) => f.skipped).length,
+  }
+}
+
+/** Downgrade-only status from merged findings (never invent a pass over Brandion fail). */
+export function statusFromFindings(
+  findings: BrandFinding[],
+  fallback: BrandCheckStatus,
+): BrandCheckStatus {
+  if (findings.some((f) => !f.passed && !f.skipped && f.severity === 'error')) return 'fail'
+  if (findings.some((f) => !f.passed && !f.skipped)) {
+    return fallback === 'fail' ? 'fail' : 'warn'
+  }
+  if (findings.some((f) => f.passed && !f.skipped)) {
+    return fallback === 'fail' || fallback === 'warn' || fallback === 'queued_pending_brandion'
+      ? fallback
+      : 'pass'
+  }
+  return fallback
 }
 
 /**
@@ -123,9 +215,18 @@ export function toBrandCheckView(input: {
 }): BrandCheckView {
   const result = isRecord(input.result) ? input.result : {}
   const provenance = isRecord(input.provenance) ? input.provenance : {}
-  const findings = Array.isArray(result.results)
+  const ruleFindings = Array.isArray(result.results)
     ? result.results.map(asFinding).filter((item): item is BrandFinding => item != null)
     : []
+  // Coverage may already be merged into results at store time; still merge for older rows
+  // that only kept tokenCoverage / for multi-frame aggregates that stash it separately.
+  const coverageFindings = tokenCoverageToFindings(result.tokenCoverage)
+  const seenRuleIds = new Set(ruleFindings.map((f) => f.ruleId))
+  const findings = [
+    ...ruleFindings,
+    ...coverageFindings.filter((f) => !seenRuleIds.has(f.ruleId)),
+  ]
+  const tallied = tallyFindings(findings)
   const evidenceTimestampsMs = Array.isArray(provenance.evidenceTimestampsMs)
     ? provenance.evidenceTimestampsMs.filter((value): value is number => typeof value === 'number')
     : []
@@ -148,9 +249,33 @@ export function toBrandCheckView(input: {
           ? frameStatuses.length
           : 0
 
+  // Prefer merged finding tallies when Brandion returned coverage-only signal
+  // (rule passed/failed often stay 0 while tokenCoverage has matches).
+  const useFindingTally =
+    findings.length > 0 &&
+    (coverageFindings.length > 0 ||
+      typeof result.passed !== 'number' ||
+      (result.passed === 0 && result.failed === 0 && result.skipped === 0 && tallied.passed + tallied.failed > 0))
+
+  const observations = Array.isArray(result.observations)
+    ? result.observations
+        .map((raw) => {
+          if (!isRecord(raw)) return null
+          if (typeof raw.tokenPath !== 'string' || typeof raw.observedValue !== 'string') return null
+          return {
+            tokenPath: raw.tokenPath,
+            observedValue: raw.observedValue,
+            ...(typeof raw.field === 'string' ? { field: raw.field } : {}),
+            ...(typeof raw.source === 'string' ? { source: raw.source } : {}),
+          }
+        })
+        .filter((item): item is NonNullable<typeof item> => item != null)
+        .slice(0, 32)
+    : []
+
   return {
     sceneKey: input.sceneKey,
-    status: input.status,
+    status: statusFromFindings(findings, input.status),
     brandionRequestId: input.brandionRequestId,
     guidelineId: typeof provenance.guidelineId === 'string' ? provenance.guidelineId : null,
     reason: typeof provenance.reason === 'string' ? provenance.reason : null,
@@ -158,10 +283,23 @@ export function toBrandCheckView(input: {
     evidenceFrameCount,
     evidenceTimestampsMs,
     frameStatuses,
-    passed: typeof result.passed === 'number' ? result.passed : findings.filter((f) => f.passed && !f.skipped).length,
-    failed: typeof result.failed === 'number' ? result.failed : findings.filter((f) => !f.passed && !f.skipped).length,
-    skipped: typeof result.skipped === 'number' ? result.skipped : findings.filter((f) => f.skipped).length,
+    passed: useFindingTally
+      ? tallied.passed
+      : typeof result.passed === 'number'
+        ? result.passed
+        : tallied.passed,
+    failed: useFindingTally
+      ? tallied.failed
+      : typeof result.failed === 'number'
+        ? result.failed
+        : tallied.failed,
+    skipped: useFindingTally
+      ? tallied.skipped
+      : typeof result.skipped === 'number'
+        ? result.skipped
+        : tallied.skipped,
     findings,
+    observations,
     detail: typeof result.detail === 'string' ? result.detail : typeof result.error === 'string' ? result.error : null,
   }
 }

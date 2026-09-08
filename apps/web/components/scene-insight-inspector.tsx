@@ -263,6 +263,26 @@ export function SceneInsightInspector(props: {
             </div>
           ) : null}
 
+          {brandCheck && brandCheck.observations.length > 0 ? (
+            <div className="videon-scene-inspect__brand-candidates">
+              <Text role="meta" as="p">
+                Gemessen ({brandCheck.observations.length})
+              </Text>
+              <Stack direction="row" gap="xs" wrap>
+                {brandCheck.observations.slice(0, 16).map((obs, index) => (
+                  <Chip key={`${obs.tokenPath}-${obs.observedValue}-${index}`} static size="sm">
+                    {obs.observedValue}
+                    <span className="videon-scene-inspect__chip-meta">
+                      {' '}
+                      · {obs.tokenPath}
+                      {obs.field ? `/${obs.field}` : ''}
+                    </span>
+                  </Chip>
+                ))}
+              </Stack>
+            </div>
+          ) : null}
+
           {orderedFindings.length > 0 ? (
             <ul className="videon-scene-inspect__findings">
               {orderedFindings.map((finding) => (
@@ -292,6 +312,11 @@ export function SceneInsightInspector(props: {
           ) : brandStatus === 'unchecked' ? (
             <Text role="meta" as="p">
               Noch kein Brand-Check für diese Szene. Über „Mehr → Brand-Check“ starten.
+            </Text>
+          ) : brandCheck ? (
+            <Text role="meta" as="p">
+              Keine Regel- oder Token-Findings gespeichert. Brand-Check erneut starten, damit
+              Brandion-Coverage (Farben, Typo, …) hier erscheint.
             </Text>
           ) : null}
         </InspectSection>

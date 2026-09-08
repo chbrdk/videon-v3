@@ -7,6 +7,9 @@ import {
 import {
   aggregateBrandCheckStatuses,
   buildBrandCandidatePathMap,
+  statusFromFindings,
+  tokenCoverageToFindings,
+  type BrandFinding,
 } from '@/lib/brand-findings'
 import { paths } from '@/lib/paths'
 import { brandionApiUrl, plexonServiceSecret } from '@/lib/runtime-config'
@@ -115,6 +118,54 @@ function asResultArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
 
+function mergeRunFindings(run: {
+  results?: unknown
+  tokenCoverage?: unknown
+}): BrandFinding[] {
+  const rules: BrandFinding[] = []
+  for (const raw of asResultArray(run.results)) {
+    if (!raw || typeof raw !== 'object') continue
+    const record = raw as Record<string, unknown>
+    if (typeof record.ruleId !== 'string' || typeof record.name !== 'string') continue
+    if (typeof record.passed !== 'boolean' || typeof record.message !== 'string') continue
+    rules.push({
+      ruleId: record.ruleId,
+      name: record.name,
+      passed: record.passed,
+      severity: typeof record.severity === 'string' ? record.severity : 'info',
+      message: record.message,
+      skipped: record.skipped === true,
+      subjectValue: typeof record.subjectValue === 'string' ? record.subjectValue : null,
+      targetValue: typeof record.targetValue === 'string' ? record.targetValue : null,
+    })
+  }
+  const coverage = tokenCoverageToFindings(run.tokenCoverage)
+  const seen = new Set(rules.map((f) => f.ruleId))
+  return [...rules, ...coverage.filter((f) => !seen.has(f.ruleId))]
+}
+
+function slimObservations(value: unknown): Array<{
+  tokenPath: string
+  observedValue: string
+  field?: string
+  source?: string
+}> {
+  if (!Array.isArray(value)) return []
+  const out: Array<{ tokenPath: string; observedValue: string; field?: string; source?: string }> = []
+  for (const raw of value.slice(0, 48)) {
+    if (!raw || typeof raw !== 'object') continue
+    const record = raw as Record<string, unknown>
+    if (typeof record.tokenPath !== 'string' || typeof record.observedValue !== 'string') continue
+    out.push({
+      tokenPath: record.tokenPath,
+      observedValue: record.observedValue,
+      ...(typeof record.field === 'string' ? { field: record.field } : {}),
+      ...(typeof record.source === 'string' ? { source: record.source } : {}),
+    })
+  }
+  return out
+}
+
 /** Calls Brandion guideline analysis-runs with a JPEG evidence frame. */
 export async function checkSceneImageAgainstBrandion(input: {
   guidelineId: string
@@ -190,19 +241,28 @@ export async function checkSceneImageAgainstBrandion(input: {
       skipped?: number
       results?: unknown
       observations?: unknown
+      tokenCoverage?: unknown
       error?: string
     }
 
+    const findings = mergeRunFindings(run)
+    const passed = findings.filter((f) => f.passed && !f.skipped).length
+    const failed = findings.filter((f) => !f.passed && !f.skipped).length
+    const skipped = findings.filter((f) => f.skipped).length
+    const status = statusFromFindings(findings, mapRunToStatus(run))
+
     return {
-      status: mapRunToStatus(run),
+      status,
       brandionRequestId: typeof run.id === 'string' ? run.id : null,
       result: {
-        passed: run.passed ?? 0,
-        failed: run.failed ?? 0,
-        skipped: run.skipped ?? 0,
+        passed,
+        failed,
+        skipped,
         runStatus: run.status ?? null,
         error: run.error ?? null,
-        results: run.results ?? [],
+        results: findings,
+        tokenCoverage: run.tokenCoverage ?? null,
+        observations: slimObservations(run.observations),
         observationCount: Array.isArray(run.observations) ? run.observations.length : 0,
         pathMap,
       },
@@ -286,12 +346,16 @@ export async function checkSceneFramesAgainstBrandion(input: {
     status: BrandCheckStatus
     brandionRequestId: string | null
   }> = []
-  const mergedFindings: unknown[] = []
-  let passed = 0
-  let failed = 0
-  let skipped = 0
+  const mergedFindings: BrandFinding[] = []
+  const mergedObservations: Array<{
+    tokenPath: string
+    observedValue: string
+    field?: string
+    source?: string
+  }> = []
   let pathMap: Record<string, string> = {}
   let firstProvenance: Record<string, unknown> = {}
+  let tokenCoverage: unknown = null
 
   for (const frame of input.frames) {
     const check = await checkSceneImageAgainstBrandion({
@@ -312,27 +376,40 @@ export async function checkSceneFramesAgainstBrandion(input: {
       status: check.status,
       brandionRequestId: check.brandionRequestId,
     })
-    const framePassed = typeof check.result.passed === 'number' ? check.result.passed : 0
-    const frameFailed = typeof check.result.failed === 'number' ? check.result.failed : 0
-    const frameSkipped = typeof check.result.skipped === 'number' ? check.result.skipped : 0
-    passed += framePassed
-    failed += frameFailed
-    skipped += frameSkipped
     for (const finding of asResultArray(check.result.results)) {
       if (finding && typeof finding === 'object') {
+        const record = finding as BrandFinding
         mergedFindings.push({
-          ...(finding as Record<string, unknown>),
-          ruleId: `${frame.frameId}:${String((finding as { ruleId?: unknown }).ruleId ?? 'rule')}`,
-          evidenceFrameId: frame.frameId,
+          ...record,
+          ruleId: `${frame.frameId}:${record.ruleId}`,
         })
       }
+    }
+    if (Array.isArray(check.result.observations)) {
+      for (const obs of check.result.observations as Array<{
+        tokenPath: string
+        observedValue: string
+        field?: string
+        source?: string
+      }>) {
+        mergedObservations.push(obs)
+      }
+    }
+    if (!tokenCoverage && check.result.tokenCoverage) {
+      tokenCoverage = check.result.tokenCoverage
     }
     if (check.result.pathMap && typeof check.result.pathMap === 'object') {
       pathMap = { ...pathMap, ...(check.result.pathMap as Record<string, string>) }
     }
   }
 
-  const status = aggregateBrandCheckStatuses(frameRuns.map((run) => run.status))
+  const passed = mergedFindings.filter((f) => f.passed && !f.skipped).length
+  const failed = mergedFindings.filter((f) => !f.passed && !f.skipped).length
+  const skipped = mergedFindings.filter((f) => f.skipped).length
+  const status = statusFromFindings(
+    mergedFindings,
+    aggregateBrandCheckStatuses(frameRuns.map((run) => run.status)),
+  )
   const primaryRun =
     frameRuns.find((run) => run.status === 'fail') ??
     frameRuns.find((run) => run.status === 'queued_pending_brandion') ??
@@ -349,7 +426,9 @@ export async function checkSceneFramesAgainstBrandion(input: {
       results: mergedFindings,
       frameRuns,
       pathMap,
-      observationCount: frameRuns.length,
+      tokenCoverage,
+      observations: mergedObservations.slice(0, 64),
+      observationCount: mergedObservations.length,
     },
     provenance: {
       ...firstProvenance,

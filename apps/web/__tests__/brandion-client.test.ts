@@ -93,6 +93,37 @@ describe('Brandion client', () => {
             ? [{ ruleId: 'logo', name: 'Logo', passed: false, severity: 'error', message: 'missing' }]
             : [{ ruleId: 'logo', name: 'Logo', passed: true, severity: 'info', message: 'ok' }],
           observations: [],
+          tokenCoverage: {
+            total: 1,
+            matched: fail ? 0 : 1,
+            partial: 0,
+            notFound: fail ? 1 : 0,
+            skipped: 0,
+            score: fail ? 0 : 1,
+            items: fail
+              ? [
+                  {
+                    tokenPath: 'color.brand.primary',
+                    tokenType: 'color',
+                    channel: 'digital',
+                    status: 'not_found',
+                    confidence: 0,
+                    detectedValue: '#111',
+                    expectedValue: '#f00',
+                  },
+                ]
+              : [
+                  {
+                    tokenPath: 'color.brand.primary',
+                    tokenType: 'color',
+                    channel: 'digital',
+                    status: 'matched',
+                    confidence: 1,
+                    detectedValue: '#f00',
+                    expectedValue: '#f00',
+                  },
+                ],
+          },
         }),
         { status: 201 },
       )
@@ -118,5 +149,6 @@ describe('Brandion client', () => {
       { frameId: 'f0', timestampMs: 0, status: 'pass', brandionRequestId: 'run-1' },
       { frameId: 'f1', timestampMs: 1000, status: 'fail', brandionRequestId: 'run-2' },
     ])
+    expect(Array.isArray(result.result.results) && result.result.results.length).toBeGreaterThan(2)
   })
 })

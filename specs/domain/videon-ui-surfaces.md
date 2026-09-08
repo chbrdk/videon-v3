@@ -55,7 +55,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 4. WHEN scenes inspect chrome is composed THEN it MUST use `ScrollArea` + `Stack` + `InspectSection` (and related chat/inspect primitives) — NOT app-local `videon-scene-insight__section` / brand-badge clones. Evidence frame thumbnails MAY remain app-local (`TimelineClipThumbnail`).
 5. WHERE no scene is selected or analysis is empty THEN the pane MUST use `EmptyState` / `Text` empty copy, not an empty scroll.
 6. WHEN Personen/Objekte/Aktionen render in the drawer THEN they MUST use dense chip/row chrome (`videon-scene-inspect__entity`) — NOT `ChatEntityGrid` / `EntityCard` (catalog min-height is wrong for a narrow inspect rail).
-7. WHEN Brand findings exist THEN the Brand section MUST surface status counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses when stored, Vision `brandCandidates`, and rule findings (severity + message + subject→target) — not only a single `pass` chip and an evidence count.
+7. WHEN Brand findings exist THEN the Brand section MUST surface status counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses when stored, Vision `brandCandidates`, measured Brandion observations when stored, and rule **plus token-coverage** findings (severity + message + subject→target) — not only a single `pass` chip and an evidence count. Token coverage MUST be merged like Brandion `FindingsWorkspace` (`tokenCoverage` → findings).
 
 ## Editor chrome (DS consistency)
 

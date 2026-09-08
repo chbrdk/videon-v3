@@ -121,5 +121,65 @@ describe('toBrandCheckView', () => {
     expect(view.guidelineId).toBeNull()
     expect(view.reason).toBe('no_active_guideline')
     expect(view.hint).toContain('Active-Pack')
+    expect(view.findings).toEqual([])
+    expect(view.observations).toEqual([])
+  })
+
+  it('merges Brandion tokenCoverage into inspector findings', () => {
+    const view = toBrandCheckView({
+      sceneKey: 'scene-0',
+      status: 'pass',
+      brandionRequestId: 'run-2',
+      provenance: { guidelineId: 'gl-demo', evidenceFrameCount: 1 },
+      result: {
+        passed: 0,
+        failed: 0,
+        skipped: 0,
+        results: [],
+        tokenCoverage: {
+          total: 2,
+          matched: 1,
+          partial: 0,
+          notFound: 1,
+          skipped: 0,
+          score: 0.5,
+          items: [
+            {
+              tokenPath: 'color.brand.primary',
+              tokenType: 'color',
+              channel: 'digital',
+              status: 'matched',
+              confidence: 1,
+              detectedValue: '#FFCC00',
+              expectedValue: '#FFCC00',
+            },
+            {
+              tokenPath: 'color.brand.accent',
+              tokenType: 'color',
+              channel: 'digital',
+              status: 'not_found',
+              confidence: 0,
+              detectedValue: '#111111',
+              expectedValue: '#0000FF',
+            },
+            {
+              tokenPath: 'color.brand.unused',
+              tokenType: 'color',
+              channel: 'digital',
+              status: 'not_found',
+              confidence: 0,
+            },
+          ],
+        },
+        observations: [{ tokenPath: 'color.brand.primary', observedValue: '#FFCC00', field: 'hex' }],
+      },
+    })
+    expect(view.findings).toHaveLength(2)
+    expect(view.findings[0]?.message).toContain('stimmt')
+    expect(view.findings[1]?.passed).toBe(false)
+    expect(view.passed).toBe(1)
+    expect(view.failed).toBe(1)
+    expect(view.status).toBe('fail')
+    expect(view.observations).toHaveLength(1)
   })
 })

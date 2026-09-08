@@ -74,8 +74,9 @@ Stored under `media_brand_checks`:
 ## UI
 
 - Media editor toolbar: **Brand-Check** (polls while stage `brand_compliance` is running).
-- Scene inspector Brand section: status + pass/fail/skip counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses, Vision `brandCandidates`, and Brandion rule findings (severity, message, subject→target).
-- Media detail API returns `brandChecks` via `toBrandCheckView` (includes `evidenceTimestampsMs` + `frameStatuses`).
+- Scene inspector Brand section: status + pass/fail/skip counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses, Vision `brandCandidates`, measured observations, and Brandion findings — **rule results merged with `tokenCoverage`** (same as Brandion FindingsWorkspace; color/typo matches live there).
+- Media detail API returns `brandChecks` via `toBrandCheckView` (includes `evidenceTimestampsMs`, `frameStatuses`, merged findings, slim `observations`).
+- Persisted `media_brand_checks.result` stores `results` (merged), `tokenCoverage`, and slim `observations`. Re-run Brand-Check after deploy to refresh older rows that only kept empty `results[]`.
 
 ## Code map
 
