@@ -337,45 +337,6 @@ main {
   );
 }
 
-.videon-analyses-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 1.25rem;
-}
-
-.videon-analyses-list__item {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: start;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.videon-analyses-list__main {
-  display: grid;
-  gap: 0.65rem;
-  min-width: 0;
-  flex: 1;
-}
-
-.videon-analyses-list__head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.videon-analyses-list__chips {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-}
-
 .videon-search-results {
   list-style: none;
   margin: 0.75rem 0 0;

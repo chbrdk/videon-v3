@@ -43,7 +43,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 5. WHEN item status is shown on browse cards/list THEN it MUST use toned `@msqdx/ui` `Badge` (lifecycle + analysis) — NOT uncolored static `Chip`s and NOT a lone green `StatusDot` for “keine Analyse”.
 6. WHERE quick actions appear THEN they MUST link to open / analyses / cuts without nesting interactive controls inside the card anchor.
 | `/upload` | Ingest | `Field` + native file input + `Button` |
-| `/analyses` | Vision runs | `StepStrip` / `Meter` / `Chip` rows |
+| `/analyses` | Vision runs (dense) | `RankedList` / `RankedRow` + `Badge` + `barPct` — NOT per-row `StepStrip`/`Meter` |
 | `/cuts` | Cut index | `HubIndexCard` / `RankedList` |
 | `/settings` | Account / appearance / language | `SettingsShell` per `settings.md` (theme default light, en/de) |
 | `/media/:id`, `/cuts/:id` | NLE | `MediaMonitor`, `TransportBar`, `Timeline*`, `FloatingPanel` / `InspectTabs`, `Toast` |

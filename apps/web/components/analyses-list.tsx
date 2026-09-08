@@ -4,27 +4,21 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Alert,
+  Badge,
   Button,
-  Chip,
   EmptyState,
   LoadingText,
-  Meter,
-  MeterList,
-  StatusDot,
-  StepStrip,
-  StepStripItem,
+  RankedList,
+  RankedRow,
   Text,
-  type StatusLevel,
 } from '@msqdx/ui'
 import {
   analysisStatusLabel,
+  analysisStatusTone,
   computePipelineProgress,
-  mediaLifecycleLabel,
   mergeStagesWithPipeline,
-  pipelineStageHint,
   pipelineStageLabel,
   pipelineStatusHeadline,
-  stageStatusLabel,
   type AnalysisStatusSnapshot,
   type PipelineStageSnapshot,
 } from '@/lib/pipeline/pipeline-status'
@@ -44,10 +38,38 @@ type AnalysisItem = {
   stages?: PipelineStageSnapshot[]
 }
 
-function statusLevel(status: string): StatusLevel {
-  if (status === 'failed') return 'critical'
-  if (status === 'running' || status === 'processing' || status === 'queued') return 'warn'
-  return 'ok'
+function formatWhen(iso: string | null | undefined): string {
+  if (!iso) return ''
+  try {
+    return new Intl.DateTimeFormat('de-DE', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(new Date(iso))
+  } catch {
+    return ''
+  }
+}
+
+function rowSecondary(item: AnalysisItem, stages: PipelineStageSnapshot[]): string {
+  const analysis: AnalysisStatusSnapshot = {
+    status: item.status,
+    startedAt: item.startedAt ?? null,
+    finishedAt: item.finishedAt,
+  }
+  const headline = pipelineStatusHeadline({
+    analysis,
+    stages,
+    mediaLifecycleState: item.mediaLifecycleState,
+  })
+  const merged = mergeStagesWithPipeline(stages)
+  const active = merged.find((stage) => stage.status === 'running')
+  const stageBit = active
+    ? pipelineStageLabel(active.stageKey)
+    : item.failedStageKey
+      ? pipelineStageLabel(item.failedStageKey)
+      : null
+  const when = formatWhen(item.finishedAt || item.startedAt || item.createdAt)
+  return [stageBit, headline, when].filter(Boolean).join(' · ')
 }
 
 export function AnalysesList({ platformProjectId }: { platformProjectId: string }) {
@@ -112,80 +134,28 @@ export function AnalysesList({ platformProjectId }: { platformProjectId: string 
   }
 
   return (
-    <ul className="videon-analyses-list" aria-label="Analysen">
-      {items.map((item) => {
+    <RankedList hint="Vision-Runs dieses Projekts — Detail und Stufen im Editor.">
+      {items.map((item, index) => {
         const stages = item.stages ?? []
         const progress = computePipelineProgress(stages)
-        const analysis: AnalysisStatusSnapshot = {
-          status: item.status,
-          startedAt: item.startedAt ?? null,
-          finishedAt: item.finishedAt,
-        }
-        const merged = mergeStagesWithPipeline(stages)
-        const headline = pipelineStatusHeadline({
-          analysis,
-          stages,
-          mediaLifecycleState: item.mediaLifecycleState,
-        })
-        const activeIndex = merged.findIndex((stage) => stage.status === 'running')
-
         return (
-          <li key={item.id} className="videon-analyses-list__item">
-            <div className="videon-analyses-list__main">
-              <div className="videon-analyses-list__head">
-                <Text role="title" as="h3">
-                  {item.mediaFilename}
-                </Text>
-                <div className="videon-analyses-list__chips">
-                  <StatusDot level={statusLevel(item.status)} />
-                  <Chip static size="sm">
-                    {analysisStatusLabel(item.status)}
-                  </Chip>
-                  <Chip static size="sm">
-                    {mediaLifecycleLabel(item.mediaLifecycleState)}
-                  </Chip>
-                </div>
-              </div>
-              <Text role="meta" as="p">
-                {headline}
-              </Text>
-              <MeterList aria-label="Pipeline-Fortschritt">
-                <Meter
-                  label="Pipeline"
-                  value={progress}
-                  valueLabel={`${progress}%`}
-                  disabled
-                />
-              </MeterList>
-              <StepStrip
-                aria-label="Pipeline-Stufen"
-                scrollToIndex={activeIndex >= 0 ? activeIndex : null}
-                hint={pipelineStageHint(merged[activeIndex]?.stageKey ?? merged[0]?.stageKey ?? 'probe')}
-              >
-                {merged.map((stage, index) => (
-                  <StepStripItem
-                    key={stage.stageKey}
-                    index={index}
-                    label={pipelineStageLabel(stage.stageKey)}
-                    active={stage.status === 'running'}
-                    selected={stage.status === 'succeeded'}
-                  >
-                    <Text role="label" as="span">
-                      {pipelineStageLabel(stage.stageKey)}
-                    </Text>
-                    <Text role="meta" as="span">
-                      {stageStatusLabel(stage.status)}
-                    </Text>
-                  </StepStripItem>
-                ))}
-              </StepStrip>
-            </div>
-            <Link href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}>
-              <Button variant="ghost">Im Editor öffnen</Button>
-            </Link>
-          </li>
+          <RankedRow
+            key={item.id}
+            index={index + 1}
+            label={item.mediaFilename}
+            value={
+              <span className="ds-chip-row" style={{ gap: '0.35rem' }}>
+                <Badge tone={analysisStatusTone(item.status)}>{analysisStatusLabel(item.status)}</Badge>
+                <span className="ds-text-numeric">{progress}%</span>
+              </span>
+            }
+            secondary={rowSecondary(item, stages)}
+            barPct={progress}
+            href={paths.routes.mediaFor(item.mediaAssetId, platformProjectId)}
+            linkComponent={Link}
+          />
         )
       })}
-    </ul>
+    </RankedList>
   )
 }
