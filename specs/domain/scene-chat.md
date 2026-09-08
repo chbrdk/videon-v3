@@ -19,3 +19,4 @@ Operator chat hub to **search scenes** across accessible projects (Access Model 
 7. WHEN hits render THEN they MUST use `@msqdx/ui` `StepStrip` / `StepStripItem` (Audion UX-journey magazine strip) — calm fixed-width teasers (larger default, no hover expand) with frame on top and meta rows below (scene, timing/duration, project, snippet + icons) — NOT a dense Mediathek card grid.
 8. WHEN a hit teaser activates (click / Enter) THEN it MUST deep-link to the media editor with seek (`t` ms and/or `scene` key) and land the playhead on that scene.
 9. Cuts remain reachable from Mediathek/editor; Upload remains from Mediathek project actions — not primary rail.
+10. Agent / Plexon assistant access is **not** this hub — see `mcp-server.md` + PLEXON `assistant-videon-mcp.md` (MCP over Product API; independent of `/chat` UI).
