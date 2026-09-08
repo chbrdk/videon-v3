@@ -1378,7 +1378,9 @@ main {
 }
 
 .videon-scene-inspect .ds-inspect-section__title {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
+  color: var(--fg, var(--ink));
+  letter-spacing: 0.06em;
 }
 
 .videon-scene-inspect .ds-chip,
@@ -1390,6 +1392,15 @@ main {
 .videon-scene-inspect .ds-empty,
 .videon-scene-inspect .ds-loading {
   font-size: 0.75rem;
+}
+
+.videon-scene-inspect .ds-chat-collapsible {
+  margin-inline: 0;
+}
+
+.videon-scene-inspect .ds-chat-collapsible--compact {
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--fg) 2.5%, transparent);
 }
 
 .videon-scene-inspect__nav {
@@ -1480,14 +1491,48 @@ main {
 
 .videon-scene-inspect__entity {
   display: grid;
-  gap: 0.15rem;
-  padding: 0.25rem 0;
+  gap: 0.2rem;
+  padding: 0.35rem 0.15rem;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   min-height: 0;
 }
 
 .videon-scene-inspect__entity:last-child {
   border-bottom: 0;
+}
+
+.videon-scene-inspect__entity-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+}
+
+.videon-scene-inspect__entity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  color: var(--accent, #ff6b00);
+  background: color-mix(in srgb, var(--accent, #ff6b00) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #ff6b00) 35%, transparent);
+}
+
+.videon-scene-inspect__entity-icon .ui-icon {
+  display: block;
+}
+
+.videon-scene-inspect__entity-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.videon-scene-inspect__entity-title {
+  font-weight: 600;
+  color: var(--fg, var(--ink));
 }
 
 .videon-scene-inspect__entity-meta {

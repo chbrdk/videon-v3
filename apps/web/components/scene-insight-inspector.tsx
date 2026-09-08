@@ -6,6 +6,14 @@ import {
   Chip,
   Divider,
   EmptyState,
+  IconBox,
+  IconCar,
+  IconImage,
+  IconPackage,
+  IconPaw,
+  IconText,
+  IconUser,
+  IconZap,
   InspectSection,
   ScrollArea,
   Stack,
@@ -19,10 +27,13 @@ import { ChatCollapsible } from '@msqdx/ui-client'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import type { BrandCheckView, BrandFinding } from '@/lib/brand-findings'
 import type { BrandCheckStatus } from '@/lib/db/brand-checks'
-import type { SceneInsight } from '@/lib/vision-schema'
+import type { ObjectCategory, SceneInsight } from '@/lib/vision-schema'
 import { formatClock } from '@/lib/editor-time'
+import type { ComponentType, SVGProps } from 'react'
 
 export type SceneFrameRef = { id: string; timestampMs: number }
+
+type EntityIconProps = SVGProps<SVGSVGElement> & { size?: number | string; strokeWidth?: number | string }
 
 const AGE_LABELS: Record<string, string> = {
   child: 'Kind',
@@ -31,6 +42,15 @@ const AGE_LABELS: Record<string, string> = {
   middle_adult: 'Mittelalt',
   older_adult: 'Älter',
   unknown: 'Unbekannt',
+}
+
+const OBJECT_CATEGORY_LABELS: Record<ObjectCategory, string> = {
+  vehicle: 'Fahrzeug',
+  product: 'Produkt',
+  prop: 'Prop',
+  animal: 'Tier',
+  text_on_screen: 'Text',
+  other: 'Objekt',
 }
 
 const BRAND_STATUS_LABELS: Record<BrandCheckStatus | 'unchecked', string> = {
@@ -56,6 +76,32 @@ const OBSERVED_LABELS: Record<SceneInsight['observedVsInferred'], string> = {
   observed_primary: 'überwiegend beobachtet',
   mixed: 'gemischt beobachtet/inferred',
   inferred_heavy: 'stark inferred',
+}
+
+type EntityKind = 'person' | 'action' | ObjectCategory | 'logo_or_wordmark'
+
+function entityIcon(kind: EntityKind): ComponentType<EntityIconProps> {
+  switch (kind) {
+    case 'person':
+      return IconUser
+    case 'action':
+      return IconZap
+    case 'text_on_screen':
+      return IconText
+    case 'vehicle':
+      return IconCar
+    case 'product':
+      return IconPackage
+    case 'animal':
+      return IconPaw
+    case 'prop':
+      return IconBox
+    case 'logo_or_wordmark':
+      return IconImage
+    case 'other':
+    default:
+      return IconBox
+  }
 }
 
 function brandStatusLevel(status: BrandCheckStatus | 'unchecked'): StatusLevel {
@@ -109,24 +155,31 @@ function EvidenceStrip(props: {
 }
 
 function EntityRow(props: {
-  chip: string
+  kind: EntityKind
+  title: string
   meta: string
   playbackUrl: string | null
   frameRefs: SceneFrameRef[]
   evidenceFrameIds: string[]
 }) {
+  const Icon = entityIcon(props.kind)
   return (
     <div className="videon-scene-inspect__entity">
-      <Stack direction="row" gap="xs" wrap align="center">
-        <Chip static size="sm">
-          {props.chip}
-        </Chip>
-        {props.meta ? (
-          <Text role="meta" as="span" className="videon-scene-inspect__entity-meta">
-            {props.meta}
+      <div className="videon-scene-inspect__entity-main">
+        <span className="videon-scene-inspect__entity-icon" aria-hidden>
+          <Icon size={14} strokeWidth={2} />
+        </span>
+        <div className="videon-scene-inspect__entity-copy">
+          <Text role="meta" as="span" className="videon-scene-inspect__entity-title">
+            {props.title}
           </Text>
-        ) : null}
-      </Stack>
+          {props.meta ? (
+            <Text role="meta" as="span" className="videon-scene-inspect__entity-meta">
+              {props.meta}
+            </Text>
+          ) : null}
+        </div>
+      </div>
       <EvidenceStrip
         playbackUrl={props.playbackUrl}
         frameRefs={props.frameRefs}
@@ -329,7 +382,8 @@ export function SceneInsightInspector(props: {
               {insight.people.map((person) => (
                 <EntityRow
                   key={person.id}
-                  chip={`${person.count}× ${person.role}`}
+                  kind="person"
+                  title={`${person.count}× ${person.role}`}
                   meta={[
                     AGE_LABELS[person.apparentAgeRange] ?? person.apparentAgeRange,
                     ...person.apparentPresentation,
@@ -353,8 +407,11 @@ export function SceneInsightInspector(props: {
               {insight.objects.map((object) => (
                 <EntityRow
                   key={object.id}
-                  chip={`${object.count}× ${object.label}`}
-                  meta={[object.category, ...object.attributes].filter(Boolean).join(' · ')}
+                  kind={object.category}
+                  title={`${object.count}× ${object.label}`}
+                  meta={[OBJECT_CATEGORY_LABELS[object.category] ?? object.category, ...object.attributes]
+                    .filter(Boolean)
+                    .join(' · ')}
                   playbackUrl={playbackUrl}
                   frameRefs={frameRefs}
                   evidenceFrameIds={object.evidenceFrameIds}
@@ -369,35 +426,45 @@ export function SceneInsightInspector(props: {
             <EmptyState>Keine Aktionen erkannt.</EmptyState>
           ) : (
             <ul className="videon-scene-inspect__actions">
-              {insight.actions.map((action, index) => (
-                <li key={`${action.label}-${index}`}>
-                  <Text role="meta" as="span" className="videon-scene-inspect__action-label">
-                    {action.label}
-                  </Text>
-                  <Timecode
-                    value={formatClock(action.startMs)}
-                    secondary={formatClock(action.endMs)}
-                    separator="–"
-                  />
-                  {action.actorIds.length ? (
-                    <Text role="meta" as="span">
-                      {action.actorIds.join(', ')}
-                    </Text>
-                  ) : null}
-                  <EvidenceStrip
-                    playbackUrl={playbackUrl}
-                    frameRefs={frameRefs}
-                    evidenceFrameIds={action.evidenceFrameIds}
-                  />
-                </li>
-              ))}
+              {insight.actions.map((action, index) => {
+                const Icon = entityIcon('action')
+                return (
+                  <li key={`${action.label}-${index}`}>
+                    <div className="videon-scene-inspect__entity-main">
+                      <span className="videon-scene-inspect__entity-icon" aria-hidden>
+                        <Icon size={14} strokeWidth={2} />
+                      </span>
+                      <div className="videon-scene-inspect__entity-copy">
+                        <Text role="meta" as="span" className="videon-scene-inspect__action-label">
+                          {action.label}
+                        </Text>
+                        <Timecode
+                          value={formatClock(action.startMs)}
+                          secondary={formatClock(action.endMs)}
+                          separator="–"
+                        />
+                        {action.actorIds.length ? (
+                          <Text role="meta" as="span">
+                            {action.actorIds.join(', ')}
+                          </Text>
+                        ) : null}
+                      </div>
+                    </div>
+                    <EvidenceStrip
+                      playbackUrl={playbackUrl}
+                      frameRefs={frameRefs}
+                      evidenceFrameIds={action.evidenceFrameIds}
+                    />
+                  </li>
+                )
+              })}
             </ul>
           )}
         </InspectSection>
 
         <Divider />
 
-        <ChatCollapsible title="Setting & Komposition" defaultOpen={false}>
+        <ChatCollapsible title="Setting & Komposition" density="compact" defaultOpen={false}>
           <InspectSection title="Setting">
             <ChatKeyValueList items={settingItems} />
           </InspectSection>
@@ -406,7 +473,7 @@ export function SceneInsightInspector(props: {
           </InspectSection>
         </ChatCollapsible>
 
-        <ChatCollapsible title="Weitere Hinweise" defaultOpen={false}>
+        <ChatCollapsible title="Weitere Hinweise" density="compact" defaultOpen={false}>
           <InspectSection title="Beobachtung">
             <Text role="meta" as="p">
               {OBSERVED_LABELS[insight.observedVsInferred] ?? insight.observedVsInferred}

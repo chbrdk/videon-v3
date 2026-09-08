@@ -54,8 +54,10 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 3. WHEN secondary facts exist (Setting, Komposition, Beobachtung, Safety, Mood) THEN they MUST live under `ChatCollapsible` — not a flat wall of custom headings.
 4. WHEN scenes inspect chrome is composed THEN it MUST use `ScrollArea` + `Stack` + `InspectSection` (and related chat/inspect primitives) — NOT app-local `videon-scene-insight__section` / brand-badge clones. Evidence frame thumbnails MAY remain app-local (`TimelineClipThumbnail`).
 5. WHERE no scene is selected or analysis is empty THEN the pane MUST use `EmptyState` / `Text` empty copy, not an empty scroll.
-6. WHEN Personen/Objekte/Aktionen render in the drawer THEN they MUST use dense chip/row chrome (`videon-scene-inspect__entity`) — NOT `ChatEntityGrid` / `EntityCard` (catalog min-height is wrong for a narrow inspect rail).
+6. WHEN Personen/Objekte/Aktionen render in the drawer THEN they MUST use dense chip/row chrome (`videon-scene-inspect__entity`) with a leading brand-accent icon by kind (person / text / vehicle / product / animal / prop / action) — NOT `ChatEntityGrid` / `EntityCard` (catalog min-height is wrong for a narrow inspect rail).
 7. WHEN Brand findings exist THEN the Brand section MUST surface status counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses when stored, Vision `brandCandidates`, measured Brandion observations when stored, and rule **plus token-coverage** findings (severity + message + subject→target) — not only a single `pass` chip and an evidence count. Token coverage MUST be merged like Brandion `FindingsWorkspace` (`tokenCoverage` → findings).
+8. WHEN secondary facts use `ChatCollapsible` in the scenes drawer THEN it MUST use `density="compact"` (sm trigger + padded chrome) — not the flush chat default / `title xl` trigger.
+9. WHEN InspectSection titles render in the scenes drawer THEN they MUST use full `--fg` color (not muted grey).
 
 ## Editor chrome (DS consistency)
 

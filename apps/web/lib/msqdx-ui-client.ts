@@ -11,4 +11,4 @@ export type { TooltipProps } from '../../../../msqdx-ui/packages/ui/src/componen
 export { Flyout, useFlyout } from '../../../../msqdx-ui/packages/ui/src/components/Flyout'
 export type { FlyoutProps } from '../../../../msqdx-ui/packages/ui/src/components/Flyout'
 export { ChatCollapsible } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'
-export type { ChatCollapsibleProps } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'
+export type { ChatCollapsibleProps, ChatCollapsibleDensity } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'
