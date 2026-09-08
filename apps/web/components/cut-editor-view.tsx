@@ -107,6 +107,11 @@ export function CutEditorView({
   const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
   const [libraryMedia, setLibraryMedia] = useState<LibraryMedia[]>([])
   const [selectedMediaId, setSelectedMediaId] = useState('')
+  const [binScenes, setBinScenes] = useState<
+    Array<{ sceneKey: string; startMs: number; endMs: number }>
+  >([])
+  const [selectedBinSceneKeys, setSelectedBinSceneKeys] = useState<string[]>([])
+  const [binScenesLoading, setBinScenesLoading] = useState(false)
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
@@ -603,7 +608,73 @@ export function CutEditorView({
       afterSceneId: activeClip?.scene.id ?? null,
     })
     setSelectedMediaId('')
+    setSelectedBinSceneKeys([])
   }
+
+  const addSelectedBinScenes = async () => {
+    if (!selectedMediaId || selectedBinSceneKeys.length === 0) return
+    const scenes = binScenes
+      .filter((scene) => selectedBinSceneKeys.includes(scene.sceneKey))
+      .map((scene) => ({
+        mediaAssetId: selectedMediaId,
+        startMs: scene.startMs,
+        endMs: scene.endMs,
+        sceneKey: scene.sceneKey,
+      }))
+    if (!scenes.length) return
+    await patchTimeline({
+      action: 'addScenes',
+      afterSceneId: activeClip?.scene.id ?? null,
+      scenes,
+    })
+    setSelectedBinSceneKeys([])
+  }
+
+  useEffect(() => {
+    if (!selectedMediaId) {
+      setBinScenes([])
+      setSelectedBinSceneKeys([])
+      return
+    }
+    let cancelled = false
+    setBinScenesLoading(true)
+    void (async () => {
+      try {
+        const response = await fetch(paths.routes.apiMediaDetail(selectedMediaId, platformProjectId), {
+          cache: 'no-store',
+        })
+        const body = (await response.json()) as {
+          scenes?: Array<{ sceneKey?: string; startMs?: number; endMs?: number }>
+        }
+        if (cancelled) return
+        const next = (body.scenes ?? [])
+          .filter(
+            (scene) =>
+              typeof scene.sceneKey === 'string' &&
+              typeof scene.startMs === 'number' &&
+              typeof scene.endMs === 'number' &&
+              scene.endMs > scene.startMs,
+          )
+          .map((scene) => ({
+            sceneKey: scene.sceneKey as string,
+            startMs: scene.startMs as number,
+            endMs: scene.endMs as number,
+          }))
+        setBinScenes(next)
+        setSelectedBinSceneKeys([])
+      } catch {
+        if (!cancelled) {
+          setBinScenes([])
+          setSelectedBinSceneKeys([])
+        }
+      } finally {
+        if (!cancelled) setBinScenesLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedMediaId, platformProjectId])
 
   const startExport = async () => {
     setExportBusy(true)
@@ -919,7 +990,7 @@ export function CutEditorView({
         }}
       >
         <div className="videon-nle__field-row">
-          <Field label="Clip einfügen" size="sm">
+          <Field label="Clip / Szenen einfügen" size="sm">
             <Select
               aria-label="Video für Clip"
               size="sm"
@@ -933,10 +1004,60 @@ export function CutEditorView({
               }))}
             />
           </Field>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy || !selectedMediaId || selectedBinSceneKeys.length === 0}
+            onClick={() => void addSelectedBinScenes()}
+          >
+            Szenen einfügen ({selectedBinSceneKeys.length})
+          </Button>
           <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
-            Nach aktivem Clip einfügen
+            Ganzes Video
           </Button>
         </div>
+
+        {selectedMediaId ? (
+          <div className="videon-nle__bin-scenes">
+            <Text role="meta" as="span">
+              {binScenesLoading
+                ? 'Szenen laden …'
+                : binScenes.length
+                  ? 'Analyse-Szenen (Mehrfachauswahl)'
+                  : 'Keine Analyse-Szenen — Ganzes Video nutzen'}
+            </Text>
+            {binScenes.length > 0 ? (
+              <ul className="videon-editor__scene-list" aria-label="Analyse-Szenen">
+                {binScenes.map((scene) => {
+                  const checked = selectedBinSceneKeys.includes(scene.sceneKey)
+                  return (
+                    <li key={scene.sceneKey}>
+                      <label className="videon-nle__bin-item">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={busy}
+                          onChange={() => {
+                            setSelectedBinSceneKeys((prev) =>
+                              checked
+                                ? prev.filter((key) => key !== scene.sceneKey)
+                                : [...prev, scene.sceneKey],
+                            )
+                          }}
+                        />
+                        <span className="videon-nle__bin-item-title">{scene.sceneKey}</span>
+                        <span className="videon-nle__bin-item-meta">
+                          {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
+                        </span>
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
 
         <Text role="meta" as="span">
           Mediathek · in Timeline ziehen

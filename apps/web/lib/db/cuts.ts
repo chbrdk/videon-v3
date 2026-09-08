@@ -24,6 +24,7 @@ export type CutScene = {
   mediaAssetId: string
   startMs: number
   endMs: number
+  sceneKey: string | null
   createdAt: string
 }
 
@@ -47,6 +48,7 @@ type CutSceneRow = {
   media_asset_id: string
   start_ms: number
   end_ms: number
+  scene_key: string | null
   created_at: Date | string
 }
 
@@ -73,6 +75,7 @@ function mapCutScene(row: CutSceneRow): CutScene {
     mediaAssetId: row.media_asset_id,
     startMs: row.start_ms,
     endMs: row.end_ms,
+    sceneKey: row.scene_key,
     createdAt: new Date(row.created_at).toISOString(),
   }
 }
@@ -105,7 +108,7 @@ export async function findCut(cutId: string): Promise<Cut | null> {
 
 export async function listScenesForCut(cutId: string): Promise<CutScene[]> {
   const result = await databasePool().query<CutSceneRow>(
-    `select id, cut_id, position, media_asset_id, start_ms, end_ms, created_at
+    `select id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key, created_at
        from cut_scenes
       where cut_id = $1
       order by position asc`,
@@ -121,7 +124,7 @@ export async function createCutWithScenes(input: {
   width?: number | null
   height?: number | null
   frameRate?: number | null
-  scenes: Array<{ mediaAssetId: string; startMs: number; endMs: number }>
+  scenes: Array<{ mediaAssetId: string; startMs: number; endMs: number; sceneKey?: string | null }>
 }): Promise<{ cut: Cut; scenes: CutScene[] }> {
   const client = await databasePool().connect()
   try {
@@ -146,10 +149,18 @@ export async function createCutWithScenes(input: {
     const scenes: CutScene[] = []
     for (const [position, scene] of input.scenes.entries()) {
       const sceneResult = await client.query<CutSceneRow>(
-        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id, cut_id, position, media_asset_id, start_ms, end_ms, created_at`,
-        [randomUUID(), cutId, position, scene.mediaAssetId, scene.startMs, scene.endMs],
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
+         values ($1, $2, $3, $4, $5, $6, $7)
+         returning id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key, created_at`,
+        [
+          randomUUID(),
+          cutId,
+          position,
+          scene.mediaAssetId,
+          scene.startMs,
+          scene.endMs,
+          scene.sceneKey?.trim() || null,
+        ],
       )
       scenes.push(mapCutScene(sceneResult.rows[0]))
     }
@@ -192,7 +203,7 @@ async function renumberCutScenes(client: PoolClient, cutId: string): Promise<voi
 
 export async function findCutScene(sceneId: string): Promise<CutScene | null> {
   const result = await databasePool().query<CutSceneRow>(
-    `select id, cut_id, position, media_asset_id, start_ms, end_ms, created_at
+    `select id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key, created_at
        from cut_scenes where id = $1`,
     [sceneId],
   )
@@ -219,9 +230,17 @@ export async function splitCutScene(input: {
       [scene.id, splitAt],
     )
     await client.query(
-      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
-       values ($1, $2, $3, $4, $5, $6)`,
-      [randomUUID(), scene.cutId, scene.position + 1, scene.mediaAssetId, splitAt, scene.endMs],
+      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        randomUUID(),
+        scene.cutId,
+        scene.position + 1,
+        scene.mediaAssetId,
+        splitAt,
+        scene.endMs,
+        scene.sceneKey,
+      ],
     )
     await renumberCutScenes(client, scene.cutId)
     await client.query('commit')
@@ -401,11 +420,43 @@ export async function addSceneToCut(input: {
   mediaAssetId: string
   startMs: number
   endMs: number
+  sceneKey?: string | null
   afterSceneId?: string | null
 }): Promise<CutScene[] | null> {
-  const startMs = Math.floor(input.startMs)
-  const endMs = Math.floor(input.endMs)
-  if (endMs - startMs < MIN_CLIP_MS) return null
+  return addScenesToCut({
+    cutId: input.cutId,
+    afterSceneId: input.afterSceneId,
+    scenes: [
+      {
+        mediaAssetId: input.mediaAssetId,
+        startMs: input.startMs,
+        endMs: input.endMs,
+        sceneKey: input.sceneKey,
+      },
+    ],
+  })
+}
+
+export async function addScenesToCut(input: {
+  cutId: string
+  afterSceneId?: string | null
+  scenes: Array<{ mediaAssetId: string; startMs: number; endMs: number; sceneKey?: string | null }>
+}): Promise<CutScene[] | null> {
+  if (!input.scenes.length) return null
+  const normalized: Array<{ mediaAssetId: string; startMs: number; endMs: number; sceneKey: string | null }> =
+    []
+  for (const scene of input.scenes) {
+    const startMs = Math.floor(scene.startMs)
+    const endMs = Math.floor(scene.endMs)
+    if (endMs - startMs < MIN_CLIP_MS) return null
+    if (!scene.mediaAssetId.trim()) return null
+    normalized.push({
+      mediaAssetId: scene.mediaAssetId.trim(),
+      startMs,
+      endMs,
+      sceneKey: scene.sceneKey?.trim() || null,
+    })
+  }
 
   const scenes = await listScenesForCut(input.cutId)
   let position = scenes.length
@@ -419,16 +470,26 @@ export async function addSceneToCut(input: {
     await client.query('begin')
     await client.query(
       `update cut_scenes
-          set position = position + 1
+          set position = position + $2
         where cut_id = $1
-          and position >= $2`,
-      [input.cutId, position],
+          and position >= $3`,
+      [input.cutId, normalized.length, position],
     )
-    await client.query(
-      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
-       values ($1, $2, $3, $4, $5, $6)`,
-      [randomUUID(), input.cutId, position, input.mediaAssetId, startMs, endMs],
-    )
+    for (const [offset, scene] of normalized.entries()) {
+      await client.query(
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
+         values ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          randomUUID(),
+          input.cutId,
+          position + offset,
+          scene.mediaAssetId,
+          scene.startMs,
+          scene.endMs,
+          scene.sceneKey,
+        ],
+      )
+    }
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
     await client.query('commit')
     return listScenesForCut(input.cutId)
@@ -448,6 +509,7 @@ export async function restoreCutTimeline(input: {
     mediaAssetId: string
     startMs: number
     endMs: number
+    sceneKey?: string | null
   }>
 }): Promise<CutScene[] | null> {
   if (input.scenes.length === 0) return null
@@ -462,9 +524,17 @@ export async function restoreCutTimeline(input: {
     const ordered = [...input.scenes].sort((a, b) => a.position - b.position)
     for (const [position, scene] of ordered.entries()) {
       await client.query(
-        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms)
-         values ($1, $2, $3, $4, $5, $6)`,
-        [scene.id, input.cutId, position, scene.mediaAssetId, scene.startMs, scene.endMs],
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
+         values ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          scene.id,
+          input.cutId,
+          position,
+          scene.mediaAssetId,
+          scene.startMs,
+          scene.endMs,
+          scene.sceneKey?.trim() || null,
+        ],
       )
     }
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])

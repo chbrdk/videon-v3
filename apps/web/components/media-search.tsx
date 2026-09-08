@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Alert, Button, IconResearch, Input, Text, ToolButton } from '@msqdx/ui'
+import { appendScenesToActiveCut } from '@/lib/active-cut-append'
 import { paths } from '@/lib/paths'
 
 type SearchHit = {
@@ -31,6 +32,7 @@ export function MediaSearch({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [addingAll, setAddingAll] = useState(false)
 
   async function onSearch(event: React.FormEvent) {
     event.preventDefault()
@@ -74,6 +76,42 @@ export function MediaSearch({
       {error ? <Alert tone="error">{error}</Alert> : null}
       {items.length > 0 ? (
         <ul className="videon-search-results" aria-label="Suchtreffer">
+          {onAddToCut && activeCutName ? (
+            <li className="videon-search-hit videon-search-hit--batch">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={addingAll || addingId !== null}
+                onClick={() => {
+                  setAddingAll(true)
+                  setError(null)
+                  void appendScenesToActiveCut(
+                    items
+                      .filter(
+                        (item) =>
+                          typeof item.startMs === 'number' &&
+                          typeof item.endMs === 'number' &&
+                          (item.endMs as number) > (item.startMs as number),
+                      )
+                      .map((item) => ({
+                        mediaAssetId: item.mediaAssetId,
+                        startMs: item.startMs as number,
+                        endMs: item.endMs as number,
+                        sceneKey: item.sceneKey,
+                        platformProjectId,
+                      })),
+                    { platformProjectId },
+                  )
+                    .then((result) => {
+                      if (!result.ok) setError(result.message)
+                    })
+                    .finally(() => setAddingAll(false))
+                }}
+              >
+                {addingAll ? 'Fügt hinzu …' : 'Alle Treffer zum Cut'}
+              </Button>
+            </li>
+          ) : null}
           {items.map((item) => {
             const hitKey = `${item.mediaAssetId}-${item.sceneKey ?? 'asset'}`
             return (
@@ -91,7 +129,7 @@ export function MediaSearch({
                   <Button
                     type="button"
                     variant="ghost"
-                    disabled={addingId === hitKey}
+                    disabled={addingId === hitKey || addingAll}
                     onClick={() => {
                       setAddingId(hitKey)
                       void Promise.resolve(onAddToCut(item)).finally(() => setAddingId(null))

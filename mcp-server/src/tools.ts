@@ -57,6 +57,7 @@ export const VIDEON_TOOL_NAMES = [
   'videon.analysis_run',
   'videon.brand_check_run',
   'videon.cut_create',
+  'videon.cut_scenes_add',
   'videon.export_run',
   'videon.reframe_run',
 ] as const
@@ -422,7 +423,7 @@ export function registerVideonTools(server: ToolServer) {
     {
       title: 'Create cut',
       description:
-        'POST /api/cuts — create a Cut from media/scenes. Write tool — confirm with user. Prefer Collection Flow for complex exports. Access Model B via actorUserId + service auth.',
+        'POST /api/cuts — create a Cut from one media or multi-source scenes[]. Each scenes[] entry needs mediaAssetId + startMs/endMs (or sceneKey). Write tool — confirm with user. Access Model B via actorUserId + service auth.',
       inputSchema: z.object({
         actorUserId,
         platformProjectId: z.string(),
@@ -433,6 +434,7 @@ export function registerVideonTools(server: ToolServer) {
         scenes: z
           .array(
             z.object({
+              mediaAssetId: z.string(),
               sceneKey: z.string().optional(),
               startMs: z.number().optional(),
               endMs: z.number().optional(),
@@ -456,7 +458,12 @@ export function registerVideonTools(server: ToolServer) {
         mediaAssetId?: string
         startMs?: number
         endMs?: number
-        scenes?: Array<{ sceneKey?: string; startMs?: number; endMs?: number }>
+        scenes?: Array<{
+          mediaAssetId: string
+          sceneKey?: string
+          startMs?: number
+          endMs?: number
+        }>
       }
       const body: Record<string, unknown> = { platformProjectId, name }
       if (mediaAssetId != null) body.mediaAssetId = mediaAssetId
@@ -469,6 +476,56 @@ export function registerVideonTools(server: ToolServer) {
         body: JSON.stringify(body),
         videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
       })
+    },
+  )
+
+  server.registerTool(
+    'videon.cut_scenes_add',
+    {
+      title: 'Add scenes to cut',
+      description:
+        'PATCH /api/cuts/:id action=addScenes — append multi-source scene ranges to an existing Cut. Write tool — confirm. No Flow node / no Hit-Card. Access Model B via actorUserId + service auth.',
+      inputSchema: z.object({
+        actorUserId,
+        platformProjectId: z.string(),
+        cutId: z.string(),
+        afterSceneId: z.string().optional(),
+        scenes: z
+          .array(
+            z.object({
+              mediaAssetId: z.string(),
+              sceneKey: z.string().optional(),
+              startMs: z.number().optional(),
+              endMs: z.number().optional(),
+            }),
+          )
+          .min(1),
+      }),
+    },
+    async (args) => {
+      const { platformProjectId, cutId, afterSceneId, scenes } = args as {
+        actorUserId?: string
+        platformProjectId: string
+        cutId: string
+        afterSceneId?: string
+        scenes: Array<{
+          mediaAssetId: string
+          sceneKey?: string
+          startMs?: number
+          endMs?: number
+        }>
+      }
+      const body: Record<string, unknown> = { action: 'addScenes', scenes }
+      if (afterSceneId != null) body.afterSceneId = afterSceneId
+      return textResult(
+        `/api/cuts/${encodeURIComponent(cutId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
+        },
+      )
     },
   )
 

@@ -25,6 +25,7 @@ describe('videon MCP tool inventory', () => {
       'videon.analysis_run',
       'videon.brand_check_run',
       'videon.cut_create',
+      'videon.cut_scenes_add',
       'videon.export_run',
       'videon.reframe_run',
     ] as const) {

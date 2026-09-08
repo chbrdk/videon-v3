@@ -2,6 +2,7 @@ import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { createCutWithScenes, listCutsForWorkspace } from '@/lib/db/cuts'
 import { findMediaAssetDetail } from '@/lib/db/media'
+import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
 
@@ -81,40 +82,40 @@ export async function POST(request: Request) {
     })
   }
 
-  const media = await findMediaAssetDetail(mediaAssetId || '')
-  const sceneInputs: Array<{ mediaAssetId: string; startMs: number; endMs: number }> = []
+  let sceneInputs: Array<{ mediaAssetId: string; startMs: number; endMs: number; sceneKey?: string | null }> =
+    []
 
   if (rawScenes?.length) {
-    for (const entry of rawScenes) {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
-      const scene = entry as Record<string, unknown>
-      const sceneMediaId = typeof scene.mediaAssetId === 'string' ? scene.mediaAssetId.trim() : ''
-      const sceneStart = typeof scene.startMs === 'number' ? Math.max(0, Math.floor(scene.startMs)) : 0
-      const sceneEnd = typeof scene.endMs === 'number' ? Math.max(sceneStart + 1, Math.floor(scene.endMs)) : 0
-      if (!sceneMediaId || sceneEnd <= sceneStart) continue
-      sceneInputs.push({ mediaAssetId: sceneMediaId, startMs: sceneStart, endMs: sceneEnd })
+    const resolved = await resolveCutSceneInputs(rawScenes)
+    if (!resolved.ok) {
+      return apiError(request, 400, 'invalid_payload', resolved.message)
     }
-  }
-
-  if (!sceneInputs.length) {
+    sceneInputs = resolved.scenes
+  } else {
     if (!mediaAssetId) {
       return apiError(request, 400, 'invalid_payload', 'mediaAssetId or scenes are required')
     }
+    const media = await findMediaAssetDetail(mediaAssetId)
     if (!media || media.workspaceId !== workspace.workspace.id) {
       return apiError(request, 404, 'not_found', 'Media asset not found')
     }
     const durationMs = media.durationMs ?? endMs ?? 60_000
-    sceneInputs.push({ mediaAssetId: media.id, startMs, endMs: endMs ?? durationMs })
-  } else {
-    for (const scene of sceneInputs) {
-      const sceneMedia = await findMediaAssetDetail(scene.mediaAssetId)
-      if (!sceneMedia || sceneMedia.workspaceId !== workspace.workspace.id) {
-        return apiError(request, 404, 'not_found', 'Media asset not found')
-      }
+    sceneInputs.push({
+      mediaAssetId: media.id,
+      startMs,
+      endMs: endMs ?? durationMs,
+      sceneKey: null,
+    })
+  }
+
+  for (const scene of sceneInputs) {
+    const sceneMedia = await findMediaAssetDetail(scene.mediaAssetId)
+    if (!sceneMedia || sceneMedia.workspaceId !== workspace.workspace.id) {
+      return apiError(request, 404, 'not_found', 'Media asset not found')
     }
   }
 
-  const primaryMedia = media ?? (await findMediaAssetDetail(sceneInputs[0].mediaAssetId))
+  const primaryMedia = await findMediaAssetDetail(sceneInputs[0].mediaAssetId)
   if (!primaryMedia) {
     return apiError(request, 404, 'not_found', 'Media asset not found')
   }

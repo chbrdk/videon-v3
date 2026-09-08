@@ -46,7 +46,8 @@ The in-app `/chat` hub (Phase 1 scene retrieval UI) remains independent. MCP is 
 | `videon.media.search` | `videon.media_search` (P1) |
 | `videon.analysis.get` | `videon.analysis_get`, `videon.media_get` (P1) |
 | `videon.analysis.run` | `videon.analysis_run` (P2) |
-| `videon.cut.create` | `videon.cut_create` (P2) |
+| `videon.cut.create` | `videon.cut_create` (P2 — multi-source `scenes[].mediaAssetId`) |
+| `videon.cut.scenes.add` | `videon.cut_scenes_add` (Accepted — Agent append; no Flow node) |
 | `videon.export.run` | `videon.export_run` (P2 / Flow-first) |
 | `videon.reframe.run` | `videon.reframe_run` (Accepted — Robust CPU) |
 
@@ -86,7 +87,8 @@ Hard limits (initial): `media_search` ≤ 20 hits; `media_get` scene list ≤ 40
 |------|---------|--------|
 | `videon.analysis_run` | `POST /api/media/:id/analysis` | Returns job/run ref; poll via `analysis_get` |
 | `videon.brand_check_run` | `POST /api/media/:id/brand-check` | Requires succeeded analysis |
-| `videon.cut_create` | `POST /api/cuts` | Chat confirmation required (Plexon write policy) |
+| `videon.cut_create` | `POST /api/cuts` | Multi-source `scenes[].mediaAssetId`; confirm |
+| `videon.cut_scenes_add` | `PATCH /api/cuts/:id` `addScenes` | Append batch; confirm; **no** Flow node |
 | `videon.export_run` | `POST /api/cuts/:id/exports` | Prefer Collection Flow first |
 | `videon.reframe_run` | `POST /api/media/:id/reframe` | Confirm/job; no Hit-Card; no Flow node yet |
 

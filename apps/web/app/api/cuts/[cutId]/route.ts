@@ -11,10 +11,12 @@ import {
   reorderCutScenes,
   renameCut,
   addSceneToCut,
+  addScenesToCut,
   rollTrimCutBoundary,
   restoreCutTimeline,
 } from '@/lib/db/cuts'
 import { findMediaAsset } from '@/lib/db/media'
+import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMediaIds } from '@/lib/db/media-stems'
 import type { TranscriptSegment } from '@/lib/cut-timeline'
@@ -218,6 +220,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       mediaAssetId: string
       startMs: number
       endMs: number
+      sceneKey?: string | null
     }> = []
     for (const entry of rawRestoreScenes) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
@@ -227,6 +230,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       const position = typeof scene.position === 'number' ? scene.position : restoreScenes.length
       const sceneStart = typeof scene.startMs === 'number' ? scene.startMs : null
       const sceneEnd = typeof scene.endMs === 'number' ? scene.endMs : null
+      const sceneKey =
+        typeof scene.sceneKey === 'string' && scene.sceneKey.trim() ? scene.sceneKey.trim() : null
       if (!id || !mediaId || sceneStart === null || sceneEnd === null) continue
       const media = await findMediaAsset(mediaId)
       if (!media || media.workspaceId !== workspace.workspace.id) {
@@ -238,9 +243,33 @@ export async function PATCH(request: Request, context: RouteContext) {
         mediaAssetId: mediaId,
         startMs: sceneStart,
         endMs: sceneEnd,
+        sceneKey,
       })
     }
     const scenes = await restoreCutTimeline({ cutId: cut.id, scenes: restoreScenes })
+    if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
+    return apiJson(request, { scenes })
+  }
+
+  if (action === 'addScenes') {
+    if (!rawRestoreScenes?.length) {
+      return apiError(request, 400, 'invalid_payload', 'scenes is required for addScenes')
+    }
+    const resolved = await resolveCutSceneInputs(rawRestoreScenes)
+    if (!resolved.ok) {
+      return apiError(request, 400, 'invalid_payload', resolved.message)
+    }
+    for (const scene of resolved.scenes) {
+      const media = await findMediaAsset(scene.mediaAssetId)
+      if (!media || media.workspaceId !== workspace.workspace.id) {
+        return apiError(request, 404, 'not_found', 'Media asset not found')
+      }
+    }
+    const scenes = await addScenesToCut({
+      cutId: cut.id,
+      afterSceneId,
+      scenes: resolved.scenes,
+    })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
     return apiJson(request, { scenes })
   }
@@ -254,11 +283,14 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!media || media.workspaceId !== workspace.workspace.id) {
       return apiError(request, 404, 'not_found', 'Media asset not found')
     }
+    const sceneKey =
+      typeof record.sceneKey === 'string' && record.sceneKey.trim() ? record.sceneKey.trim() : null
     const scenes = await addSceneToCut({
       cutId: cut.id,
       mediaAssetId,
       startMs,
       endMs,
+      sceneKey,
       afterSceneId,
     })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')

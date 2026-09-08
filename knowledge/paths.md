@@ -86,6 +86,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | `VIDEON_REFRAME_SERVICE_URL` | Always-on reframe worker base (no trailing slash) |
 | Media reframe API | `POST/GET /api/media/:id/reframe(s)` — `specs/api/media-reframe.md` |
 | Reframe worker | Coolify `videon-v3:reframe-worker` `hydwudxhs3ovqdf3lpdk9gjz` · port **8092** · FQDN `https://hydwudxhs3ovqdf3lpdk9gjz.projects-a.plygrnd.tech` · `knowledge/staging-coolify-reframe-worker.md` |
+| Multi-source Cuts | `specs/domain/cut-multi-source-compose.md` · `specs/api/cuts.md` — `PATCH addScenes`; MCP `videon.cut_scenes_add` |
 
 ## V7 production rollout
 

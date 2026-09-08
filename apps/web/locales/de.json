@@ -41,7 +41,13 @@
     "hitsHint": "Klick öffnet die Szene im Editor.",
     "hitScene": "Szene",
     "hitSceneN": "Szene {n}",
-    "hitDuration": "Dauer {duration}"
+    "hitDuration": "Dauer {duration}",
+    "activeCut": "Aktiver Cut: {name}",
+    "needActiveCut": "Cut-Editor öffnen, um Treffer zum aktiven Cut hinzuzufügen.",
+    "addToCut": "Zum Cut",
+    "addAllToCut": "Alle zum Cut",
+    "addingToCut": "Fügt hinzu …",
+    "addedToCut": "{count} Szene(n) zu „{name}“ hinzugefügt"
   },
   "collections": {
     "title": "Projekte",

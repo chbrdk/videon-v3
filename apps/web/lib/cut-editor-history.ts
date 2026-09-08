@@ -4,6 +4,7 @@ export type CutTimelineSnapshotScene = {
   mediaAssetId: string
   startMs: number
   endMs: number
+  sceneKey?: string | null
 }
 
 export type CutEditorSnapshot = {
@@ -20,13 +21,21 @@ export function snapshotFromClips(
       mediaAssetId: string
       startMs: number
       endMs: number
+      sceneKey?: string | null
     }
   }>,
   cutPlayheadMs: number,
   activeIndex: number,
 ): CutEditorSnapshot {
   return {
-    scenes: clips.map((clip) => ({ ...clip.scene })),
+    scenes: clips.map((clip) => ({
+      id: clip.scene.id,
+      position: clip.scene.position,
+      mediaAssetId: clip.scene.mediaAssetId,
+      startMs: clip.scene.startMs,
+      endMs: clip.scene.endMs,
+      sceneKey: clip.scene.sceneKey ?? null,
+    })),
     cutPlayheadMs,
     activeIndex,
   }
