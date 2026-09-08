@@ -711,28 +711,46 @@ main {
   grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 0;
   min-width: 0;
+  min-height: 0;
+  background: color-mix(in srgb, var(--nle-bg) 70%, black);
 }
 
 .videon-nle--player-first .videon-nle__program {
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
+/* Height-first program monitor: ultrawide must not stretch the frame endlessly. */
 .videon-nle__monitor-host {
-  min-height: 0;
+  container-type: size;
+  container-name: nle-monitor;
   display: grid;
-  min-height: clamp(16rem, 42vh, 42rem);
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
   height: 100%;
+  padding: 0.35rem 0.5rem;
+  background: color-mix(in srgb, var(--nle-bg) 55%, black);
 }
 
 .videon-nle__monitor-host .ds-media-monitor,
 .videon-nle__monitor {
+  /* Fit inside host using the smaller of (full height @ 16:9) vs (full width @ 16:9). */
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  height: min(100cqh, calc(100cqw * 9 / 16));
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 100%;
-  height: 100%;
-  border: 0;
-  background: transparent;
+  min-height: 0;
+  border: 1px solid var(--nle-border);
+  background: #000;
   color: var(--nle-text);
+}
+
+.videon-nle__monitor-host .ds-media-monitor__surface {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .videon-nle__monitor.is-fullscreen,
@@ -946,11 +964,14 @@ main {
 
 .videon-nle__video {
   display: block;
-  width: 100%;
+  /* Prefer available height; width follows intrinsic aspect, clamped by the frame. */
+  width: auto;
   height: 100%;
+  max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   background: #000;
+  margin-inline: auto;
 }
 
 .videon-nle__video-placeholder {

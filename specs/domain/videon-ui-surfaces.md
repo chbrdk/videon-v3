@@ -76,6 +76,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 5. WHEN voice/music stems exist THEN the program monitor MUST play stem streams (`/stems/{voice|music}/stream`) synced to the video clock; the `<video>` audio bus MUST stay muted (split-out original). A1/A2 mute MUST mute only the matching stem — never silence sibling stems via `video.muted`.
 6. WHEN stem separation runs without Demucs THEN it MUST use center-band approximation (`ffmpeg_center_band`), not raw mid/side as \"voice\". True Voice/Music REQUIRES Demucs — see `knowledge/stem-separation.md`.
 7. WHEN voice/music stems exist THEN the editor MUST offer a download of each stem WAV (`/stems/{voice|music}/stream?download=1`) so operators can inspect A1/A2 offline (debug / share).
+8. WHEN the program monitor renders THEN its frame MUST be **height-first**: size with `aspect-ratio: 16 / 9` using `min(available height, available width × 9/16)` — NOT stretch to ultrawide width. The video MUST stay fully visible (`object-fit: contain`, centered).
 
 ## Timeline DS shell (Wave C)
 
