@@ -118,22 +118,33 @@ export async function listMediaForWorkspace(workspaceId: string): Promise<MediaB
   }))
 }
 
+const PLATFORM_PROJECT_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 /**
  * Fail-closed Mediathek across Access Model B projects:
  * platform_project_id allowlist ∩ local owner/member.
+ * Columns are UUID — bind as uuid[] / uuid, not text[].
  */
 export async function listMediaForAccessibleProjects(input: {
   platformProjectIds: string[]
   plexonUserId: string
   limit?: number
 }): Promise<MediaBrowseItemAcrossProjects[]> {
-  const ids = [...new Set(input.platformProjectIds.map((id) => id.trim()).filter(Boolean))]
+  const ids = [
+    ...new Set(
+      input.platformProjectIds
+        .map((id) => id.trim())
+        .filter((id) => PLATFORM_PROJECT_UUID_RE.test(id)),
+    ),
+  ]
   if (!ids.length) return []
+  if (!PLATFORM_PROJECT_UUID_RE.test(input.plexonUserId.trim())) return []
   const limit = Math.min(Math.max(input.limit ?? 500, 1), 500)
   const result = await databasePool().query<MediaRow>(
     `select m.id, m.workspace_id, m.created_by_plexon_user_id, m.storage_key, m.original_filename, m.mime_type,
             m.bytes, m.checksum_sha256, m.lifecycle_state, m.duration_ms, m.width, m.height, m.frame_rate,
-            m.created_at, m.updated_at, w.platform_project_id,
+            m.created_at, m.updated_at, w.platform_project_id::text as platform_project_id,
             (
               select ar.status
                 from analysis_runs ar
@@ -143,13 +154,13 @@ export async function listMediaForAccessibleProjects(input: {
             ) as latest_analysis_status
        from media_assets m
        join videon_workspaces w on w.id = m.workspace_id
-      where w.platform_project_id = any($1::text[])
+      where w.platform_project_id = any($1::uuid[])
         and m.lifecycle_state <> 'archived'
         and (
-              w.owner_plexon_user_id = $2
+              w.owner_plexon_user_id = $2::uuid
            or exists (
                 select 1 from videon_workspace_members mem
-                 where mem.workspace_id = w.id and mem.plexon_user_id = $2
+                 where mem.workspace_id = w.id and mem.plexon_user_id = $2::uuid
               )
             )
       order by m.created_at desc

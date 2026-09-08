@@ -14,7 +14,7 @@ describe('media list API', () => {
   it('lists across allowlisted projects with membership join', () => {
     const source = readFileSync(join(__dirname, '../lib/db/media.ts'), 'utf8')
     expect(source).toMatch(/listMediaForAccessibleProjects/)
+    expect(source).toMatch(/platform_project_id = any\(\$1::uuid\[\]\)/)
     expect(source).toMatch(/videon_workspace_members/)
-    expect(source).toMatch(/platform_project_id = any/)
   })
 })

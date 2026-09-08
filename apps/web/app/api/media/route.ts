@@ -63,7 +63,11 @@ export async function GET(request: Request) {
         projectName: nameById.get(item.platformProjectId) ?? null,
       })),
     })
-  } catch {
+  } catch (error) {
+    console.error('[VIDEON-v3] Media listing failed', {
+      hasPlatformProjectId: Boolean(platformProjectId),
+      message: error instanceof Error ? error.message : String(error),
+    })
     return apiError(request, 503, 'dependency_unavailable', 'Media listing failed', { retryable: true })
   }
 }
