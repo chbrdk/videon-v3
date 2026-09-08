@@ -85,7 +85,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | `REFRAME_JOB_NAME` | `videon.media.reframe` |
 | `VIDEON_REFRAME_SERVICE_URL` | Always-on reframe worker base (no trailing slash) |
 | Media reframe API | `POST/GET /api/media/:id/reframe(s)` — `specs/api/media-reframe.md` |
-| Reframe worker | Coolify `videon-v3:reframe-worker` · port **8092** · `knowledge/staging-coolify-reframe-worker.md` |
+| Reframe worker | Coolify `videon-v3:reframe-worker` `hydwudxhs3ovqdf3lpdk9gjz` · port **8092** · FQDN `https://hydwudxhs3ovqdf3lpdk9gjz.projects-a.plygrnd.tech` · `knowledge/staging-coolify-reframe-worker.md` |
 
 ## V7 production rollout
 
