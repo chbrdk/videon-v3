@@ -51,9 +51,11 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 1. WHEN the scenes tab lists analysed scenes THEN each navigator row MUST show a **truncated** label (≈72 chars via `timelineClipLabel`), a `Timecode` range, and an optional Brand status (`StatusDot` + `Chip`/`Badge`) — NOT the full `insight.summary` as the row title.
 2. WHEN a scene is selected THEN the detail pane MUST show the full summary once as `Text` body, then primary facts (Brand, Personen, Objekte, Aktionen) via `@msqdx/ui` `InspectSection` (+ `ChatKeyValueList` / `Chip` / `Badge` as appropriate).
-3. WHEN secondary facts exist (Setting, Komposition, Brand-Hinweise, Beobachtung, Safety, Mood) THEN they MUST live under `ChatCollapsible` — not a flat wall of custom headings.
+3. WHEN secondary facts exist (Setting, Komposition, Beobachtung, Safety, Mood) THEN they MUST live under `ChatCollapsible` — not a flat wall of custom headings.
 4. WHEN scenes inspect chrome is composed THEN it MUST use `ScrollArea` + `Stack` + `InspectSection` (and related chat/inspect primitives) — NOT app-local `videon-scene-insight__section` / brand-badge clones. Evidence frame thumbnails MAY remain app-local (`TimelineClipThumbnail`).
 5. WHERE no scene is selected or analysis is empty THEN the pane MUST use `EmptyState` / `Text` empty copy, not an empty scroll.
+6. WHEN Personen/Objekte/Aktionen render in the drawer THEN they MUST use dense chip/row chrome (`videon-scene-inspect__entity`) — NOT `ChatEntityGrid` / `EntityCard` (catalog min-height is wrong for a narrow inspect rail).
+7. WHEN Brand findings exist THEN the Brand section MUST surface status counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses when stored, Vision `brandCandidates`, and rule findings (severity + message + subject→target) — not only a single `pass` chip and an evidence count.
 
 ## Editor chrome (DS consistency)
 

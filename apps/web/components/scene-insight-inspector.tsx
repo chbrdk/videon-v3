@@ -2,7 +2,6 @@
 
 import {
   Badge,
-  ChatEntityGrid,
   ChatKeyValueList,
   Chip,
   Divider,
@@ -14,12 +13,11 @@ import {
   Text,
   Timecode,
   type BadgeTone,
-  type ChatEntityItem,
   type StatusLevel,
 } from '@msqdx/ui'
 import { ChatCollapsible } from '@msqdx/ui-client'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
-import type { BrandCheckView } from '@/lib/brand-findings'
+import type { BrandCheckView, BrandFinding } from '@/lib/brand-findings'
 import type { BrandCheckStatus } from '@/lib/db/brand-checks'
 import type { SceneInsight } from '@/lib/vision-schema'
 import { formatClock } from '@/lib/editor-time'
@@ -36,13 +34,13 @@ const AGE_LABELS: Record<string, string> = {
 }
 
 const BRAND_STATUS_LABELS: Record<BrandCheckStatus | 'unchecked', string> = {
-  unchecked: 'ungeprüft',
-  queued_pending_brandion: 'wartet auf Brandion',
-  running: 'läuft',
-  pass: 'pass',
-  warn: 'warn',
-  fail: 'fail',
-  skipped: 'übersprungen',
+  unchecked: 'Noch nicht geprüft',
+  queued_pending_brandion: 'Wartet auf Brandion',
+  running: 'Läuft',
+  pass: 'Bestanden',
+  warn: 'Warnung',
+  fail: 'Nicht bestanden',
+  skipped: 'Übersprungen',
 }
 
 const BRAND_REASON_LABELS: Record<string, string> = {
@@ -74,7 +72,7 @@ function brandBadgeTone(status: BrandCheckStatus | 'unchecked'): BadgeTone {
   return 'neutral'
 }
 
-function findingBadgeTone(finding: { skipped: boolean; passed: boolean }): BadgeTone {
+function findingBadgeTone(finding: BrandFinding): BadgeTone {
   if (finding.skipped) return 'neutral'
   if (finding.passed) return 'success'
   return 'danger'
@@ -83,13 +81,22 @@ function findingBadgeTone(finding: { skipped: boolean; passed: boolean }): Badge
 function EvidenceStrip(props: {
   playbackUrl: string | null
   frameRefs: SceneFrameRef[]
-  evidenceFrameIds: string[]
+  evidenceFrameIds?: string[]
+  timestampsMs?: number[]
 }) {
-  const frames = props.frameRefs.filter((frame) => props.evidenceFrameIds.includes(frame.id))
-  if (!frames.length || !props.playbackUrl) return null
+  const byTimestamp = props.timestampsMs?.length
+    ? props.timestampsMs
+        .map((timestampMs) => {
+          const match = props.frameRefs.find((frame) => frame.timestampMs === timestampMs)
+          return match ?? { id: `ts-${timestampMs}`, timestampMs }
+        })
+        .filter((frame) => Number.isFinite(frame.timestampMs))
+    : props.frameRefs.filter((frame) => (props.evidenceFrameIds ?? []).includes(frame.id))
+
+  if (!byTimestamp.length || !props.playbackUrl) return null
   return (
     <div className="videon-scene-insight__evidence" data-testid="scene-evidence-strip">
-      {frames.map((frame) => (
+      {byTimestamp.map((frame) => (
         <div key={frame.id} className="videon-scene-insight__evidence-frame" title={frame.id}>
           <TimelineClipThumbnail playbackUrl={props.playbackUrl} sourceMs={frame.timestampMs} />
           <Text role="meta" as="span">
@@ -101,28 +108,32 @@ function EvidenceStrip(props: {
   )
 }
 
-function peopleToEntities(insight: SceneInsight): ChatEntityItem[] {
-  return insight.people.map((person) => ({
-    id: person.id,
-    title: `${person.count}× ${person.role}`,
-    subtitle: AGE_LABELS[person.apparentAgeRange] ?? person.apparentAgeRange,
-    description: person.apparentPresentation.length
-      ? person.apparentPresentation.join(', ')
-      : undefined,
-    badge: 'Person',
-    accent: 'neutral' as const,
-  }))
-}
-
-function objectsToEntities(insight: SceneInsight): ChatEntityItem[] {
-  return insight.objects.map((object) => ({
-    id: object.id,
-    title: `${object.count}× ${object.label}`,
-    subtitle: object.category,
-    description: object.attributes.length ? object.attributes.join(', ') : undefined,
-    badge: 'Objekt',
-    accent: 'neutral' as const,
-  }))
+function EntityRow(props: {
+  chip: string
+  meta: string
+  playbackUrl: string | null
+  frameRefs: SceneFrameRef[]
+  evidenceFrameIds: string[]
+}) {
+  return (
+    <div className="videon-scene-inspect__entity">
+      <Stack direction="row" gap="xs" wrap align="center">
+        <Chip static size="sm">
+          {props.chip}
+        </Chip>
+        {props.meta ? (
+          <Text role="meta" as="span" className="videon-scene-inspect__entity-meta">
+            {props.meta}
+          </Text>
+        ) : null}
+      </Stack>
+      <EvidenceStrip
+        playbackUrl={props.playbackUrl}
+        frameRefs={props.frameRefs}
+        evidenceFrameIds={props.evidenceFrameIds}
+      />
+    </div>
+  )
 }
 
 export function SceneInsightInspector(props: {
@@ -137,10 +148,7 @@ export function SceneInsightInspector(props: {
   const failedFindings = brandCheck?.findings.filter((f) => !f.passed && !f.skipped) ?? []
   const warnFindings = brandCheck?.findings.filter((f) => f.skipped) ?? []
   const passFindings = brandCheck?.findings.filter((f) => f.passed && !f.skipped) ?? []
-  const orderedFindings = [...failedFindings, ...warnFindings, ...passFindings].slice(0, 12)
-
-  const peopleEntities = peopleToEntities(insight)
-  const objectEntities = objectsToEntities(insight)
+  const orderedFindings = [...failedFindings, ...warnFindings, ...passFindings].slice(0, 24)
 
   const settingItems = [
     { label: 'Ort', value: insight.setting.location },
@@ -167,148 +175,165 @@ export function SceneInsightInspector(props: {
       data-testid="scene-insight-inspector"
       aria-label="Szenen-Detail"
     >
-      <Stack direction="column" gap="md">
-        <Text role="body" as="p" className="videon-scene-inspect__summary">
+      <Stack direction="column" gap="sm" className="videon-scene-inspect__dense">
+        <Text role="meta" as="p" className="videon-scene-inspect__summary">
           {insight.summary}
         </Text>
 
         <InspectSection title="Brand">
-          <Stack direction="row" gap="sm" align="center" wrap className="videon-scene-inspect__brand-row">
+          <Stack direction="row" gap="xs" align="center" wrap className="videon-scene-inspect__brand-row">
             <StatusDot level={brandStatusLevel(brandStatus)} />
             <Chip static size="sm">
               {BRAND_STATUS_LABELS[brandStatus]}
             </Chip>
-            {brandCheck && (brandCheck.failed > 0 || brandCheck.passed > 0) ? (
+            {brandCheck && (brandCheck.failed > 0 || brandCheck.passed > 0 || brandCheck.skipped > 0) ? (
               <Badge tone={brandBadgeTone(brandStatus)}>
-                {brandCheck.passed} ok / {brandCheck.failed} fail
+                {brandCheck.passed} ok · {brandCheck.failed} fail
+                {brandCheck.skipped > 0 ? ` · ${brandCheck.skipped} skip` : ''}
               </Badge>
             ) : null}
-            {brandCheck?.guidelineId ? (
-              <Text role="meta" as="span">
-                Guideline {brandCheck.guidelineId}
-              </Text>
-            ) : brandCheck?.reason === 'no_active_guideline' ? (
-              <Text role="meta" as="span">
-                keine Guideline gebunden
-              </Text>
-            ) : null}
-            {brandCheck && brandCheck.evidenceFrameCount > 0 ? (
-              <Text role="meta" as="span">
-                {brandCheck.evidenceFrameCount} Evidence-Frame
-                {brandCheck.evidenceFrameCount === 1 ? '' : 's'}
-              </Text>
-            ) : null}
           </Stack>
+
+          {brandCheck?.guidelineId ? (
+            <Text role="meta" as="p">
+              Guideline: {brandCheck.guidelineId}
+            </Text>
+          ) : brandCheck?.reason === 'no_active_guideline' ? (
+            <Text role="meta" as="p">
+              Keine Guideline gebunden
+            </Text>
+          ) : null}
+
+          {brandCheck?.brandionRequestId ? (
+            <Text role="meta" as="p">
+              Request: {brandCheck.brandionRequestId}
+            </Text>
+          ) : null}
+
           {brandCheck?.reason ? (
             <Text role="meta" as="p">
               {BRAND_REASON_LABELS[brandCheck.reason] ?? brandCheck.reason}
               {brandCheck.hint ? ` — ${brandCheck.hint}` : ''}
             </Text>
           ) : null}
+
           {brandCheck?.detail ? (
-            <Text role="body" as="p">
+            <Text role="meta" as="p">
               {brandCheck.detail}
             </Text>
           ) : null}
+
+          {brandCheck && brandCheck.evidenceFrameCount > 0 ? (
+            <div className="videon-scene-inspect__brand-evidence">
+              <Text role="meta" as="p">
+                Evidence ({brandCheck.evidenceFrameCount}
+                {brandCheck.frameStatuses.length
+                  ? ` · ${brandCheck.frameStatuses.map((status) => BRAND_STATUS_LABELS[status] ?? status).join(', ')}`
+                  : ''}
+                )
+              </Text>
+              <EvidenceStrip
+                playbackUrl={playbackUrl}
+                frameRefs={frameRefs}
+                timestampsMs={
+                  brandCheck.evidenceTimestampsMs.length
+                    ? brandCheck.evidenceTimestampsMs
+                    : frameRefs.slice(0, brandCheck.evidenceFrameCount).map((frame) => frame.timestampMs)
+                }
+              />
+            </div>
+          ) : null}
+
+          {insight.brandCandidates.length > 0 ? (
+            <div className="videon-scene-inspect__brand-candidates">
+              <Text role="meta" as="p">
+                Vision-Hinweise
+              </Text>
+              <Stack direction="row" gap="xs" wrap>
+                {insight.brandCandidates.map((candidate, index) => (
+                  <Chip key={`${candidate.text}-${index}`} static size="sm">
+                    {candidate.text}
+                    <span className="videon-scene-inspect__chip-meta">
+                      {' '}
+                      · {candidate.kind} · {candidate.confidence}
+                    </span>
+                  </Chip>
+                ))}
+              </Stack>
+            </div>
+          ) : null}
+
           {orderedFindings.length > 0 ? (
             <ul className="videon-scene-inspect__findings">
               {orderedFindings.map((finding) => (
                 <li key={finding.ruleId}>
-                  <Badge tone={findingBadgeTone(finding)}>
-                    {finding.skipped ? 'skip' : finding.passed ? 'pass' : 'fail'}
-                  </Badge>
-                  <Text role="body" as="span">
-                    {finding.name}
-                  </Text>
-                  <Text role="meta" as="span">
+                  <div className="videon-scene-inspect__finding-head">
+                    <Badge tone={findingBadgeTone(finding)}>
+                      {finding.skipped ? 'skip' : finding.passed ? 'pass' : 'fail'}
+                    </Badge>
+                    {finding.severity && finding.severity !== 'info' ? (
+                      <Badge tone="neutral">{finding.severity}</Badge>
+                    ) : null}
+                    <Text role="meta" as="span" className="videon-scene-inspect__finding-name">
+                      {finding.name}
+                    </Text>
+                  </div>
+                  <Text role="meta" as="p">
                     {finding.message}
                   </Text>
                   {finding.subjectValue || finding.targetValue ? (
-                    <Text role="meta" as="span">
+                    <Text role="meta" as="p">
                       {finding.subjectValue ?? '—'} → {finding.targetValue ?? '—'}
                     </Text>
                   ) : null}
                 </li>
               ))}
             </ul>
+          ) : brandStatus === 'unchecked' ? (
+            <Text role="meta" as="p">
+              Noch kein Brand-Check für diese Szene. Über „Mehr → Brand-Check“ starten.
+            </Text>
           ) : null}
         </InspectSection>
 
         <InspectSection title="Personen">
-          {peopleEntities.length === 0 ? (
+          {insight.people.length === 0 ? (
             <EmptyState>Keine Personen erkannt.</EmptyState>
-          ) : peopleEntities.length >= 2 ? (
-            <>
-              <ChatEntityGrid items={peopleEntities} fullWidth />
+          ) : (
+            <Stack direction="column" gap="xs">
               {insight.people.map((person) => (
-                <EvidenceStrip
+                <EntityRow
                   key={person.id}
+                  chip={`${person.count}× ${person.role}`}
+                  meta={[
+                    AGE_LABELS[person.apparentAgeRange] ?? person.apparentAgeRange,
+                    ...person.apparentPresentation,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                   playbackUrl={playbackUrl}
                   frameRefs={frameRefs}
                   evidenceFrameIds={person.evidenceFrameIds}
                 />
-              ))}
-            </>
-          ) : (
-            <Stack direction="column" gap="sm">
-              {insight.people.map((person) => (
-                <div key={person.id}>
-                  <Stack direction="row" gap="sm" wrap align="center">
-                    <Chip static size="sm">
-                      {person.count}× {person.role}
-                    </Chip>
-                    <Text role="meta" as="span">
-                      {AGE_LABELS[person.apparentAgeRange] ?? person.apparentAgeRange}
-                      {person.apparentPresentation.length
-                        ? ` · ${person.apparentPresentation.join(', ')}`
-                        : ''}
-                    </Text>
-                  </Stack>
-                  <EvidenceStrip
-                    playbackUrl={playbackUrl}
-                    frameRefs={frameRefs}
-                    evidenceFrameIds={person.evidenceFrameIds}
-                  />
-                </div>
               ))}
             </Stack>
           )}
         </InspectSection>
 
         <InspectSection title="Objekte">
-          {objectEntities.length === 0 ? (
+          {insight.objects.length === 0 ? (
             <EmptyState>Keine Objekte erkannt.</EmptyState>
-          ) : objectEntities.length >= 2 ? (
-            <>
-              <ChatEntityGrid items={objectEntities} fullWidth />
+          ) : (
+            <Stack direction="column" gap="xs">
               {insight.objects.map((object) => (
-                <EvidenceStrip
+                <EntityRow
                   key={object.id}
+                  chip={`${object.count}× ${object.label}`}
+                  meta={[object.category, ...object.attributes].filter(Boolean).join(' · ')}
                   playbackUrl={playbackUrl}
                   frameRefs={frameRefs}
                   evidenceFrameIds={object.evidenceFrameIds}
                 />
-              ))}
-            </>
-          ) : (
-            <Stack direction="column" gap="sm">
-              {insight.objects.map((object) => (
-                <div key={object.id}>
-                  <Stack direction="row" gap="sm" wrap align="center">
-                    <Chip static size="sm">
-                      {object.count}× {object.label}
-                    </Chip>
-                    <Text role="meta" as="span">
-                      {object.category}
-                      {object.attributes.length ? ` · ${object.attributes.join(', ')}` : ''}
-                    </Text>
-                  </Stack>
-                  <EvidenceStrip
-                    playbackUrl={playbackUrl}
-                    frameRefs={frameRefs}
-                    evidenceFrameIds={object.evidenceFrameIds}
-                  />
-                </div>
               ))}
             </Stack>
           )}
@@ -321,7 +346,7 @@ export function SceneInsightInspector(props: {
             <ul className="videon-scene-inspect__actions">
               {insight.actions.map((action, index) => (
                 <li key={`${action.label}-${index}`}>
-                  <Text role="body" as="span">
+                  <Text role="meta" as="span" className="videon-scene-inspect__action-label">
                     {action.label}
                   </Text>
                   <Timecode
@@ -357,33 +382,8 @@ export function SceneInsightInspector(props: {
         </ChatCollapsible>
 
         <ChatCollapsible title="Weitere Hinweise" defaultOpen={false}>
-          <InspectSection title="Marken-Hinweise">
-            {insight.brandCandidates.length === 0 ? (
-              <EmptyState>Keine Marken-Hinweise.</EmptyState>
-            ) : (
-              <Stack direction="column" gap="sm">
-                {insight.brandCandidates.map((candidate, index) => (
-                  <div key={`${candidate.text}-${index}`}>
-                    <Stack direction="row" gap="sm" wrap align="center">
-                      <Chip static size="sm">
-                        {candidate.text}
-                      </Chip>
-                      <Text role="meta" as="span">
-                        {candidate.kind} · {candidate.confidence}
-                      </Text>
-                    </Stack>
-                    <EvidenceStrip
-                      playbackUrl={playbackUrl}
-                      frameRefs={frameRefs}
-                      evidenceFrameIds={candidate.evidenceFrameIds}
-                    />
-                  </div>
-                ))}
-              </Stack>
-            )}
-          </InspectSection>
           <InspectSection title="Beobachtung">
-            <Text role="body" as="p">
+            <Text role="meta" as="p">
               {OBSERVED_LABELS[insight.observedVsInferred] ?? insight.observedVsInferred}
             </Text>
           </InspectSection>

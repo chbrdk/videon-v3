@@ -74,8 +74,8 @@ Stored under `media_brand_checks`:
 ## UI
 
 - Media editor toolbar: **Brand-Check** (polls while stage `brand_compliance` is running).
-- Scene inspector: badge, guideline id or “keine Guideline”, reason/hint, evidence-frame count, Brandion findings.
-- Media detail API returns `brandChecks` via `toBrandCheckView`.
+- Scene inspector Brand section: status + pass/fail/skip counts, guideline/request ids, reason/hint, evidence thumbs + timestamps, per-frame statuses, Vision `brandCandidates`, and Brandion rule findings (severity, message, subject→target).
+- Media detail API returns `brandChecks` via `toBrandCheckView` (includes `evidenceTimestampsMs` + `frameStatuses`).
 
 ## Code map
 

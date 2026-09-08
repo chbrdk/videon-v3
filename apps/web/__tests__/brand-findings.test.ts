@@ -69,7 +69,12 @@ describe('toBrandCheckView', () => {
       sceneKey: 'scene-0',
       status: 'fail',
       brandionRequestId: 'run-1',
-      provenance: { guidelineId: 'gl-demo', evidenceFrameCount: 2 },
+      provenance: {
+        guidelineId: 'gl-demo',
+        evidenceFrameCount: 2,
+        evidenceTimestampsMs: [120, 840],
+        frameStatuses: ['fail', 'pass'],
+      },
       result: {
         passed: 1,
         failed: 1,
@@ -96,6 +101,8 @@ describe('toBrandCheckView', () => {
     expect(view.reason).toBeNull()
     expect(view.hint).toBeNull()
     expect(view.evidenceFrameCount).toBe(2)
+    expect(view.evidenceTimestampsMs).toEqual([120, 840])
+    expect(view.frameStatuses).toEqual(['fail', 'pass'])
     expect(view.findings).toHaveLength(2)
     expect(view.findings[0]?.name).toBe('Primary logo present')
   })

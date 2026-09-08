@@ -24,6 +24,10 @@ export type BrandCheckView = {
   reason: string | null
   hint: string | null
   evidenceFrameCount: number
+  /** Timestamps of frames sent to Brandion (ms), when provenance recorded them. */
+  evidenceTimestampsMs: number[]
+  /** Per-evidence-frame Brandion status, aligned with evidenceTimestampsMs when present. */
+  frameStatuses: BrandCheckStatus[]
   passed: number
   failed: number
   skipped: number
@@ -122,13 +126,26 @@ export function toBrandCheckView(input: {
   const findings = Array.isArray(result.results)
     ? result.results.map(asFinding).filter((item): item is BrandFinding => item != null)
     : []
+  const evidenceTimestampsMs = Array.isArray(provenance.evidenceTimestampsMs)
+    ? provenance.evidenceTimestampsMs.filter((value): value is number => typeof value === 'number')
+    : []
+  const frameStatusesFromProvenance = Array.isArray(provenance.frameStatuses)
+    ? provenance.frameStatuses.filter((value): value is BrandCheckStatus => typeof value === 'string')
+    : []
+  const frameStatusesFromRuns = Array.isArray(result.frameRuns)
+    ? result.frameRuns
+        .map((run) => (isRecord(run) && typeof run.status === 'string' ? (run.status as BrandCheckStatus) : null))
+        .filter((value): value is BrandCheckStatus => value != null)
+    : []
+  const frameStatuses =
+    frameStatusesFromProvenance.length > 0 ? frameStatusesFromProvenance : frameStatusesFromRuns
   const evidenceFrameCount =
     typeof provenance.evidenceFrameCount === 'number'
       ? provenance.evidenceFrameCount
-      : Array.isArray(provenance.evidenceTimestampsMs)
-        ? provenance.evidenceTimestampsMs.length
-        : Array.isArray(result.frameRuns)
-          ? result.frameRuns.length
+      : evidenceTimestampsMs.length > 0
+        ? evidenceTimestampsMs.length
+        : frameStatuses.length > 0
+          ? frameStatuses.length
           : 0
 
   return {
@@ -139,6 +156,8 @@ export function toBrandCheckView(input: {
     reason: typeof provenance.reason === 'string' ? provenance.reason : null,
     hint: typeof provenance.hint === 'string' ? provenance.hint : null,
     evidenceFrameCount,
+    evidenceTimestampsMs,
+    frameStatuses,
     passed: typeof result.passed === 'number' ? result.passed : findings.filter((f) => f.passed && !f.skipped).length,
     failed: typeof result.failed === 'number' ? result.failed : findings.filter((f) => !f.passed && !f.skipped).length,
     skipped: typeof result.skipped === 'number' ? result.skipped : findings.filter((f) => f.skipped).length,
