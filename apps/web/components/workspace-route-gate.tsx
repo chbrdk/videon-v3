@@ -29,13 +29,14 @@ export function WorkspaceRouteGate({
   if (!resolvedId) {
     return (
       <article className="videon-hub">
-        <HubPageHeader eyebrow="Collection" title="Kontext fehlt" />
+        <HubPageHeader eyebrow="Projekt" title="Collection fehlt" />
         <EmptyState>
           <Text role="body" as="p">
-            Diese Fläche ist an eine PLEXON Collection gebunden. Wähle zuerst eine Collection.
+            Mediathek, Upload, Analysen und Cuts gehören zu einer aktiven Collection (PLEXON-Projekt).
+            Wähle zuerst eine zugängliche Collection.
           </Text>
           <Link href={paths.routes.collections}>
-            <Button variant="primary">Collection wählen</Button>
+            <Button variant="primary">Projekt wählen</Button>
           </Link>
         </EmptyState>
       </article>

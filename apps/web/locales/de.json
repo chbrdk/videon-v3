@@ -8,14 +8,39 @@
   },
   "nav": {
     "home": "Übersicht",
-    "collections": "Collections",
+    "collections": "Projekte",
+    "collection": "Collection",
+    "chooseCollection": "Projekt wählen",
+    "switchCollection": "Collection wechseln",
+    "switchCollectionAria": "Aktive Collection wechseln — {name}",
     "library": "Mediathek",
+    "libraryAria": "Mediathek · {collection}",
     "upload": "Upload",
     "analyses": "Analysen",
     "cuts": "Cuts",
     "settings": "Einstellungen",
     "settingsAria": "Einstellungen",
     "homeAria": "{brand} Übersicht"
+  },
+  "collections": {
+    "title": "Projekt wählen",
+    "deck": "Collection = aktives Projekt. Nur zugewiesene Collections (Access Model B) — danach öffnet die Mediathek dieser Collection."
+  },
+  "library": {
+    "deck": "Medien dieser Collection — nicht über alle Projekte hinweg."
+  },
+  "upload": {
+    "title": "Video hochladen",
+    "deck": "Upload landet in der aktiven Collection.",
+    "toLibrary": "Zur Mediathek"
+  },
+  "analyses": {
+    "deck": "Vision-Runs der aktiven Collection.",
+    "upload": "Video hochladen"
+  },
+  "cuts": {
+    "deck": "Cuts der aktiven Collection.",
+    "toLibrary": "Zur Mediathek"
   },
   "pages": {
     "settings": {
@@ -58,6 +83,26 @@
   "home": {
     "kicker": "VIDEON",
     "title": "Video-Intelligence",
-    "lede": "Collection-gebundene Mediathek, Analysen und Cuts."
+    "lede": "Collection-gebundene Mediathek, Analysen und Cuts.",
+    "workspaceTitle": "Aktives Projekt",
+    "activeCollection": "Aktive Collection: {name}",
+    "noCollection": "Wähle eine Collection — Mediathek, Analysen und Cuts bleiben daran gebunden.",
+    "pickCollectionBody": "Access Model B: nur Collections, die dir in PLEXON zugewiesen sind.",
+    "capabilitiesAria": "VIDEON Kapazitäten",
+    "libraryMeta": "Medien dieser Collection — Upload und Analyse starten hier.",
+    "uploadMeta": "Direkt in Object Storage — Analyse startet nach Abschluss.",
+    "analysesMeta": "OpenRouter / Qwen mit Schema-Fallback und Szenen-Insights.",
+    "cutsMeta": "Schnitt-Compositions dieser Collection.",
+    "recentTitle": "Zuletzt in der Collection",
+    "recentDeck": "Die letzten Medien und Vision-Runs dieser Collection.",
+    "recentEmpty": "Wähle eine Collection, um Aktivität zu sehen.",
+    "activityAria": "Letzte Aktivität",
+    "mediaCol": "Medien",
+    "noMedia": "Noch keine Assets.",
+    "startUpload": "Upload starten",
+    "noAnalyses": "Noch keine Vision-Runs.",
+    "openAnalyses": "Analysen öffnen",
+    "cutsHint": "Editor pro Medium in der Mediathek.",
+    "openCuts": "Cuts öffnen"
   }
 }

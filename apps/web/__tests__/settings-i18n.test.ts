@@ -17,6 +17,10 @@ describe('i18n', () => {
     expect(en('settings.themeLight')).toBe('Light')
     expect(de('nav.settings')).toBe('Einstellungen')
     expect(en('nav.settings')).toBe('Settings')
+    expect(de('nav.library')).toBe('Mediathek')
+    expect(de('nav.chooseCollection')).toBe('Projekt wählen')
+    expect(de('library.deck')).toContain('dieser Collection')
+    expect(en('nav.libraryAria', { collection: 'Acme' })).toBe('Library · Acme')
   })
 })
 

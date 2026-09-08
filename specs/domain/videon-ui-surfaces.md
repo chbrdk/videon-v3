@@ -15,13 +15,22 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 3. WHILE the Cuts/Media editor owns playback and edit domain logic, the visible chrome (transport, monitor frame, timeline ruler/track/clip shell, icon tools) MUST use DS primitives after Wave 2.
 4. WHERE Collection context is missing, hubs MUST fail closed (gate + EmptyState), never invent a second project model.
 
+## Information architecture
+
+1. WHEN the operator works in VIDEON THEN the **active Collection** (`platformProjectId`) MUST be the sole user-facing project — NOT a nested “Projects contain Collections” model.
+2. WHEN the NavRail renders THEN it MUST NOT list `/collections` as a primary capability peer of Mediathek / Upload / Analysen / Cuts.
+3. WHEN Collection context is shown in chrome THEN it MUST use a **Collection switcher** (Rail footer or dedicated fallback route) sourced from Access Model B — aligning with PLEXON `videon-integration.md` § UX.
+4. WHEN the Mediathek hub renders THEN it MUST present media **of the active Collection** only (label/deck MUST make that scope explicit).
+5. WHERE `/collections` remains THEN it MUST act as **picker / switcher fallback** (gate CTA, deep link, Rail switcher target) — NOT as a second product hub competing with the library.
+6. Cross-Collection “all media” overview is optional later and MUST NOT ship as the default Mediathek.
+
 ## Surfaces
 
 | Route | Role | DS composition |
 |-------|------|----------------|
 | `/` | Home magazine | Cover + `HubIndexCard` capabilities + activity columns |
-| `/collections` | Access Model B picker | `HubIndexCard` grid |
-| `/library` | Media hub | Header + `Input` search + cards/list + browse filters |
+| `/collections` | Collection switcher / Access Model B picker (fallback) | `HubIndexCard` grid |
+| `/library` | Collection-scoped media hub | Header + `Input` search + cards/list + browse filters |
 
 ## Mediathek browse (Wave A)
 

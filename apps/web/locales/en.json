@@ -8,14 +8,39 @@
   },
   "nav": {
     "home": "Overview",
-    "collections": "Collections",
+    "collections": "Projects",
+    "collection": "Collection",
+    "chooseCollection": "Choose project",
+    "switchCollection": "Switch collection",
+    "switchCollectionAria": "Switch active collection — {name}",
     "library": "Library",
+    "libraryAria": "Library · {collection}",
     "upload": "Upload",
     "analyses": "Analyses",
     "cuts": "Cuts",
     "settings": "Settings",
     "settingsAria": "Settings",
     "homeAria": "{brand} overview"
+  },
+  "collections": {
+    "title": "Choose project",
+    "deck": "Collection = active project. Only assigned collections (Access Model B) — then the library opens for that collection."
+  },
+  "library": {
+    "deck": "Media for this collection — not across all projects."
+  },
+  "upload": {
+    "title": "Upload video",
+    "deck": "Uploads land in the active collection.",
+    "toLibrary": "Back to library"
+  },
+  "analyses": {
+    "deck": "Vision runs for the active collection.",
+    "upload": "Upload video"
+  },
+  "cuts": {
+    "deck": "Cuts for the active collection.",
+    "toLibrary": "Back to library"
   },
   "pages": {
     "settings": {
@@ -58,6 +83,26 @@
   "home": {
     "kicker": "VIDEON",
     "title": "Video intelligence",
-    "lede": "Collection-bound library, analyses, and cuts."
+    "lede": "Collection-bound library, analyses, and cuts.",
+    "workspaceTitle": "Active project",
+    "activeCollection": "Active collection: {name}",
+    "noCollection": "Choose a collection — library, analyses, and cuts stay bound to it.",
+    "pickCollectionBody": "Access Model B: only collections explicitly assigned to you in PLEXON.",
+    "capabilitiesAria": "VIDEON capabilities",
+    "libraryMeta": "Media for this collection — upload and analysis start here.",
+    "uploadMeta": "Direct to object storage — analysis starts after ingest.",
+    "analysesMeta": "OpenRouter / Qwen with schema fallback and scene insights.",
+    "cutsMeta": "Edit compositions for this collection.",
+    "recentTitle": "Recently in this collection",
+    "recentDeck": "Latest media and vision runs for this collection.",
+    "recentEmpty": "Choose a collection to see activity.",
+    "activityAria": "Recent activity",
+    "mediaCol": "Media",
+    "noMedia": "No assets yet.",
+    "startUpload": "Start upload",
+    "noAnalyses": "No vision runs yet.",
+    "openAnalyses": "Open analyses",
+    "cutsHint": "Open the editor per asset from the library.",
+    "openCuts": "Open cuts"
   }
 }

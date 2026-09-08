@@ -14,20 +14,23 @@ import {
 } from '../lib/msqdx-ui-shell'
 import { Avatar } from '@msqdx/ui'
 import { useActiveCollection } from './collection-context'
-import { NavIconAnalyses, NavIconCuts, NavIconLibrary, NavIconOverview, NavIconUpload } from './nav-icons'
+import { useAccessibleCollections } from './use-accessible-collections'
+import {
+  NavIconAnalyses,
+  NavIconCollection,
+  NavIconCuts,
+  NavIconLibrary,
+  NavIconOverview,
+  NavIconUpload,
+} from './nav-icons'
 import { paths } from '../lib/paths'
 import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 import { useT, useUserPrefs } from '../lib/user-prefs'
 
+/** Capability rail — Collection switcher lives in the footer, not as a peer hub. */
 const PRIMARY_NAV_IDS = [
   { id: 'home', route: paths.routes.home, labelKey: 'nav.home', icon: <NavIconOverview /> },
-  {
-    id: 'collections',
-    route: paths.routes.collections,
-    labelKey: 'nav.collections',
-    icon: <NavIconOverview />,
-  },
   { id: 'library', route: paths.routes.library, labelKey: 'nav.library', icon: <NavIconLibrary /> },
   { id: 'upload', route: paths.routes.upload, labelKey: 'nav.upload', icon: <NavIconUpload /> },
   {
@@ -54,6 +57,7 @@ export function AppShell({
   const router = useRouter()
   const { data: session } = useSession()
   const { platformProjectId } = useActiveCollection()
+  const { nameFor } = useAccessibleCollections()
   const { displayName: prefName } = useUserPrefs()
   const t = useT()
   const [railEdge, setRailEdge] = useState<RailDockEdge>(paths.railDockEdge)
@@ -61,6 +65,8 @@ export function AppShell({
     prefName.trim() && prefName !== paths.defaultDisplayName
       ? prefName
       : session?.user?.name?.trim() || session?.user?.email?.trim() || paths.defaultDisplayName
+  const collectionName = nameFor(platformProjectId)
+  const collectionSwitcherLabel = collectionName || t('nav.chooseCollection')
 
   const frameStyle = useMemo(
     () =>
@@ -82,15 +88,21 @@ export function AppShell({
     () =>
       PRIMARY_NAV_IDS.map((item) => {
         const href = workspaceHref(item.route, platformProjectId)
+        const label = t(item.labelKey)
+        const ariaLabel =
+          item.id === 'library' && collectionName
+            ? t('nav.libraryAria', { collection: collectionName })
+            : label
         return {
           id: item.id,
           href,
-          label: t(item.labelKey),
+          label,
+          ariaLabel,
           icon: item.icon,
           active: isActive(item.route, href),
         }
       }),
-    [pathname, platformProjectId, t],
+    [pathname, platformProjectId, collectionName, t],
   )
 
   return (
@@ -110,6 +122,14 @@ export function AppShell({
           linkComponent={Link}
           items={navItems}
           footerItems={[
+            {
+              id: 'collection',
+              label: collectionSwitcherLabel,
+              href: paths.routes.collections,
+              active: pathname.startsWith(paths.routes.collections),
+              ariaLabel: t('nav.switchCollectionAria', { name: collectionSwitcherLabel }),
+              icon: <NavIconCollection />,
+            },
             {
               id: 'settings',
               label: t('nav.settings'),

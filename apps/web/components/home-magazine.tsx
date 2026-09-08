@@ -13,7 +13,9 @@ import {
   Text,
 } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
+import { useAccessibleCollections } from '@/components/use-accessible-collections'
 import { paths } from '../lib/paths'
+import { useT } from '@/lib/user-prefs'
 
 function HomeChapter({
   title,
@@ -43,7 +45,10 @@ type MediaItem = { id: string; originalFilename: string; lifecycleState: string 
 type AnalysisItem = { id: string; mediaAssetId: string; mediaFilename: string; status: string }
 
 export function HomeMagazine() {
+  const t = useT()
   const { platformProjectId } = useActiveCollection()
+  const { nameFor } = useAccessibleCollections()
+  const collectionName = nameFor(platformProjectId)
   const [media, setMedia] = useState<MediaItem[]>([])
   const [analyses, setAnalyses] = useState<AnalysisItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -95,63 +100,62 @@ export function HomeMagazine() {
       </header>
 
       <HomeChapter
-        title="Collection-Video-Arbeitsfläche"
+        title={t('home.workspaceTitle')}
         deck={
           platformProjectId
-            ? `Aktive Collection: ${platformProjectId}`
-            : 'Mediathek, Analysen und Cuts bleiben Collection-gebunden — geöffnet aus PLEXON.'
+            ? t('home.activeCollection', { name: collectionName || platformProjectId })
+            : t('home.noCollection')
         }
       >
-        <ul className="ds-hub-index-grid videon-home-cta-row" aria-label="VIDEON Kapazitäten">
-          <li>
-            <HubIndexCard
-              href={paths.routes.collections}
-              title="Collections"
-              meta="Nur zugewiesene PLEXON Collections — Access Model B."
-            />
-          </li>
-          <li>
-            <HubIndexCard
-              href={libraryHref}
-              title="Mediathek"
-              meta="Collection-scoped Assets und signierte Uploads."
-            />
-          </li>
-          <li>
-            <HubIndexCard
-              href={uploadHref}
-              title="Upload"
-              meta="Direkt in Object Storage — Analyse startet nach Abschluss."
-            />
-          </li>
-          <li>
-            <HubIndexCard
-              href={analysesHref}
-              title="Analysen"
-              meta="OpenRouter / Qwen mit Schema-Fallback und Szenen-Insights."
-            />
-          </li>
-        </ul>
+        {!platformProjectId ? (
+          <EmptyState>
+            <Text role="body" as="p">
+              {t('home.pickCollectionBody')}
+            </Text>
+            <Link href={paths.routes.collections}>
+              <Button variant="primary">{t('nav.chooseCollection')}</Button>
+            </Link>
+          </EmptyState>
+        ) : (
+          <ul className="ds-hub-index-grid videon-home-cta-row" aria-label={t('home.capabilitiesAria')}>
+            <li>
+              <HubIndexCard
+                href={libraryHref}
+                title={t('nav.library')}
+                meta={t('home.libraryMeta')}
+              />
+            </li>
+            <li>
+              <HubIndexCard href={uploadHref} title={t('nav.upload')} meta={t('home.uploadMeta')} />
+            </li>
+            <li>
+              <HubIndexCard
+                href={analysesHref}
+                title={t('nav.analyses')}
+                meta={t('home.analysesMeta')}
+              />
+            </li>
+            <li>
+              <HubIndexCard href={cutsHref} title={t('nav.cuts')} meta={t('home.cutsMeta')} />
+            </li>
+          </ul>
+        )}
       </HomeChapter>
 
       <HomeChapter
-        title="Zuletzt in der Collection"
-        deck={
-          platformProjectId
-            ? 'Die letzten Medien und Vision-Runs dieser Collection.'
-            : 'Wähle eine Collection, um Aktivität zu sehen.'
-        }
+        title={t('home.recentTitle')}
+        deck={platformProjectId ? t('home.recentDeck') : t('home.recentEmpty')}
       >
-        <div className="videon-home-run-columns" aria-label="Letzte Aktivität">
+        <div className="videon-home-run-columns" aria-label={t('home.activityAria')}>
           <div className="videon-home-run-col">
-            <SectionChrome title="Medien" quiet as="h3" />
+            <SectionChrome title={t('home.mediaCol')} quiet as="h3" />
             {loading ? (
-              <LoadingText>Lädt …</LoadingText>
+              <LoadingText>{t('common.loading')}</LoadingText>
             ) : media.length === 0 ? (
               <EmptyState className="videon-home-empty">
-                <Text role="body">Noch keine Assets.</Text>
+                <Text role="body">{t('home.noMedia')}</Text>
                 <Link href={uploadHref}>
-                  <Button variant="ghost">Upload starten</Button>
+                  <Button variant="ghost">{t('home.startUpload')}</Button>
                 </Link>
               </EmptyState>
             ) : (
@@ -170,14 +174,14 @@ export function HomeMagazine() {
             )}
           </div>
           <div className="videon-home-run-col">
-            <SectionChrome title="Analysen" quiet as="h3" />
+            <SectionChrome title={t('nav.analyses')} quiet as="h3" />
             {loading ? (
-              <LoadingText>Lädt …</LoadingText>
+              <LoadingText>{t('common.loading')}</LoadingText>
             ) : analyses.length === 0 ? (
               <EmptyState className="videon-home-empty">
-                <Text role="body">Noch keine Vision-Runs.</Text>
+                <Text role="body">{t('home.noAnalyses')}</Text>
                 <Link href={analysesHref}>
-                  <Button variant="ghost">Analysen öffnen</Button>
+                  <Button variant="ghost">{t('home.openAnalyses')}</Button>
                 </Link>
               </EmptyState>
             ) : (
@@ -196,11 +200,11 @@ export function HomeMagazine() {
             )}
           </div>
           <div className="videon-home-run-col">
-            <SectionChrome title="Cuts" quiet as="h3" />
+            <SectionChrome title={t('nav.cuts')} quiet as="h3" />
             <EmptyState className="videon-home-empty">
-              <Text role="body">Editor pro Medium in der Mediathek.</Text>
+              <Text role="body">{t('home.cutsHint')}</Text>
               <Link href={cutsHref}>
-                <Button variant="ghost">Cuts öffnen</Button>
+                <Button variant="ghost">{t('home.openCuts')}</Button>
               </Link>
             </EmptyState>
           </div>
