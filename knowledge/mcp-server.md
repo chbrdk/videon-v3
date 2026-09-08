@@ -8,10 +8,12 @@
 
 Streamable-HTTP MCP (`mcp-server/`) proxies Access Model B Product APIs for the Plexon assistant.
 
-- Phase 1 read: `media_search`, `media_get`, analyses/cuts  
-- Phase 2 write/jobs: `analysis_run`, `brand_check_run`, `cut_create`, `export_run`  
+**Assistant auth (dynamic per user):** `PLEXON_SERVICE_SECRET` + `actorUserId` injected by Plexon on each tool call → Product headers `X-Service-Secret` + `X-Plexon-User-Id`. Same pattern as CREATION.
 
-Auth: Settings API tokens (`VIDEON_API_TOKEN` = `videon_…`). Staging may seed via `VIDEON_BOOTSTRAP_API_TOKEN` + `VIDEON_BOOTSTRAP_API_OWNER_ID` on the web app.
+Optional: Settings API token for Cursor/direct use only — not the assistant path.
+
+- Phase 1 read: `media_search`, `media_get`, analyses/cuts  
+- Phase 2 write/jobs: `analysis_run`, `brand_check_run`, `cut_create`, `export_run`
 
 ## Coolify
 
@@ -21,6 +23,7 @@ Auth: Settings API tokens (`VIDEON_API_TOKEN` = `videon_…`). Staging may seed 
 | FQDN | `https://pjupngbkompeyfjqocgsi0jy.projects-a.plygrnd.tech` |
 | Port | **3103** |
 | Plexon | `VIDEON_MCP_URL` → FQDN above |
+| MCP env | `VIDEON_API_URL`, `PLEXON_SERVICE_SECRET` (shared with web) |
 
 ## Related
 

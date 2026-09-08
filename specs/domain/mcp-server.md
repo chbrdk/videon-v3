@@ -24,17 +24,19 @@ The in-app `/chat` hub (Phase 1 scene retrieval UI) remains independent. MCP is 
 | Key | Required | Notes |
 |-----|----------|-------|
 | `VIDEON_API_URL` | Yes | Base URL of videon-v3 web (no trailing slash) |
-| `VIDEON_API_TOKEN` | Yes* | Settings API token (`videon_` + secret) — user-scoped Product calls |
+| `PLEXON_SERVICE_SECRET` | Yes* | Shared federation secret — **Plexon assistant** (per-user via `actorUserId`) |
+| `VIDEON_API_TOKEN` | No | Optional Settings API token for Cursor/direct MCP only |
+| `PLEXON_FEDERATION_CONTRACT_VERSION` | No | Default `2026-05-plexon-federation-v3` |
 | `MCP_TRANSPORT` | No | `stdio` or omit/`http` |
 | `MCP_PORT` | No | Default `3103` (avoid Brandion `3100` / Echon `3101` / Creation `3102`) |
 | `MCP_STATELESS` | No | `1` behind reverse proxies that drop MCP session headers |
 
-\* Phase 1 auth is **locked**: Settings API tokens only (`specs/domain/settings-api-tokens.md`). Token owner = Plexon user id; Access Model B fail-closed. Session-cookie forwarding from the browser is **out of scope** for the MCP process. Service-secret interim is **not** used for MCP→Product in Phase 1.
+\* Assistant auth is **per chat user**, not a fixed token: Plexon injects `actorUserId` on every tool call; MCP sends `X-Service-Secret` + `X-Plexon-User-Id`. Product applies Access Model B for that user. Settings API tokens remain for non-assistant clients (Cursor).
 
-### Auth decision (locked)
+### Auth (locked)
 
-1. **Settings API tokens** (mirror Brandion) + Collection ACL via token owner.  
-2. ~~Interim service secret~~ — deferred / not used for MCP Phase 1.  
+1. **Plexon assistant:** `PLEXON_SERVICE_SECRET` + injected `actorUserId` (same pattern as CREATION).  
+2. **Cursor / direct MCP (optional):** Settings API token (`videon_…`) — owner = ACL principal.  
 3. Session-cookie forwarding from the browser is **out of scope** for the MCP process.
 
 ## Capability catalog alignment

@@ -7,9 +7,10 @@ const gated = auth((request) => {
   const pathname = request.nextUrl.pathname
   const authHeader = request.headers.get('authorization')?.toLowerCase() ?? ''
   const hasBearer = authHeader.startsWith('bearer ')
+  const hasServiceSecret = Boolean(request.headers.get('x-service-secret')?.trim())
   /**
-   * Machine / MCP clients: Bearer skips login redirect only.
-   * Routes still authenticate via requireSessionUserId() / token store.
+   * Machine / MCP clients: Bearer or federation service secret skips login redirect.
+   * Routes authenticate via requireSessionUserId() (token / service+actor / session).
    */
   const isPublic =
     pathname === pathLogin ||
@@ -18,7 +19,7 @@ const gated = auth((request) => {
     pathname.startsWith('/api/federation/health') ||
     pathname.startsWith('/api/platform/provisioning') ||
     pathname.startsWith('/api/tokens/verify') ||
-    (pathname.startsWith('/api/') && hasBearer) ||
+    (pathname.startsWith('/api/') && (hasBearer || hasServiceSecret)) ||
     pathname.startsWith('/_next') ||
     pathname === '/favicon.ico'
   if (isPublic) return NextResponse.next()

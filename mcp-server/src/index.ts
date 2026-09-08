@@ -2,7 +2,8 @@
  * VIDEON v3 MCP Server – Streamable HTTP (default) or stdio.
  * Spec: specs/domain/mcp-server.md
  *
- * Env: MCP_TRANSPORT, MCP_PORT (3103), MCP_STATELESS, VIDEON_API_URL, VIDEON_API_TOKEN
+ * Env: MCP_TRANSPORT, MCP_PORT (3103), MCP_STATELESS, VIDEON_API_URL,
+ *      PLEXON_SERVICE_SECRET (+ actorUserId per tool), optional VIDEON_API_TOKEN
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
@@ -79,8 +80,8 @@ async function main() {
   if (USE_STDIO) {
     const transport = new StdioServerTransport(process.stdin, process.stdout)
     await mcpServer.connect(transport)
-    if (!process.env.VIDEON_API_URL || !process.env.VIDEON_API_TOKEN) {
-      log('VIDEON_API_URL or VIDEON_API_TOKEN not set – tools will return configuration errors.')
+    if (!process.env.VIDEON_API_URL || (!process.env.PLEXON_SERVICE_SECRET && !process.env.VIDEON_API_TOKEN)) {
+      log('VIDEON_API_URL and PLEXON_SERVICE_SECRET (or VIDEON_API_TOKEN) not set – tools will error.')
     }
     log('Running in stdio mode.')
     return
@@ -151,8 +152,8 @@ async function main() {
 
   server.listen(PORT, () => {
     log(`Server listening on port ${PORT} (stateless=${STATELESS})`)
-    if (!process.env.VIDEON_API_URL || !process.env.VIDEON_API_TOKEN) {
-      log('VIDEON_API_URL or VIDEON_API_TOKEN not set – tools will return configuration errors.')
+    if (!process.env.VIDEON_API_URL || (!process.env.PLEXON_SERVICE_SECRET && !process.env.VIDEON_API_TOKEN)) {
+      log('VIDEON_API_URL and PLEXON_SERVICE_SECRET (or VIDEON_API_TOKEN) not set – tools will error.')
     }
   })
 
