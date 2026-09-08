@@ -1,8 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Badge, Panel, SectionChrome, StepStrip, StepStripItem, Text } from '@msqdx/ui'
+import type { ReactNode } from 'react'
+import {
+  IconClock,
+  IconHistory,
+  IconProjects,
+  IconText,
+  IconVideo,
+  Panel,
+  SectionChrome,
+  StepStrip,
+  StepStripItem,
+  Text,
+} from '@msqdx/ui'
 import { formatClock } from '@/lib/editor-time'
 import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import { paths } from '@/lib/paths'
@@ -35,54 +46,65 @@ function timingLabel(hit: SceneSearchHitModel): string | null {
   return null
 }
 
+function durationLabel(hit: SceneSearchHitModel): string | null {
+  if (hit.startMs == null || hit.endMs == null || hit.endMs < hit.startMs) return null
+  return formatClock(hit.endMs - hit.startMs)
+}
+
+function sceneOrdinalLabel(hit: SceneSearchHitModel, index: number, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  const raw = hit.sceneKey?.trim()
+  if (raw) {
+    const match = raw.match(/(\d+)/)
+    if (match) return t('chat.hitSceneN', { n: Number(match[1]) })
+    return raw
+  }
+  return t('chat.hitSceneN', { n: index + 1 })
+}
+
 function SceneHitShot({
   mediaAssetId,
   platformProjectId,
   atMs,
-  expanded,
 }: {
   mediaAssetId: string
   platformProjectId: string
   atMs: number
-  expanded: boolean
 }) {
   const playbackUrl = mediaStreamPlaybackUrl(mediaAssetId, platformProjectId)
   const thumbnail = useClipThumbnail(playbackUrl, atMs)
   if (!thumbnail) {
-    return (
-      <div
-        className={`videon-scene-hit-shot videon-scene-hit-shot--empty${expanded ? ' videon-scene-hit-shot--expanded' : ''}`}
-        aria-hidden
-      />
-    )
+    return <div className="videon-scene-hit-shot videon-scene-hit-shot--empty" aria-hidden />
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element -- data-URL frame from clip thumbnail hook
-    <img
-      src={thumbnail}
-      alt=""
-      className={`videon-scene-hit-shot${expanded ? ' videon-scene-hit-shot--expanded' : ''}`}
-    />
+    <img src={thumbnail} alt="" className="videon-scene-hit-shot" />
+  )
+}
+
+function MetaRow({
+  icon,
+  children,
+}: {
+  icon: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="videon-scene-hit-row">
+      <span className="videon-scene-hit-row-icon" aria-hidden>
+        {icon}
+      </span>
+      <span className="videon-scene-hit-row-text">{children}</span>
+    </div>
   )
 }
 
 /**
  * Audion-style StepStrip teasers for scene search hits.
- * Hover/focus expands the frame; activate opens the editor at the scene.
+ * Calm fixed-size cards; activate opens the editor at the scene.
  */
 export function SceneSearchHitStrip({ hits }: { hits: SceneSearchHitModel[] }) {
   const t = useT()
   const router = useRouter()
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (expandedIdx == null) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setExpandedIdx(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [expandedIdx])
 
   const items = hits.filter((hit) => Boolean(hit.platformProjectId))
   if (!items.length) return null
@@ -92,69 +114,70 @@ export function SceneSearchHitStrip({ hits }: { hits: SceneSearchHitModel[] }) {
       className="videon-scene-hits"
       aria-label={t('chat.hitsAria')}
       scrollerLabel={t('chat.hitsAria')}
-      scrollToIndex={expandedIdx}
       header={
         <SectionChrome quiet title={t('chat.hitsTitle')} meta={String(items.length)} metaTone="accent" as="h3" />
       }
       hint={t('chat.hitsHint')}
     >
       {items.map((hit, idx) => {
-        const expanded = expandedIdx === idx
         const atMs = hitAtMs(hit)
         const timing = timingLabel(hit)
+        const duration = durationLabel(hit)
         const href = paths.routes.mediaFor(hit.mediaAssetId, hit.platformProjectId, {
           tMs: hit.startMs,
           sceneKey: hit.sceneKey,
         })
         const snippet = hit.searchText.trim()
-        const n = String(idx + 1).padStart(2, '0')
-        const label = [hit.mediaFilename, hit.sceneKey, timing].filter(Boolean).join(' · ')
+        const sceneLabel = sceneOrdinalLabel(hit, idx, t)
+        const label = [hit.mediaFilename, sceneLabel, timing].filter(Boolean).join(' · ')
 
         return (
           <StepStripItem
             key={hit.id}
             index={idx}
-            className={`videon-scene-hit-slide${expanded ? ' videon-scene-hit-slide--expanded' : ''}`}
-            expanded={expanded}
+            className="videon-scene-hit-slide"
             label={label}
             onActivate={() => router.push(href)}
-            onPointerEnter={() => setExpandedIdx(idx)}
-            onPointerLeave={() => setExpandedIdx((prev) => (prev === idx ? null : prev))}
-            onFocus={() => setExpandedIdx(idx)}
           >
             <Panel as="div" className="videon-scene-hit-panel">
-              <header className="videon-scene-hit-head">
-                <span className="videon-scene-hit-num" aria-hidden>
-                  {n}
-                </span>
-                <div className="videon-scene-hit-head-copy">
-                  <Text role="label" className="videon-scene-hit-eyebrow">
-                    {timing ?? t('chat.hitScene')}
-                    {hit.sceneKey ? ` · ${hit.sceneKey}` : ''}
-                  </Text>
-                  <Text role="headline" as="h4" className="videon-scene-hit-title">
-                    {hit.mediaFilename}
-                  </Text>
-                </div>
-              </header>
-
               <SceneHitShot
                 mediaAssetId={hit.mediaAssetId}
                 platformProjectId={hit.platformProjectId}
                 atMs={atMs}
-                expanded={expanded}
               />
 
-              <div className="videon-scene-hit-meta">
-                {hit.projectName ? <Badge tone="neutral">{hit.projectName}</Badge> : null}
-                {expanded && snippet ? (
-                  <Text role="meta" as="p" className="videon-scene-hit-snippet">
-                    {snippet.slice(0, 220)}
-                  </Text>
-                ) : null}
-                <Text role="meta" as="span" className="videon-scene-hit-open-hint">
-                  {expanded ? t('chat.hitOpenHint') : t('chat.hitHoverHint')}
+              <div className="videon-scene-hit-body">
+                <Text role="headline" as="h4" className="videon-scene-hit-title">
+                  {hit.mediaFilename}
                 </Text>
+
+                <div className="videon-scene-hit-facts" role="list">
+                  <MetaRow icon={<IconVideo size={14} />}>
+                    <span role="listitem">{sceneLabel}</span>
+                  </MetaRow>
+                  {timing ? (
+                    <MetaRow icon={<IconClock size={14} />}>
+                      <span role="listitem">{timing}</span>
+                    </MetaRow>
+                  ) : null}
+                  {duration ? (
+                    <MetaRow icon={<IconHistory size={14} />}>
+                      <span role="listitem">{t('chat.hitDuration', { duration })}</span>
+                    </MetaRow>
+                  ) : null}
+                  {hit.projectName ? (
+                    <MetaRow icon={<IconProjects size={14} />}>
+                      <span role="listitem">{hit.projectName}</span>
+                    </MetaRow>
+                  ) : null}
+                  {snippet ? (
+                    <MetaRow icon={<IconText size={14} />}>
+                      <span role="listitem" className="videon-scene-hit-snippet">
+                        {snippet.slice(0, 160)}
+                      </span>
+                    </MetaRow>
+                  ) : null}
+                </div>
               </div>
             </Panel>
           </StepStripItem>

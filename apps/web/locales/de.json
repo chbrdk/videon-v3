@@ -27,7 +27,7 @@
   "chat": {
     "aria": "Szenen-Chat",
     "emptyTitle": "Szenen suchen",
-    "emptyBody": "Frag nach Stimmung, Personen, Objekten oder Dateinamen — Treffer als Journey-Strip; Hover vergrößert, Klick springt in den Editor.",
+    "emptyBody": "Frag nach Stimmung, Personen, Objekten oder Dateinamen — Treffer als Journey-Strip; Klick springt in den Editor.",
     "placeholder": "z. B. Logo im Büro, Interview, Produktclose-up …",
     "composerLabel": "Frage",
     "send": "Suchen",
@@ -38,10 +38,10 @@
     "hitCount": "{count} Treffer für „{query}“.",
     "hitsAria": "Szenen-Treffer",
     "hitsTitle": "Treffer",
-    "hitsHint": "Hover vergrößert den Frame — Klick öffnet die Szene im Editor.",
+    "hitsHint": "Klick öffnet die Szene im Editor.",
     "hitScene": "Szene",
-    "hitHoverHint": "Hover zum Vergrößern",
-    "hitOpenHint": "Klick öffnet im Editor"
+    "hitSceneN": "Szene {n}",
+    "hitDuration": "Dauer {duration}"
   },
   "collections": {
     "title": "Projekte",

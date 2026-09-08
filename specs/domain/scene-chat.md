@@ -16,6 +16,6 @@ Operator chat hub to **search scenes** across accessible projects (Access Model 
 4. WHEN the open chat surface lays out THEN the panel/turns MUST use the stage width (Audion/Plexon pattern: override DS `chat-panel-open` 56/52/36rem caps) with a soft ultra-wide max (~112rem); user turns stay readable; assistant hit grids stretch full row.
 5. WHEN the operator submits a query THEN the hub MUST call `GET /api/media/search` (optional `platformProjectId`; without it → all accessible projects, fail-closed like Mediathek).
 6. WHEN the query is natural language THEN the server MUST strip filler words, expand domain concepts (e.g. dashboard/UI), and match with OR-prefix `to_tsquery` plus `ILIKE` fallback — NOT `plainto_tsquery` AND of the full sentence.
-7. WHEN hits render THEN they MUST use `@msqdx/ui` `StepStrip` / `StepStripItem` (Audion UX-journey magazine strip) — horizontal scroll-snap teasers with hover/focus expand (larger frame) — NOT a dense Mediathek card grid.
+7. WHEN hits render THEN they MUST use `@msqdx/ui` `StepStrip` / `StepStripItem` (Audion UX-journey magazine strip) — calm fixed-width teasers (larger default, no hover expand) with frame on top and meta rows below (scene, timing/duration, project, snippet + icons) — NOT a dense Mediathek card grid.
 8. WHEN a hit teaser activates (click / Enter) THEN it MUST deep-link to the media editor with seek (`t` ms and/or `scene` key) and land the playhead on that scene.
 9. Cuts remain reachable from Mediathek/editor; Upload remains from Mediathek project actions — not primary rail.
