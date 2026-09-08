@@ -54,6 +54,10 @@ export const paths = {
   maxUploadBytes: 2 * 1024 * 1024 * 1024,
   envFederationMode: 'PLEXON_FEDERATION_MODE',
   envPlexonServiceSecret: 'PLEXON_SERVICE_SECRET',
+  /** Browser iframe origin for central assistant (falls back to base/auth). */
+  envPlexonPublicUrl: 'NEXT_PUBLIC_PLEXON_URL',
+  pathAssistantEmbed: '/assistant/embed',
+  pathAssistantExpand: '/assistant',
   envPlexonBaseUrl: 'NEXT_PLEXON_BASE_URL',
   envPlexonAuthUrl: 'PLEXON_AUTH_URL',
   envAuthSecret: 'AUTH_SECRET',

@@ -20,6 +20,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 1. WHEN the operator works in VIDEON THEN each **Projekt** is one PLEXON Collection (`platformProjectId`) — NOT a nested “Projects contain Collections” model.
 2. WHEN user-facing copy names that entity THEN it MUST say **Projekt** / **Project** (DE/EN). Internal code, federation, and APIs MAY still say Collection / `platformProjectId`.
 3. WHEN the NavRail renders THEN PRIMARY MUST be **Chat · Übersicht · Projekte · Mediathek · Analysen** (Audion/Checkion-aligned). Upload and Cuts MUST NOT be primary rail peers (deep links / editor remain). See `scene-chat.md`.
+3a. WHEN an authenticated `AppShell` renders THEN it MUST mount `PlatformAssistantHost` (bottom-end FAB + `ChatOverlay` → Plexon `/assistant/embed?product=videon`) — see `platform-assistant-host.md`. In-app `/chat` remains the scene-retrieval hub; the FAB is the central agent.
 4. WHEN the Projekte rail item renders THEN it MUST use the shared folder **Projects** icon (`NavIconProjects`).
 5. WHEN the **Projekte** hub renders THEN it MUST list Access Model B accessible projects and set active project context on select.
 6. WHEN the **Mediathek** hub renders THEN it MUST list media across **all** accessible projects by default. Optional `?platformProjectId=` MAY filter to one project.

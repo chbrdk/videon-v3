@@ -24,6 +24,7 @@ import {
 import { paths } from '../lib/paths'
 import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
+import { PlatformAssistantHost } from './platform-assistant-host'
 import { useT, useUserPrefs } from '../lib/user-prefs'
 
 /** Chat · Home · Projekte · Mediathek · Analysen — Upload/Cuts via deep links only. */
@@ -145,6 +146,7 @@ export function AppShell({
         {description && !editor ? <p className="videon-page-lead">{description}</p> : null}
         {children}
       </div>
+      <PlatformAssistantHost platformProjectId={platformProjectId} />
     </AppFrame>
   )
 }

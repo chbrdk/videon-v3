@@ -30,6 +30,27 @@ a {
   text-decoration: none;
 }
 
+.platform-assistant-fab.ds-btn {
+  position: fixed;
+  inset-inline-end: 1.25rem;
+  inset-block-end: 1.25rem;
+  z-index: 70;
+  border-radius: 999px;
+  width: 3rem;
+  min-width: 3rem;
+  height: 3rem;
+  padding: 0;
+}
+
+.platform-assistant-embed-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
 main {
   min-height: 100vh;
 }

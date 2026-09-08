@@ -12,5 +12,10 @@ export { Flyout, useFlyout } from '../../../../msqdx-ui/packages/ui/src/componen
 export type { FlyoutProps } from '../../../../msqdx-ui/packages/ui/src/components/Flyout'
 export { ChatCollapsible } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'
 export type { ChatCollapsibleProps, ChatCollapsibleDensity } from '../../../../msqdx-ui/packages/ui/src/components/ChatCollapsible'
+export { ChatOverlay } from '../../../../msqdx-ui/packages/ui/src/components/ChatOverlay'
+export type {
+  ChatOverlayPlacement,
+  ChatOverlayProps,
+} from '../../../../msqdx-ui/packages/ui/src/components/ChatOverlay'
 export { ContextMenu } from '../../../../msqdx-ui/packages/ui/src/components/ContextMenu'
 export type { ContextMenuProps, ContextMenuItem } from '../../../../msqdx-ui/packages/ui/src/components/ContextMenu'
