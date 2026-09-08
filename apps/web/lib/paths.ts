@@ -78,6 +78,10 @@ export const paths = {
   envWhisperLanguage: 'VIDEON_WHISPER_LANGUAGE',
   /** Always-on stem worker base URL (no trailing slash), e.g. http://videon-stem-worker:8091 */
   envStemServiceUrl: 'VIDEON_STEM_SERVICE_URL',
+  /** Settings API tokens for MCP / machine clients (`videon_` + 64 hex). */
+  apiTokenPrefix: 'videon_' as const,
+  apiTokenBytes: 32,
+  apiTokenFixtureOwnerId: 'videon-fixture-owner',
   routes: {
     home: '/',
     chat: '/chat',
@@ -92,6 +96,9 @@ export const paths = {
     /** @deprecated Alias — redirects to `/projects`. */
     collections: '/collections',
     apiCollections: '/api/collections',
+    apiTokens: '/api/tokens',
+    apiTokenDetail: (tokenId: string) => `/api/tokens/${encodeURIComponent(tokenId)}`,
+    apiTokenVerify: '/api/tokens/verify',
     apiMedia: '/api/media',
     apiMediaList: (platformProjectId: string) =>
       `/api/media?platformProjectId=${encodeURIComponent(platformProjectId)}`,

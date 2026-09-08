@@ -163,6 +163,15 @@ export type ApiError = {
   }
 }
 
+/** Settings API token list stub (no secret). Spec: settings-api-tokens.md */
+export type ApiTokenStub = {
+  id: string
+  label: string
+  prefix: string
+  createdAt: string
+  lastUsedAt: string | null
+}
+
 export function relativeWorkspaceLinks(platformProjectId: string) {
   const id = encodeURIComponent(platformProjectId)
   return {

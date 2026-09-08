@@ -126,7 +126,20 @@
     "collectionHelp": "VIDEON is project-bound — no nested project model under the project.",
     "collectionBody": "Workspaces and media are always bound to a PLEXON project (Access Model B).",
     "product": "Product",
-    "productHelp": "Product identity of the VIDEON island."
+    "productHelp": "Product identity of the VIDEON island.",
+    "apiTokens": "API tokens",
+    "apiTokensHelp": "Personal Bearer tokens for MCP and scripts (prefix {prefix}). Secret shown once.",
+    "tokenLabel": "Label",
+    "tokenLabelPlaceholder": "e.g. Plexon MCP",
+    "createToken": "Create token",
+    "createFailed": "Could not create token",
+    "revokeToken": "Revoke",
+    "revokeConfirm": "Revoke this token?",
+    "revokeFailed": "Revoke failed",
+    "noTokens": "No tokens yet.",
+    "tokenRevealTitle": "New token (copy once)",
+    "tokenRevealHint": "The secret cannot be retrieved again.",
+    "copyToken": "Copy"
   },
   "login": {
     "title": "Sign in",

@@ -16,10 +16,18 @@ import {
   Text,
   ToggleGroup,
 } from '@msqdx/ui'
+import { SettingsTokens } from '@/components/settings-tokens'
+import type { ApiTokenStub } from '@videon-v3/contracts'
 import { paths } from '@/lib/paths'
 import { useUserPrefs, type UiLocaleId, type UiThemeId } from '@/lib/user-prefs'
 
-export function SettingsPage({ federationModeLabel }: { federationModeLabel: string }) {
+export function SettingsPage({
+  federationModeLabel,
+  initialTokens = [],
+}: {
+  federationModeLabel: string
+  initialTokens?: ApiTokenStub[]
+}) {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { displayName, setDisplayName, theme, setTheme, accent, setAccent, locale, setLocale, t } =
@@ -176,6 +184,7 @@ export function SettingsPage({ federationModeLabel }: { federationModeLabel: str
       languageHelp={t('settings.languageHelp')}
       extras={
         <>
+          <SettingsTokens tokens={initialTokens} />
           <SettingsBand title={t('settings.federation')} help={t('settings.federationHelp')}>
             <Text role="body" as="p">
               {t('settings.federationMode', {
