@@ -160,7 +160,7 @@ export async function deleteMediaAssetForWorkspace(
       `update cuts
           set status = 'archived',
               updated_at = now()
-        where workspace_id = $2
+        where workspace_id = $1
           and not exists (select 1 from cut_scenes cs where cs.cut_id = cuts.id)`,
       [workspaceId],
     )

@@ -591,7 +591,19 @@ export function MediaEditorView({
       const response = await fetch(paths.routes.apiMediaDetail(mediaAssetId, platformProjectId), {
         method: 'DELETE',
       })
-      const body = (await response.json()) as { error?: { message?: string } }
+      const raw = await response.text()
+      let body: { error?: { message?: string }; deleted?: boolean } = {}
+      if (raw.trim()) {
+        try {
+          body = JSON.parse(raw) as { error?: { message?: string }; deleted?: boolean }
+        } catch {
+          throw new Error(
+            response.ok
+              ? 'Löschen unvollständig (ungültige Antwort)'
+              : `Löschen fehlgeschlagen (${response.status})`,
+          )
+        }
+      }
       if (!response.ok) throw new Error(body.error?.message || 'Löschen fehlgeschlagen')
       router.push(paths.routes.libraryFor(platformProjectId))
       router.refresh()

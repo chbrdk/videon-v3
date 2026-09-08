@@ -110,18 +110,31 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   const { mediaAssetId } = await context.params
-  const deleted = await deleteMediaAssetForWorkspace(mediaAssetId.trim(), workspace.workspace.id)
-  if (!deleted) {
-    return apiError(request, 404, 'not_found', 'Media asset not found')
-  }
+  try {
+    const deleted = await deleteMediaAssetForWorkspace(mediaAssetId.trim(), workspace.workspace.id)
+    if (!deleted) {
+      return apiError(request, 404, 'not_found', 'Media asset not found')
+    }
 
-  if (objectStorageConfig()) {
-    const store = new S3ObjectStore()
-    await store.removeObject({
-      workspaceId: workspace.workspace.id,
-      storageKey: deleted.storageKey,
-    }).catch(() => {})
-  }
+    if (objectStorageConfig()) {
+      const store = new S3ObjectStore()
+      await store
+        .removeObject({
+          workspaceId: workspace.workspace.id,
+          storageKey: deleted.storageKey,
+        })
+        .catch(() => {})
+    }
 
-  return apiJson(request, { deleted: true, mediaAssetId: mediaAssetId.trim() })
+    return apiJson(request, { deleted: true, mediaAssetId: mediaAssetId.trim() })
+  } catch (error) {
+    console.error('[VIDEON] media DELETE failed', error)
+    return apiError(
+      request,
+      500,
+      'dependency_unavailable',
+      error instanceof Error ? error.message : 'Media delete failed',
+      { retryable: true },
+    )
+  }
 }
