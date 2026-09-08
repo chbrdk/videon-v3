@@ -65,9 +65,13 @@ export const paths = {
   envObjectStorageRegion: 'VIDEON_OBJECT_STORAGE_REGION',
   envObjectStorageBucket: 'VIDEON_OBJECT_STORAGE_BUCKET',
   envObjectStorageEndpoint: 'VIDEON_OBJECT_STORAGE_ENDPOINT',
+  /** Browser-facing S3 endpoint for signed PUT/GET when the private endpoint is internal-only. */
+  envObjectStoragePublicEndpoint: 'VIDEON_OBJECT_STORAGE_PUBLIC_ENDPOINT',
   envObjectStorageAccessKeyId: 'VIDEON_OBJECT_STORAGE_ACCESS_KEY_ID',
   envObjectStorageSecretAccessKey: 'VIDEON_OBJECT_STORAGE_SECRET_ACCESS_KEY',
   envObjectStorageForcePathStyle: 'VIDEON_OBJECT_STORAGE_FORCE_PATH_STYLE',
+  /** Extra CORS AllowedOrigins (comma-separated) for browser uploads. */
+  envObjectStorageCorsOrigins: 'VIDEON_OBJECT_STORAGE_CORS_ORIGINS',
   envOpenRouterApiKey: 'OPENROUTER_API_KEY',
   envOpenRouterApiBaseUrl: 'OPENROUTER_API_BASE_URL',
   envVisionDefaultModel: 'VIDEON_VISION_DEFAULT_MODEL',

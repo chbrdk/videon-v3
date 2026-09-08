@@ -35,6 +35,8 @@ export type ObjectStorageConfig = {
   region: string
   bucket: string
   endpoint?: string
+  /** Host the browser must hit for signed URLs; defaults to `endpoint`. */
+  publicEndpoint?: string
   accessKeyId: string
   secretAccessKey: string
   forcePathStyle: boolean
@@ -51,13 +53,31 @@ export function objectStorageConfig(): ObjectStorageConfig | null {
     throw new Error('VIDEON object storage configuration is incomplete')
   }
   const endpoint = env(paths.envObjectStorageEndpoint)
+  const publicEndpoint = env(paths.envObjectStoragePublicEndpoint)
   return {
     region,
     bucket,
     ...(endpoint ? { endpoint } : {}),
+    ...(publicEndpoint ? { publicEndpoint } : {}),
     accessKeyId,
     secretAccessKey,
     forcePathStyle: asBoolean(env(paths.envObjectStorageForcePathStyle)),
+  }
+}
+
+/** True when a URL host is likely reachable from a browser (not docker-internal). */
+export function storageUrlLooksBrowserReachable(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.toLowerCase()
+    if (!host) return false
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') return true
+    if (!host.includes('.')) return false
+    if (host.endsWith('.internal') || host.endsWith('.local') || host.endsWith('.lan')) return false
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return false
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
   }
 }
 

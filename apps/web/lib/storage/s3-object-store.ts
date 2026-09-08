@@ -11,7 +11,7 @@ import type { Readable } from 'node:stream'
 import { sha256HexFromStream } from './object-checksum'
 import { ensureBrowserUploadCors } from './bucket-cors'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { objectStorageConfig } from '@/lib/runtime-config'
+import { objectStorageConfig, storageUrlLooksBrowserReachable } from '@/lib/runtime-config'
 import type {
   CreateDownloadTargetInput,
   CreateUploadTargetInput,
@@ -44,24 +44,62 @@ function contentDisposition(filename: string, disposition: 'inline' | 'attachmen
   return `${disposition}; filename="${clean}"`
 }
 
+function buildS3Client(input: {
+  region: string
+  endpoint?: string
+  forcePathStyle: boolean
+  accessKeyId: string
+  secretAccessKey: string
+}): S3Client {
+  return new S3Client({
+    region: input.region,
+    ...(input.endpoint ? { endpoint: input.endpoint } : {}),
+    forcePathStyle: input.forcePathStyle,
+    credentials: {
+      accessKeyId: input.accessKeyId,
+      secretAccessKey: input.secretAccessKey,
+    },
+  })
+}
+
 /** Private S3-compatible boundary. Signed URLs are always short-lived and workspace-scoped. */
 export class S3ObjectStore implements ObjectStore {
   private readonly client: S3Client
+  /** Client whose endpoint matches the host the browser will call (SigV4). */
+  private readonly signClient: S3Client
   private readonly bucket: string
+  private readonly browserSigningReachable: boolean
 
   constructor() {
     const config = objectStorageConfig()
     if (!config) throw new Error('VIDEON object storage is not configured')
     this.bucket = config.bucket
-    this.client = new S3Client({
+    this.client = buildS3Client({
       region: config.region,
-      ...(config.endpoint ? { endpoint: config.endpoint } : {}),
+      endpoint: config.endpoint,
       forcePathStyle: config.forcePathStyle,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
     })
+    const signEndpoint = config.publicEndpoint || config.endpoint
+    this.signClient =
+      signEndpoint && signEndpoint !== config.endpoint
+        ? buildS3Client({
+            region: config.region,
+            endpoint: signEndpoint,
+            forcePathStyle: config.forcePathStyle,
+            accessKeyId: config.accessKeyId,
+            secretAccessKey: config.secretAccessKey,
+          })
+        : this.client
+    this.browserSigningReachable = signEndpoint
+      ? storageUrlLooksBrowserReachable(signEndpoint)
+      : true
+  }
+
+  /** False when signed URLs would target a host the browser cannot reach. */
+  canSignBrowserUpload(): boolean {
+    return this.browserSigningReachable
   }
 
   async createUploadTarget(input: CreateUploadTargetInput): Promise<UploadTarget> {
@@ -70,14 +108,15 @@ export class S3ObjectStore implements ObjectStore {
     }
     const key = sourceStorageKey(input)
     try {
-      await ensureBrowserUploadCors(this.client, this.bucket)
-    } catch {
-      // Credentials may lack PutBucketCors; direct browser upload still works when CORS is configured manually.
+      await ensureBrowserUploadCors(this.signClient, this.bucket)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn('[VIDEON-v3] ensureBrowserUploadCors failed — browser direct PUT may fail:', message)
     }
     // MinIO / browser PUT: keep checksum in VIDEON DB only — provider checksum headers
     // break many S3-compatible signed uploads.
     const url = await getSignedUrl(
-      this.client,
+      this.signClient,
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
@@ -98,7 +137,7 @@ export class S3ObjectStore implements ObjectStore {
   async createDownloadTarget(input: CreateDownloadTargetInput): Promise<UploadTarget> {
     assertWorkspaceKey(input.workspaceId, input.storageKey)
     const url = await getSignedUrl(
-      this.client,
+      this.signClient,
       new GetObjectCommand({
         Bucket: this.bucket,
         Key: input.storageKey,

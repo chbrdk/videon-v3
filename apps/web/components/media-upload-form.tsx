@@ -84,20 +84,45 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
       })
       const intentBody = (await intentResponse.json()) as {
         media?: { id: string }
-        upload?: { uploadUrl: string; headers: Record<string, string> }
+        upload?: { uploadUrl: string; headers: Record<string, string>; mode?: 'direct' | 'proxy' }
         error?: { message?: string }
       }
       if (!intentResponse.ok || !intentBody.media || !intentBody.upload) {
         throw new Error(intentBody.error?.message || 'Upload-Intent fehlgeschlagen')
       }
 
-      setProgress('Datei wird übertragen … 0 %')
-      await putFileWithProgress(intentBody.upload.uploadUrl, file, intentBody.upload.headers, (percent) => {
-        setProgress(`Datei wird übertragen … ${percent} %`)
-      })
+      const mediaId = intentBody.media.id
+      const proxyUrl = paths.routes.apiMediaUpload(mediaId, platformProjectId)
+      const proxyHeaders = {
+        'content-type': file.type || 'video/mp4',
+      }
+
+      const uploadVia = async (url: string, headers: Record<string, string>, label: string) => {
+        setProgress(`${label} … 0 %`)
+        await putFileWithProgress(url, file, headers, (percent) => {
+          setProgress(`${label} … ${percent} %`)
+        })
+      }
+
+      if (intentBody.upload.mode === 'proxy') {
+        await uploadVia(proxyUrl, proxyHeaders, 'Datei wird übertragen (Proxy)')
+      } else {
+        try {
+          await uploadVia(intentBody.upload.uploadUrl, intentBody.upload.headers, 'Datei wird übertragen')
+        } catch (directError) {
+          const message = directError instanceof Error ? directError.message : ''
+          const looksCors =
+            message.includes('CORS') ||
+            message.includes('Object Storage nicht erreichbar') ||
+            message.includes('Netzwerkfehler')
+          if (!looksCors) throw directError
+          setProgress('Direct-Upload blockiert — wechsle auf Same-Origin-Proxy …')
+          await uploadVia(proxyUrl, proxyHeaders, 'Datei wird übertragen (Proxy)')
+        }
+      }
 
       setProgress('Upload wird geprüft und abgeschlossen …')
-      const completeResponse = await fetch(paths.routes.apiMediaComplete(intentBody.media.id), {
+      const completeResponse = await fetch(paths.routes.apiMediaComplete(mediaId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platformProjectId }),
@@ -110,8 +135,7 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
         throw new Error(completeBody.error?.message || 'Upload-Abschluss fehlgeschlagen')
       }
 
-      const mediaId = completeBody.media?.id ?? intentBody.media.id
-      router.push(paths.routes.mediaFor(mediaId, platformProjectId))
+      router.push(paths.routes.mediaFor(completeBody.media?.id ?? mediaId, platformProjectId))
       router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload fehlgeschlagen')

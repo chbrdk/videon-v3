@@ -1,5 +1,6 @@
 import { GetBucketCorsCommand, PutBucketCorsCommand, type CORSRule } from '@aws-sdk/client-s3'
 import type { S3Client } from '@aws-sdk/client-s3'
+import { paths } from '@/lib/paths'
 
 const BROWSER_UPLOAD_METHODS = ['PUT', 'GET', 'HEAD'] as const
 
@@ -16,6 +17,13 @@ export function uploadAllowedOrigins(): string[] {
   const publicUrl = process.env.NEXT_PUBLIC_VIDEON_URL?.trim()
   if (publicUrl) origins.add(normalizeOrigin(publicUrl))
   origins.add('http://localhost:3010')
+  const extra = process.env[paths.envObjectStorageCorsOrigins]?.trim()
+  if (extra) {
+    for (const part of extra.split(',')) {
+      const origin = normalizeOrigin(part)
+      if (origin) origins.add(origin)
+    }
+  }
   return [...origins]
 }
 

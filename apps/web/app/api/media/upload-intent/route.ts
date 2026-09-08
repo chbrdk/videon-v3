@@ -5,6 +5,7 @@ import { paths } from '@/lib/paths'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 import { pendingChecksumForMedia } from '@/lib/storage/pending-checksum'
+import { mediaSourceStorageKey } from '@/lib/storage/object-store'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 import { randomUUID } from 'node:crypto'
@@ -66,12 +67,20 @@ export async function POST(request: Request) {
     const mediaAssetId = randomUUID()
     const checksumSha256 = pendingChecksumForMedia(mediaAssetId)
     const store = new S3ObjectStore()
-    const target = await store.createUploadTarget({
-      workspaceId: resolved.workspace.id,
-      mediaAssetId,
-      mimeType,
-      bytes,
-    })
+    const preferProxy = !store.canSignBrowserUpload()
+    const target = preferProxy
+      ? {
+          storageKey: mediaSourceStorageKey(resolved.workspace.id, mediaAssetId),
+          uploadUrl: paths.routes.apiMediaUpload(mediaAssetId, platformProjectId),
+          headers: { 'content-type': mimeType },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        }
+      : await store.createUploadTarget({
+          workspaceId: resolved.workspace.id,
+          mediaAssetId,
+          mimeType,
+          bytes,
+        })
     const media = await createUploadingMediaAsset({
       id: mediaAssetId,
       workspace: resolved.workspace,
@@ -89,7 +98,7 @@ export async function POST(request: Request) {
         media,
         upload: {
           ...target,
-          mode: 'direct' as const,
+          mode: preferProxy ? ('proxy' as const) : ('direct' as const),
         },
       },
       201,

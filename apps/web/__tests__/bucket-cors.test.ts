@@ -10,9 +10,20 @@ afterEach(() => {
 describe('uploadAllowedOrigins', () => {
   it('includes the public VIDEON URL and local dev', () => {
     process.env.NEXT_PUBLIC_VIDEON_URL = 'https://videon.projects-a.plygrnd.tech/'
+    delete process.env.VIDEON_OBJECT_STORAGE_CORS_ORIGINS
     expect(uploadAllowedOrigins()).toEqual([
       'https://videon.projects-a.plygrnd.tech',
       'http://localhost:3010',
+    ])
+  })
+
+  it('merges extra CORS origins from env', () => {
+    process.env.NEXT_PUBLIC_VIDEON_URL = 'https://videon.projects-a.plygrnd.tech'
+    process.env.VIDEON_OBJECT_STORAGE_CORS_ORIGINS = 'https://alt.example, https://videon.projects-a.plygrnd.tech/'
+    expect(uploadAllowedOrigins()).toEqual([
+      'https://videon.projects-a.plygrnd.tech',
+      'http://localhost:3010',
+      'https://alt.example',
     ])
   })
 })
