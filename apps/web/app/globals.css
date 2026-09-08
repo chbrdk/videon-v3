@@ -1450,7 +1450,8 @@ main {
 
 .videon-cut-timeline__layout {
   display: grid;
-  grid-template-columns: 3.1rem minmax(0, 1fr);
+  /* Track chrome: label + up to 3 action buttons (↓ / eye / mute). */
+  grid-template-columns: 5rem minmax(0, 1fr);
   min-width: 100%;
 }
 
@@ -1473,12 +1474,13 @@ main {
   justify-items: center;
   gap: 0.2rem;
   min-height: 3.6rem;
-  padding: 0.25rem 0.15rem;
+  padding: 0.25rem 0.2rem;
   font-size: 0.62rem;
   letter-spacing: 0.06em;
   color: var(--nle-muted, var(--muted));
   border-bottom: 1px solid var(--nle-border, var(--line));
   background: var(--nle-panel-2, transparent);
+  overflow: visible;
 }
 
 .videon-cut-timeline__header-label--transcript {
@@ -1505,7 +1507,10 @@ main {
 
 .videon-cut-timeline__header-actions {
   display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: center;
   gap: 0.15rem;
+  max-width: 100%;
 }
 
 .videon-cut-timeline__track-btn {
