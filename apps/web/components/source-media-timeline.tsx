@@ -226,6 +226,92 @@ export function SourceMediaTimeline({
     [disabled, msAtClientX, onContextMenuRequest],
   )
 
+  const emitSceneContextMenu = useCallback(
+    (
+      event: ReactMouseEvent,
+      scene: { sceneKey: string; startMs: number; endMs: number },
+    ) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (disabled || tracks.si.muted || !onContextMenuRequest) return
+      onContextMenuRequest({
+        kind: 'scene',
+        sceneKey: scene.sceneKey,
+        startMs: scene.startMs,
+        endMs: scene.endMs,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [disabled, onContextMenuRequest, tracks.si.muted],
+  )
+
+  const onInsightTrackContextMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      if (tracks.si.hidden || tracks.si.muted || disabled || !onContextMenuRequest) return
+      event.preventDefault()
+      const atMs = msAtClientX(event.clientX)
+      const scene =
+        scenes.find((entry) => atMs >= entry.startMs && atMs < entry.endMs) ??
+        scenes.find((entry) => atMs >= entry.startMs && atMs <= entry.endMs)
+      if (scene) {
+        onContextMenuRequest({
+          kind: 'scene',
+          sceneKey: scene.sceneKey,
+          startMs: scene.startMs,
+          endMs: scene.endMs,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        })
+        return
+      }
+      onContextMenuRequest({
+        kind: 'lane',
+        atMs,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [disabled, msAtClientX, onContextMenuRequest, scenes, tracks.si.hidden, tracks.si.muted],
+  )
+
+  const onTranscriptTrackContextMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      if (tracks.tx.hidden || tracks.tx.muted || disabled || !onContextMenuRequest) return
+      event.preventDefault()
+      const atMs = msAtClientX(event.clientX)
+      const index = transcriptSegments.findIndex(
+        (segment) => atMs >= segment.startMs && atMs < segment.endMs,
+      )
+      const segment = index >= 0 ? transcriptSegments[index] : undefined
+      if (segment) {
+        onContextMenuRequest({
+          kind: 'transcript',
+          startMs: segment.startMs,
+          endMs: segment.endMs,
+          index,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        })
+        return
+      }
+      onContextMenuRequest({
+        kind: 'lane',
+        atMs,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [
+      disabled,
+      msAtClientX,
+      onContextMenuRequest,
+      tracks.tx.hidden,
+      tracks.tx.muted,
+      transcriptSegments,
+    ],
+  )
+
   const onTrackPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (disabled) return
     seekFromPointer(event.clientX)
@@ -421,10 +507,7 @@ export function SourceMediaTimeline({
               <div
                 className={`videon-cut-timeline__track videon-cut-timeline__track--insight${tracks.si.hidden ? ' is-collapsed' : ''}${tracks.si.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
-                onContextMenu={(event) => {
-                  if (tracks.si.hidden || tracks.si.muted) return
-                  emitLaneContextMenu(event)
-                }}
+                onContextMenu={onInsightTrackContextMenu}
               >
                 {!tracks.si.hidden
                   ? scenes.map((scene, index) => {
@@ -443,19 +526,7 @@ export function SourceMediaTimeline({
                             event.stopPropagation()
                             onSeek(scene.startMs)
                           }}
-                          onContextMenu={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            if (disabled || tracks.si.muted || !onContextMenuRequest) return
-                            onContextMenuRequest({
-                              kind: 'scene',
-                              sceneKey: scene.sceneKey,
-                              startMs: scene.startMs,
-                              endMs: scene.endMs,
-                              clientX: event.clientX,
-                              clientY: event.clientY,
-                            })
-                          }}
+                          onContextMenu={(event) => emitSceneContextMenu(event, scene)}
                           title={[scene.summary, meta].filter(Boolean).join('\n')}
                           disabled={tracks.si.muted}
                         >
@@ -493,10 +564,7 @@ export function SourceMediaTimeline({
 
               <div
                 className={`videon-cut-timeline__track videon-cut-timeline__track--transcript${tracks.tx.hidden ? ' is-collapsed' : ''}${tracks.tx.muted ? ' is-muted' : ''}`}
-                onContextMenu={(event) => {
-                  if (tracks.tx.hidden || tracks.tx.muted) return
-                  emitLaneContextMenu(event)
-                }}
+                onContextMenu={onTranscriptTrackContextMenu}
               >
                 {!tracks.tx.hidden
                   ? transcriptSegments.map((segment, index) => (

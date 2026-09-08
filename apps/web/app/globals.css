@@ -1829,12 +1829,21 @@ a.videon-cut-timeline__track-btn--link {
   display: grid;
   align-content: center;
   gap: 0.1rem;
+  top: 0.15rem;
+  bottom: 0.15rem;
+  /* Full clip chrome is the hit target — labels must not steal / shrink hit testing. */
+  pointer-events: auto;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, #3d6b5c 82%, white 8%),
     #2f5548
   );
   border-color: color-mix(in srgb, #7dba9a 50%, var(--nle-border, var(--line)));
+}
+
+.videon-cut-timeline__clip--insight .videon-cut-timeline__clip-label,
+.videon-cut-timeline__clip--insight .videon-cut-timeline__clip-meta {
+  pointer-events: none;
 }
 
 .videon-cut-timeline__clip--insight.is-active {
@@ -2039,8 +2048,7 @@ a.videon-cut-timeline__track-btn--link {
   max-width: 100%;
 }
 
-.videon-cut-timeline__clip--insight .videon-cut-timeline__clip-label,
-.videon-cut-timeline__transcript-segment {
+.videon-cut-timeline__clip--insight .videon-cut-timeline__clip-label {
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -2107,6 +2115,7 @@ a.videon-cut-timeline__track-btn--link {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .videon-cut-timeline__transcript-segment:hover {
