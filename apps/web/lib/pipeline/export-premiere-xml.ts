@@ -1,6 +1,9 @@
 /**
- * Premiere Pro XMEML v4 + ZIP media package helpers.
+ * Premiere Pro XMEML + ZIP media package helpers.
  * Spec: specs/domain/cut-export-extras.md
+ *
+ * Audio sync: match auto-editor / Premiere conventions — exploded stereo tracks,
+ * frame in/out only (no bogus pproTicks), empty file duration, links on video only.
  */
 
 export type PremiereXmlScene = {
@@ -108,7 +111,17 @@ How to use:
 `
 }
 
-/** Build XMEML v4 sequence; pathurl values point at ZIP-relative media/. */
+/**
+ * Premiere ticks: 254_016_000_000 per second (Adobe). Prefer omitting pproTicks
+ * and relying on frame in/out — wrong ticks make Premiere ignore audio offsets.
+ */
+export const PREMIERE_TICKS_PER_SECOND = 254_016_000_000
+
+export function premiereTicksFromMs(ms: number): number {
+  return Math.max(0, Math.round((ms / 1000) * PREMIERE_TICKS_PER_SECOND))
+}
+
+/** Build XMEML for Premiere; pathurl values point at ZIP-relative media/. */
 export function buildPremiereXmeml(input: {
   cut: PremiereXmlCut
   scenes: PremiereXmlScene[]
@@ -121,38 +134,38 @@ export function buildPremiereXmeml(input: {
   const totalMs = scenes.reduce((sum, scene) => sum + Math.max(0, scene.endMs - scene.startMs), 0)
   const totalFrames = framesFromMs(totalMs, fps)
   const sequenceName = escapeXml(input.cut.name || 'Cut')
+  const timebase = Math.round(fps)
   const rate = rateXml(fps)
   const definedFiles = new Set<string>()
 
-  const linkBlock = (index: number) => {
-    const videoId = `clipitem-${index + 1}`
-    const audioLId = `clipitem-${index + 1 + n}`
-    const audioRId = `clipitem-${index + 1 + n * 2}`
+  // Audio clip ids continue after all video ids (auto-editor / Premiere convention).
+  const audioLFirstId = n + 1
+  const audioRFirstId = n * 2 + 1
+
+  const videoLinkBlock = (index: number) => {
     const clipindex = index + 1
     return `
 						<link>
-							<linkclipref>${videoId}</linkclipref>
+							<linkclipref>clipitem-${index + 1}</linkclipref>
 							<mediatype>video</mediatype>
 							<trackindex>1</trackindex>
 							<clipindex>${clipindex}</clipindex>
 						</link>
 						<link>
-							<linkclipref>${audioLId}</linkclipref>
+							<linkclipref>clipitem-${audioLFirstId + index}</linkclipref>
 							<mediatype>audio</mediatype>
 							<trackindex>1</trackindex>
 							<clipindex>${clipindex}</clipindex>
-							<groupindex>1</groupindex>
 						</link>
 						<link>
-							<linkclipref>${audioRId}</linkclipref>
+							<linkclipref>clipitem-${audioRFirstId + index}</linkclipref>
 							<mediatype>audio</mediatype>
 							<trackindex>2</trackindex>
 							<clipindex>${clipindex}</clipindex>
-							<groupindex>1</groupindex>
 						</link>`
   }
 
-  const fileBlock = (scene: PremiereXmlScene, index: number, fileDurMs: number) => {
+  const fileBlock = (scene: PremiereXmlScene, index: number) => {
     const fileId = `file-${scene.mediaAssetId}`
     if (definedFiles.has(fileId)) {
       return `<file id="${fileId}"/>`
@@ -163,11 +176,12 @@ export function buildPremiereXmeml(input: {
       scene.zipMediaName ||
       sanitizePremiereMediaBasename(scene.originalFilename || '', scene.mediaAssetId)
     const pathUrl = `file://media/${escapeXml(zipName)}`
+    // Empty <duration>: Premiere reads length from the media file (auto-editor pattern).
     return `<file id="${fileId}">
 							<name>${displayName}</name>
 							<pathurl>${pathUrl}</pathurl>
 							${rate}
-							<duration>${framesFromMs(fileDurMs, fps)}</duration>
+							<duration></duration>
 							<timecode>
 								${rate}
 								<string>00:00:00:00</string>
@@ -199,86 +213,74 @@ export function buildPremiereXmeml(input: {
     .map((scene, index) => {
       const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
       const tlStart = timelineStartMs(scenes, index)
-      const fileDurMs =
-        scene.mediaDurationMs != null && scene.mediaDurationMs > 0
-          ? scene.mediaDurationMs
-          : Math.max(scene.endMs, clipDurMs)
       const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
       const inFrames = framesFromMs(scene.startMs, fps)
       const outFrames = framesFromMs(scene.endMs, fps)
       return `
 					<clipitem id="clipitem-${index + 1}" premiereChannelType="video">
-						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
 						<name>${displayName}</name>
 						<enabled>TRUE</enabled>
-						<duration>${framesFromMs(fileDurMs, fps)}</duration>
-						${rate}
 						<start>${framesFromMs(tlStart, fps)}</start>
 						<end>${framesFromMs(tlStart + clipDurMs, fps)}</end>
 						<in>${inFrames}</in>
 						<out>${outFrames}</out>
-						<pproTicksIn>${inFrames * 1000000}</pproTicksIn>
-						<pproTicksOut>${outFrames * 1000000}</pproTicksOut>
-						${fileBlock(scene, index, fileDurMs)}
+						${fileBlock(scene, index)}
 						<sourcetrack>
 							<mediatype>video</mediatype>
 							<trackindex>1</trackindex>
 						</sourcetrack>
-						${linkBlock(index)}
+						${videoLinkBlock(index)}
 					</clipitem>`
     })
     .join('')
 
-  const audioTrackClips = (channelTrackIndex: 1 | 2) =>
+  const audioTrackClips = (explodedIndex: 0 | 1) =>
     scenes
       .map((scene, index) => {
         const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
         const tlStart = timelineStartMs(scenes, index)
-        const fileDurMs =
-          scene.mediaDurationMs != null && scene.mediaDurationMs > 0
-            ? scene.mediaDurationMs
-            : Math.max(scene.endMs, clipDurMs)
         const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
         const fileId = `file-${scene.mediaAssetId}`
-        const clipId = `clipitem-${index + 1 + n * channelTrackIndex}`
+        const firstId = explodedIndex === 0 ? audioLFirstId : audioRFirstId
+        const clipId = `clipitem-${firstId + index}`
+        const sourceTrackIndex = explodedIndex + 1
         const inFrames = framesFromMs(scene.startMs, fps)
         const outFrames = framesFromMs(scene.endMs, fps)
         return `
 					<clipitem id="${clipId}" premiereChannelType="stereo">
-						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
 						<name>${displayName}</name>
 						<enabled>TRUE</enabled>
-						<duration>${framesFromMs(fileDurMs, fps)}</duration>
-						${rate}
 						<start>${framesFromMs(tlStart, fps)}</start>
 						<end>${framesFromMs(tlStart + clipDurMs, fps)}</end>
 						<in>${inFrames}</in>
 						<out>${outFrames}</out>
-						<pproTicksIn>${inFrames * 1000000}</pproTicksIn>
-						<pproTicksOut>${outFrames * 1000000}</pproTicksOut>
 						<file id="${fileId}"/>
 						<sourcetrack>
 							<mediatype>audio</mediatype>
-							<trackindex>${channelTrackIndex}</trackindex>
+							<trackindex>${sourceTrackIndex}</trackindex>
 						</sourcetrack>
-						${linkBlock(index)}
 					</clipitem>`
       })
       .join('')
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE xmeml>
-<xmeml version="4">
-	<sequence id="sequence-${escapeXml(input.cut.id)}" MZ.Sequence.PreviewFrameSizeHeight="${height}" MZ.Sequence.PreviewFrameSizeWidth="${width}" explodedTracks="true">
-		<uuid>${escapeXml(input.cut.id)}</uuid>
-		<duration>${totalFrames}</duration>
-		${rate}
+<xmeml version="5">
+	<sequence explodedTracks="true">
 		<name>${sequenceName}</name>
+		<duration>${totalFrames}</duration>
+		<rate>
+			<timebase>${timebase}</timebase>
+			<ntsc>FALSE</ntsc>
+		</rate>
 		<media>
 			<video>
 				<format>
 					<samplecharacteristics>
-						${rate}
+						<rate>
+							<timebase>${timebase}</timebase>
+							<ntsc>FALSE</ntsc>
+						</rate>
 						<width>${width}</width>
 						<height>${height}</height>
 						<pixelaspectratio>square</pixelaspectratio>
@@ -287,8 +289,6 @@ export function buildPremiereXmeml(input: {
 				</format>
 				<track>
 					${videoClips}
-					<enabled>TRUE</enabled>
-					<locked>FALSE</locked>
 				</track>
 			</video>
 			<audio>
@@ -299,16 +299,12 @@ export function buildPremiereXmeml(input: {
 						<samplerate>48000</samplerate>
 					</samplecharacteristics>
 				</format>
-				<track>
-					${audioTrackClips(1)}
-					<enabled>TRUE</enabled>
-					<locked>FALSE</locked>
+				<track currentExplodedTrackIndex="0" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					${audioTrackClips(0)}
 					<outputchannelindex>1</outputchannelindex>
 				</track>
-				<track>
-					${audioTrackClips(2)}
-					<enabled>TRUE</enabled>
-					<locked>FALSE</locked>
+				<track currentExplodedTrackIndex="1" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					${audioTrackClips(1)}
 					<outputchannelindex>2</outputchannelindex>
 				</track>
 			</audio>
@@ -317,4 +313,5 @@ export function buildPremiereXmeml(input: {
 </xmeml>
 `
 }
+
 
