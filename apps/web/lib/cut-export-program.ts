@@ -1,9 +1,12 @@
 import {
   buildCutTimeline,
   cutTotalDurationMs,
-  findTimelineItemAtCutMs,
   type CutTimelineScene,
 } from '@/lib/cut-timeline'
+import {
+  findProgramVideoAtCutMs,
+  type ProgramVideoClipRef,
+} from '@/lib/cut-program-hit'
 
 export type ProgramExportSlice =
   | {
@@ -15,19 +18,40 @@ export type ProgramExportSlice =
     }
   | { kind: 'black'; durationMs: number }
 
+function programTotalMs(scenes: CutTimelineScene[], v2Clips: ProgramVideoClipRef[]): number {
+  const v1 = cutTotalDurationMs(scenes)
+  const v2 = v2Clips.reduce((max, clip) => {
+    const end = Math.max(0, clip.timelineStartMs) + Math.max(0, clip.endMs - clip.startMs)
+    return Math.max(max, end)
+  }, 0)
+  return Math.max(v1, v2)
+}
+
 /**
  * Flatten free-arrange timeline into concat-ready slices.
- * Gaps → black; overlaps → winner (higher position) only.
+ * Gaps → black; V1 overlaps → higher position; unmuted V2 covers V1.
  */
-export function buildProgramExportSlices(scenes: CutTimelineScene[]): ProgramExportSlice[] {
-  const timeline = buildCutTimeline(scenes)
-  const total = cutTotalDurationMs(scenes)
-  if (timeline.length === 0 || total <= 0) return []
+export function buildProgramExportSlices(
+  scenes: CutTimelineScene[],
+  options?: { v2Clips?: ProgramVideoClipRef[]; v2Muted?: boolean },
+): ProgramExportSlice[] {
+  const v2Clips = options?.v2Clips ?? []
+  const v2Muted = Boolean(options?.v2Muted)
+  const total = programTotalMs(scenes, v2Muted ? [] : v2Clips)
+  if (total <= 0) return []
 
+  const timeline = buildCutTimeline(scenes)
   const boundaries = new Set<number>([0, total])
   for (const item of timeline) {
     boundaries.add(item.cutStartMs)
     boundaries.add(item.cutEndMs)
+  }
+  if (!v2Muted) {
+    for (const clip of v2Clips) {
+      const start = Math.max(0, Math.floor(clip.timelineStartMs))
+      boundaries.add(start)
+      boundaries.add(start + Math.max(0, clip.endMs - clip.startMs))
+    }
   }
   const sorted = [...boundaries].sort((a, b) => a - b)
   const raw: ProgramExportSlice[] = []
@@ -37,17 +61,34 @@ export function buildProgramExportSlices(scenes: CutTimelineScene[]): ProgramExp
     const to = sorted[i + 1]!
     if (to <= from) continue
     const mid = from + Math.floor((to - from) / 2)
-    const winner = findTimelineItemAtCutMs(timeline, mid)
-    if (!winner || mid >= winner.cutEndMs || mid < winner.cutStartMs) {
+    const hit = findProgramVideoAtCutMs({
+      cutMs: mid,
+      v1Scenes: scenes,
+      v2Clips,
+      v2Muted,
+    })
+    if (!hit) {
       raw.push({ kind: 'black', durationMs: to - from })
       continue
     }
-    const sourceStart = winner.scene.startMs + (from - winner.cutStartMs)
-    const sourceEnd = winner.scene.startMs + (to - winner.cutStartMs)
+    if (hit.lane === 'v2') {
+      const sourceStart = hit.clip.startMs + (from - hit.cutStartMs)
+      const sourceEnd = hit.clip.startMs + (to - hit.cutStartMs)
+      raw.push({
+        kind: 'media',
+        sceneId: hit.clip.id,
+        mediaAssetId: hit.clip.mediaAssetId,
+        startMs: sourceStart,
+        endMs: sourceEnd,
+      })
+      continue
+    }
+    const sourceStart = hit.item.scene.startMs + (from - hit.item.cutStartMs)
+    const sourceEnd = hit.item.scene.startMs + (to - hit.item.cutStartMs)
     raw.push({
       kind: 'media',
-      sceneId: winner.scene.id,
-      mediaAssetId: winner.scene.mediaAssetId,
+      sceneId: hit.item.scene.id,
+      mediaAssetId: hit.item.scene.mediaAssetId,
       startMs: sourceStart,
       endMs: sourceEnd,
     })

@@ -44,7 +44,7 @@ Assemble and edit a **Cut** from analysis scenes (and whole clips) drawn from **
 | Flow node for scenes.add | **Out of scope** |
 | Hit-Card capability confirm for batch add | **Out of scope** (local active-Cut path only) |
 | Extra audio bus track | Done — `cut-multi-track.md` |
-| Second video track (V2 overlay) | **Follow-up** — not this wave |
+| Second video track (V2 overlay) | Done — `video_overlay` + `cut_video_clips` (`cut-multi-track.md`) |
 
 ## Chrome parity
 

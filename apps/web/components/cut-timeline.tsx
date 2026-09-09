@@ -56,6 +56,17 @@ export type CutTimelineAudioClip = {
   label?: string
 }
 
+export type CutTimelineVideoClip = {
+  id: string
+  trackId: string
+  mediaAssetId: string
+  position: number
+  timelineStartMs: number
+  startMs: number
+  endMs: number
+  label?: string
+}
+
 export const MEDIA_DRAG_TYPE = 'application/vnd.videon.media+json'
 export const AUDIO_BUS_DRAG_TYPE = 'application/vnd.videon.audio-bus+json'
 
@@ -81,9 +92,12 @@ type CutTimelineProps = {
   mixPeaksByMediaId?: Record<string, number[]>
   sourceDurationMsByMediaId?: Record<string, number>
   audioClips?: CutTimelineAudioClip[]
+  videoClips?: CutTimelineVideoClip[]
   audioBusLabel?: string
   audioBusMuted?: boolean
+  videoOverlayMuted?: boolean
   selectedAudioClipId?: string | null
+  selectedVideoClipId?: string | null
   onSelectClip: (index: number) => void
   onSeek: (cutMs: number) => void
   onReorder: (sceneIds: string[]) => void
@@ -91,11 +105,17 @@ type CutTimelineProps = {
   onTrim: (sceneId: string, startMs: number, endMs: number, timelineStartMs?: number) => void
   onRollTrim?: (leftSceneId: string, boundaryMs: number) => void
   onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null; timelineStartMs?: number }) => void
+  onDropVideoOverlay?: (payload: MediaDragPayload & { timelineStartMs: number }) => void
   onDropAudioBus?: (payload: MediaDragPayload & { timelineStartMs: number }) => void
   onSelectAudioClip?: (clipId: string | null) => void
+  onSelectVideoClip?: (clipId: string | null) => void
   onMoveAudioClip?: (clipId: string, timelineStartMs: number) => void
+  onMoveVideoClip?: (clipId: string, timelineStartMs: number) => void
+  onTrimVideoClip?: (clipId: string, startMs: number, endMs: number, timelineStartMs?: number) => void
   onDeleteAudioClip?: (clipId: string) => void
+  onDeleteVideoClip?: (clipId: string) => void
   onToggleAudioBusMuted?: () => void
+  onToggleVideoOverlayMuted?: () => void
   onContextMenuRequest?: (request: CutTimelineContextMenuRequest) => void
   /** Per-track mute for the program audio mixer. */
   onTrackMutesChange?: (mutes: ProgramTrackMutes) => void
@@ -119,9 +139,12 @@ export function CutTimeline({
   mixPeaksByMediaId = {},
   sourceDurationMsByMediaId = {},
   audioClips = [],
+  videoClips = [],
   audioBusLabel = 'Voice-Over',
   audioBusMuted = false,
+  videoOverlayMuted = false,
   selectedAudioClipId = null,
+  selectedVideoClipId = null,
   onSelectClip,
   onSeek,
   onReorder,
@@ -129,11 +152,17 @@ export function CutTimeline({
   onTrim,
   onRollTrim,
   onDropMedia,
+  onDropVideoOverlay,
   onDropAudioBus,
   onSelectAudioClip,
+  onSelectVideoClip,
   onMoveAudioClip,
+  onMoveVideoClip,
+  onTrimVideoClip,
   onDeleteAudioClip,
+  onDeleteVideoClip,
   onToggleAudioBusMuted,
+  onToggleVideoOverlayMuted,
   onContextMenuRequest,
   onTrackMutesChange,
   hasStemAudio = false,
@@ -199,13 +228,22 @@ export function CutTimeline({
   }, [audioBusMuted])
 
   useEffect(() => {
+    setTracks((current) =>
+      current.v2.muted === videoOverlayMuted
+        ? current
+        : { ...current, v2: { ...current.v2, muted: videoOverlayMuted } },
+    )
+  }, [videoOverlayMuted])
+
+  useEffect(() => {
     onTrackMutesChange?.({
       v1: tracks.v1.muted,
+      v2: tracks.v2.muted,
       a1: tracks.a1.muted,
       a2: tracks.a2.muted,
       ab: tracks.ab.muted,
     })
-  }, [tracks.v1.muted, tracks.a1.muted, tracks.a2.muted, tracks.ab.muted, onTrackMutesChange])
+  }, [tracks.v1.muted, tracks.v2.muted, tracks.a1.muted, tracks.a2.muted, tracks.ab.muted, onTrackMutesChange])
 
   const timeline = useMemo(() => {
     const scenes = clips.map((clip) => {
@@ -548,6 +586,181 @@ export function CutTimeline({
 
   const playheadLeftPx = timelineLeftPx(cutPlayheadMs, msPerPixel)
   const dropHintLeftPx = dropHintMs !== null ? timelineLeftPx(dropHintMs, msPerPixel) : null
+
+  const [v2MovePreview, setV2MovePreview] = useState<{ clipId: string; timelineStartMs: number } | null>(null)
+  const [v2TrimPreview, setV2TrimPreview] = useState<{
+    clipId: string
+    startMs: number
+    endMs: number
+    timelineStartMs: number
+  } | null>(null)
+  const v2MoveRef = useRef<{
+    clipId: string
+    originTimelineStartMs: number
+    pointerStartX: number
+    armed: boolean
+    previewStartMs: number
+  } | null>(null)
+  const v2TrimRef = useRef<{
+    clipId: string
+    edge: 'start' | 'end'
+    startMs: number
+    endMs: number
+    timelineStartMs: number
+    pointerStartX: number
+  } | null>(null)
+
+  const visibleVideoClips = useMemo(() => {
+    return videoClips.map((clip) => {
+      const trimming = v2TrimPreview?.clipId === clip.id
+      const moving = v2MovePreview?.clipId === clip.id
+      return {
+        ...clip,
+        startMs: trimming ? v2TrimPreview.startMs : clip.startMs,
+        endMs: trimming ? v2TrimPreview.endMs : clip.endMs,
+        timelineStartMs: trimming
+          ? v2TrimPreview.timelineStartMs
+          : moving
+            ? v2MovePreview.timelineStartMs
+            : clip.timelineStartMs,
+      }
+    })
+  }, [videoClips, v2MovePreview, v2TrimPreview])
+
+  const onV2TrackDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (disabled || !onDropVideoOverlay) return
+    if (!event.dataTransfer.types.includes(MEDIA_DRAG_TYPE)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    if (lanesRef.current) {
+      const rect = lanesRef.current.getBoundingClientRect()
+      const maxX = Math.max(contentWidthPx, rect.width)
+      const x = Math.min(Math.max(event.clientX - rect.left, 0), maxX)
+      setDropHintMs(snapCutMs(Math.floor(x * msPerPixel), snapPoints))
+    }
+  }
+
+  const onV2TrackDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setDropHintMs(null)
+    if (disabled || !onDropVideoOverlay) return
+    const raw = event.dataTransfer.getData(MEDIA_DRAG_TYPE)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as MediaDragPayload
+      if (!payload.mediaAssetId) return
+      const rect = lanesRef.current?.getBoundingClientRect()
+      const maxX = Math.max(contentWidthPx, rect?.width ?? 0)
+      const cutMs =
+        rect != null
+          ? snapCutMs(
+              Math.floor(Math.min(Math.max(event.clientX - rect.left, 0), maxX) * msPerPixel),
+              snapPoints,
+            )
+          : 0
+      onDropVideoOverlay({ ...payload, timelineStartMs: cutMs })
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const startV2ClipMove = (event: ReactPointerEvent<HTMLDivElement>, clip: CutTimelineVideoClip) => {
+    if (disabled || !onMoveVideoClip || tracks.v2.muted) return
+    if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
+    event.stopPropagation()
+    const origin = {
+      clipId: clip.id,
+      originTimelineStartMs: clip.timelineStartMs,
+      pointerStartX: event.clientX,
+      armed: false,
+      previewStartMs: clip.timelineStartMs,
+    }
+    v2MoveRef.current = origin
+    const onMove = (moveEvent: PointerEvent) => {
+      const current = v2MoveRef.current
+      if (!current || current.clipId !== origin.clipId) return
+      const deltaPx = moveEvent.clientX - current.pointerStartX
+      if (!current.armed && Math.abs(deltaPx) < 5) return
+      current.armed = true
+      const nextStart = Math.max(0, snapCutMs(current.originTimelineStartMs + Math.round(deltaPx * msPerPixel), snapPoints))
+      current.previewStartMs = nextStart
+      setV2MovePreview({ clipId: current.clipId, timelineStartMs: nextStart })
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      const current = v2MoveRef.current
+      v2MoveRef.current = null
+      setV2MovePreview(null)
+      if (!current?.armed || !onMoveVideoClip) return
+      if (current.previewStartMs === current.originTimelineStartMs) return
+      onMoveVideoClip(current.clipId, current.previewStartMs)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  const startV2Trim = (
+    event: ReactPointerEvent<HTMLSpanElement>,
+    clip: CutTimelineVideoClip,
+    edge: 'start' | 'end',
+  ) => {
+    event.stopPropagation()
+    if (disabled || !onTrimVideoClip) return
+    v2TrimRef.current = {
+      clipId: clip.id,
+      edge,
+      startMs: clip.startMs,
+      endMs: clip.endMs,
+      timelineStartMs: clip.timelineStartMs,
+      pointerStartX: event.clientX,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const onV2TrimMove = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    const trim = v2TrimRef.current
+    if (!trim) return
+    const deltaMs = Math.round((event.clientX - trim.pointerStartX) * msPerPixel)
+    const mediaDurationMs = sourceDurationMsByMediaId[
+      videoClips.find((clip) => clip.id === trim.clipId)?.mediaAssetId ?? ''
+    ] ?? Math.max(trim.endMs, MIN_CUT_CLIP_MS)
+    const preview = computeTrimPreview({
+      mode: 'ripple',
+      edge: trim.edge,
+      startMs: trim.startMs,
+      endMs: trim.endMs,
+      sourceDelta: deltaMs,
+      mediaDurationMs,
+      nextClip: null,
+    })
+    if (!preview) return
+    const timelineStartMs =
+      trim.edge === 'start'
+        ? Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
+        : trim.timelineStartMs
+    setV2TrimPreview({ clipId: trim.clipId, ...preview, timelineStartMs })
+  }
+
+  const endV2Trim = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    const trim = v2TrimRef.current
+    const preview = v2TrimPreview
+    v2TrimRef.current = null
+    setV2TrimPreview(null)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    if (!trim || !preview || preview.clipId !== trim.clipId || !onTrimVideoClip) return
+    if (
+      preview.startMs === trim.startMs &&
+      preview.endMs === trim.endMs &&
+      preview.timelineStartMs === trim.timelineStartMs
+    ) {
+      return
+    }
+    onTrimVideoClip(preview.clipId, preview.startMs, preview.endMs, preview.timelineStartMs)
+  }
+
   usePlayheadFollow(viewportRef, playheadLeftPx, !disabled)
   const activeTxIndex = useMemo(
     () =>
@@ -598,6 +811,18 @@ export function CutTimeline({
               onToggleHidden={() => toggleTrack('v1', 'hidden')}
               onToggleMuted={() => toggleTrack('v1', 'muted')}
               muteHint={hasStemAudio ? 'Originalton (nach Split stumm)' : 'Program-Ton stumm'}
+            />
+            <TimelineTrackHeader
+              id="v2"
+              label="V2"
+              hidden={tracks.v2.hidden}
+              muted={tracks.v2.muted}
+              onToggleHidden={() => toggleTrack('v2', 'hidden')}
+              onToggleMuted={() => {
+                toggleTrack('v2', 'muted')
+                onToggleVideoOverlayMuted?.()
+              }}
+              muteHint="Overlay ausblenden (V1 bleibt)"
             />
             <TimelineTrackHeader
               id="a1"
@@ -715,6 +940,7 @@ export function CutTimeline({
                         event.stopPropagation()
                         if (moveRef.current?.armed) return
                         onSelectAudioClip?.(null)
+                        onSelectVideoClip?.(null)
                         onSelectClip(item.index)
                         seekFromPointer(event.clientX)
                       }}
@@ -762,6 +988,81 @@ export function CutTimeline({
                 })
                   : null}
                 {!tracks.v1.hidden && dropHintLeftPx !== null ? (
+                  <div className="videon-cut-timeline__drop-hint" style={{ left: `${dropHintLeftPx}px` }} />
+                ) : null}
+              </div>
+
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--video videon-cut-timeline__track--v2${tracks.v2.hidden ? ' is-collapsed' : ''}${tracks.v2.muted ? ' is-muted' : ''}`}
+                onPointerDown={onTrackPointerDown}
+                onDragOver={onV2TrackDragOver}
+                onDragLeave={() => setDropHintMs(null)}
+                onDrop={onV2TrackDrop}
+                role="slider"
+                aria-label="Video-Overlay V2"
+                aria-valuemin={0}
+                aria-valuemax={totalDurationMs}
+                aria-valuenow={cutPlayheadMs}
+              >
+                {!tracks.v2.hidden
+                  ? visibleVideoClips.map((clip) => {
+                      const durationMs = Math.max(0, clip.endMs - clip.startMs)
+                      const leftPx = timelineLeftPx(clip.timelineStartMs, msPerPixel)
+                      const widthPx = timelineWidthPx(durationMs, msPerPixel)
+                      const isActive = selectedVideoClipId === clip.id
+                      const thumbMs = clip.startMs + Math.floor(durationMs / 2)
+                      const playbackUrl = playbackUrlByMediaId[clip.mediaAssetId] ?? null
+                      const label = clip.label ?? `V2`
+                      return (
+                        <TimelineClip
+                          key={clip.id}
+                          label={label}
+                          leftPct={contentWidthPx > 0 ? (leftPx / contentWidthPx) * 100 : 0}
+                          widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
+                          active={isActive}
+                          tone="accent"
+                          className={`videon-cut-timeline__clip videon-cut-timeline__clip--v2${isActive ? ' is-active-clip' : ''}${v2MovePreview?.clipId === clip.id ? ' is-dragging' : ''}`}
+                          style={{ pointerEvents: tracks.v2.muted ? 'none' : undefined }}
+                          onPointerDown={(event) => startV2ClipMove(event, clip)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            if (v2MoveRef.current?.armed) return
+                            onSelectAudioClip?.(null)
+                            onSelectVideoClip?.(clip.id)
+                            seekFromPointer(event.clientX)
+                          }}
+                          title={label}
+                        >
+                          <TimelineClipThumbnail
+                            sourceMs={thumbMs}
+                            mediaAssetId={clip.mediaAssetId}
+                            platformProjectId={platformProjectId}
+                            playbackUrl={playbackUrl}
+                          />
+                          <span className="videon-cut-timeline__clip-duration" aria-hidden="true">
+                            {formatClock(durationMs)}
+                          </span>
+                          <span
+                            className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--start"
+                            title="Resize: Startkante"
+                            onPointerDown={(event) => startV2Trim(event, clip, 'start')}
+                            onPointerMove={onV2TrimMove}
+                            onPointerUp={endV2Trim}
+                            onPointerCancel={endV2Trim}
+                          />
+                          <span
+                            className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--end"
+                            title="Resize: Endkante"
+                            onPointerDown={(event) => startV2Trim(event, clip, 'end')}
+                            onPointerMove={onV2TrimMove}
+                            onPointerUp={endV2Trim}
+                            onPointerCancel={endV2Trim}
+                          />
+                        </TimelineClip>
+                      )
+                    })
+                  : null}
+                {!tracks.v2.hidden && dropHintLeftPx !== null ? (
                   <div className="videon-cut-timeline__drop-hint" style={{ left: `${dropHintLeftPx}px` }} />
                 ) : null}
               </div>

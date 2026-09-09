@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import { findCut, listScenesForCut, type Cut, type CutScene } from '@/lib/db/cuts'
 import { listCutAudioClips, listCutTracks, type CutAudioClip } from '@/lib/db/cut-audio'
+import { listCutVideoClips } from '@/lib/db/cut-video'
 import {
   findCutExport,
   markCutExportFailed,
@@ -207,6 +208,15 @@ async function buildSegments(input: {
   sourceCache: Map<string, string>
   reencode: boolean
   cut: Cut
+  v2Clips?: Array<{
+    id: string
+    mediaAssetId: string
+    position: number
+    timelineStartMs: number
+    startMs: number
+    endMs: number
+  }>
+  v2Muted?: boolean
 }): Promise<string[]> {
   const segmentPaths: string[] = []
   const width = input.cut.width && input.cut.width > 0 ? input.cut.width : 1280
@@ -222,9 +232,16 @@ async function buildSegments(input: {
       endMs: scene.endMs,
       timelineStartMs: scene.timelineStartMs ?? 0,
     })),
+    {
+      v2Clips: input.v2Clips ?? [],
+      v2Muted: input.v2Muted,
+    },
   )
 
-  const needsPadOrOverlap = slices.some((slice) => slice.kind === 'black') || slices.length !== input.scenes.length
+  const needsPadOrOverlap =
+    slices.some((slice) => slice.kind === 'black') ||
+    Boolean(input.v2Clips?.length) ||
+    slices.length !== input.scenes.length
   const forceReencode = input.reencode || needsPadOrOverlap
 
   for (const slice of slices) {
@@ -331,8 +348,10 @@ async function runPremiereXmlExport(input: {
   const zipPath = join(tmpdir(), `videon-export-${input.exportId}.zip`)
   const tracks = await listCutTracks(input.cut.id)
   const audioClips = await listCutAudioClips(input.cut.id)
+  const videoClipsAll = await listCutVideoClips(input.cut.id)
   const unmutedTrackIds = new Set(tracks.filter((track) => !track.muted).map((track) => track.id))
   const busClips = audioClips.filter((clip) => unmutedTrackIds.has(clip.trackId))
+  const overlayClips = videoClipsAll.filter((clip) => unmutedTrackIds.has(clip.trackId))
 
   try {
     for (const scene of input.scenes) {
@@ -351,11 +370,11 @@ async function runPremiereXmlExport(input: {
       sourceCache.set(media.id, sourcePath)
     }
 
-    for (const clip of busClips) {
+    for (const clip of [...busClips, ...overlayClips]) {
       if (mediaById.has(clip.mediaAssetId)) continue
       const media = await findMediaAssetDetail(clip.mediaAssetId)
       if (!media || media.workspaceId !== input.cut.workspaceId) {
-        throw new Error(`Bus media unavailable for clip ${clip.id}`)
+        throw new Error(`Track media unavailable for clip ${clip.id}`)
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
@@ -388,6 +407,18 @@ async function runPremiereXmlExport(input: {
           originalFilename: media.originalFilename,
           zipMediaName: zipNames.get(scene.mediaAssetId),
           mediaDurationMs: media.durationMs,
+        }
+      }),
+      overlayClips: overlayClips.map((clip) => {
+        const media = mediaById.get(clip.mediaAssetId)!
+        return {
+          id: clip.id,
+          mediaAssetId: clip.mediaAssetId,
+          timelineStartMs: clip.timelineStartMs,
+          startMs: clip.startMs,
+          endMs: clip.endMs,
+          originalFilename: media.originalFilename,
+          zipMediaName: zipNames.get(clip.mediaAssetId),
         }
       }),
       busClips: busClips.map((clip) => {
@@ -474,8 +505,11 @@ export async function runCutExport(exportId: string): Promise<void> {
   const outputPath = join(tmpdir(), `videon-export-${exportId}.mp4`)
   const tracks = await listCutTracks(cut.id)
   const audioClipsAll = await listCutAudioClips(cut.id)
+  const videoClipsAll = await listCutVideoClips(cut.id)
   const unmutedTrackIds = new Set(tracks.filter((track) => !track.muted).map((track) => track.id))
   const busClips = audioClipsAll.filter((clip) => unmutedTrackIds.has(clip.trackId))
+  const overlayClips = videoClipsAll.filter((clip) => unmutedTrackIds.has(clip.trackId))
+  const v2Muted = !tracks.some((track) => track.kind === 'video_overlay' && !track.muted)
 
   try {
     for (const scene of scenes) {
@@ -494,11 +528,11 @@ export async function runCutExport(exportId: string): Promise<void> {
       sourceCache.set(scene.mediaAssetId, sourcePath)
     }
 
-    for (const clip of busClips) {
+    for (const clip of [...busClips, ...overlayClips]) {
       if (sourceCache.has(clip.mediaAssetId)) continue
       const media = await findMediaAssetDetail(clip.mediaAssetId)
       if (!media || media.workspaceId !== cut.workspaceId) {
-        throw new Error(`Bus media unavailable for clip ${clip.id}`)
+        throw new Error(`Track media unavailable for clip ${clip.id}`)
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-export-source-${clip.mediaAssetId}-${randomUUID()}`)
@@ -510,15 +544,29 @@ export async function runCutExport(exportId: string): Promise<void> {
       sourceCache.set(clip.mediaAssetId, sourcePath)
     }
 
-    const normalize = cutExportNeedsNormalize(cut, scenes, mediaById)
-    segmentPaths = await buildSegments({ scenes, sourceCache, reencode: normalize, cut })
+    const normalize = cutExportNeedsNormalize(cut, scenes, mediaById) || overlayClips.length > 0
+    const segmentInput = {
+      scenes,
+      sourceCache,
+      cut,
+      v2Clips: overlayClips.map((clip) => ({
+        id: clip.id,
+        mediaAssetId: clip.mediaAssetId,
+        position: clip.position,
+        timelineStartMs: clip.timelineStartMs,
+        startMs: clip.startMs,
+        endMs: clip.endMs,
+      })),
+      v2Muted,
+    }
+    segmentPaths = await buildSegments({ ...segmentInput, reencode: normalize })
 
     try {
       await concatSegments(segmentPaths, programPath, normalize)
     } catch (error) {
       if (normalize) throw error
       for (const path of segmentPaths) await unlink(path).catch(() => {})
-      segmentPaths = await buildSegments({ scenes, sourceCache, reencode: true, cut })
+      segmentPaths = await buildSegments({ ...segmentInput, reencode: true })
       await concatSegments(segmentPaths, programPath, true)
     }
 

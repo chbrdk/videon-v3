@@ -5,10 +5,12 @@ import { CUT_SCENE_POSITION_PARK } from './cuts'
 
 const MIN_CLIP_MS = 500
 
+export type CutTrackKind = 'audio_bus' | 'video_overlay'
+
 export type CutTrack = {
   id: string
   cutId: string
-  kind: 'audio_bus'
+  kind: CutTrackKind
   trackIndex: number
   name: string
   muted: boolean
@@ -30,7 +32,7 @@ export type CutAudioClip = {
 type TrackRow = {
   id: string
   cut_id: string
-  kind: 'audio_bus'
+  kind: CutTrackKind
   track_index: number
   name: string
   muted: boolean
@@ -97,11 +99,35 @@ export async function ensureDefaultAudioBusTrack(cutId: string): Promise<CutTrac
   return mapTrack(inserted.rows[0]!)
 }
 
+export async function ensureDefaultVideoOverlayTrack(cutId: string): Promise<CutTrack> {
+  const existing = await databasePool().query<TrackRow>(
+    `select id, cut_id, kind, track_index, name, muted, created_at
+       from cut_tracks
+      where cut_id = $1 and kind = 'video_overlay'
+      order by track_index asc
+      limit 1`,
+    [cutId],
+  )
+  if (existing.rows[0]) return mapTrack(existing.rows[0])
+
+  const id = randomUUID()
+  const inserted = await databasePool().query<TrackRow>(
+    `insert into cut_tracks (id, cut_id, kind, track_index, name, muted)
+     values ($1, $2, 'video_overlay', 0, 'V2', false)
+     on conflict (cut_id, kind, track_index) do update set name = cut_tracks.name
+     returning id, cut_id, kind, track_index, name, muted, created_at`,
+    [id, cutId],
+  )
+  return mapTrack(inserted.rows[0]!)
+}
+
 export async function listCutTracks(cutId: string): Promise<CutTrack[]> {
   await ensureDefaultAudioBusTrack(cutId)
+  await ensureDefaultVideoOverlayTrack(cutId)
   const result = await databasePool().query<TrackRow>(
     `select id, cut_id, kind, track_index, name, muted, created_at
-       from cut_tracks where cut_id = $1 order by track_index asc`,
+       from cut_tracks where cut_id = $1
+      order by case kind when 'video_overlay' then 0 when 'audio_bus' then 1 else 2 end, track_index asc`,
     [cutId],
   )
   return result.rows.map(mapTrack)

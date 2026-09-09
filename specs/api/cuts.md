@@ -68,17 +68,21 @@ Create a Cut.
 - Inserted in array order after `afterSceneId` (or at end).
 - Returns `{ scenes }` full ordered timeline.
 
-### New: audio bus (`cut-multi-track.md`)
+### New: audio bus + V2 overlay (`cut-multi-track.md`)
 
 | Action | Body | Result |
 |--------|------|--------|
 | `addAudioClip` | `mediaAssetId`, `startMs`, `endMs`, optional `timelineStartMs`, `trackId` | `{ tracks, audioClips }` |
-| `trimAudioClip` | `audioClipId`, `startMs`?, `endMs`? | `{ audioClips }` |
+| `trimAudioClip` | `audioClipId`, `startMs`?, `endMs`?, optional `timelineStartMs` | `{ audioClips }` |
 | `moveAudioClip` | `audioClipId`, `timelineStartMs` | `{ audioClips }` |
 | `deleteAudioClip` | `audioClipId` | `{ audioClips }` |
+| `addVideoClip` | `mediaAssetId`, `startMs`, `endMs`, optional `timelineStartMs`, `trackId` | `{ tracks, videoClips }` |
+| `trimVideoClip` | `videoClipId`, `startMs`?, `endMs`?, optional `timelineStartMs` | `{ videoClips }` |
+| `moveVideoClip` | `videoClipId`, `timelineStartMs` | `{ videoClips }` |
+| `deleteVideoClip` | `videoClipId` | `{ videoClips }` |
 | `setTrackMuted` | `trackId`, `muted` | `{ tracks }` |
 
-`GET /api/cuts/:id` includes `tracks` and `audioClips` (empty arrays when none).
+`GET /api/cuts/:id` includes `tracks`, `audioClips`, and `videoClips` (empty arrays when none).
 
 ### Waveform peaks on Cut detail
 

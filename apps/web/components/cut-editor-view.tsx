@@ -29,6 +29,7 @@ import {
   splitSourceMsForCutPlayhead,
   type TranscriptSegment,
 } from '@/lib/cut-timeline'
+import { findProgramVideoAtCutMs } from '@/lib/cut-program-hit'
 import {
   snapshotFromClips,
   type CutEditorSnapshot,
@@ -114,6 +115,17 @@ type CutAudioClip = {
   endMs: number
 }
 
+type CutVideoClip = {
+  id: string
+  trackId: string
+  cutId: string
+  position: number
+  mediaAssetId: string
+  timelineStartMs: number
+  startMs: number
+  endMs: number
+}
+
 const SEEK_STEP_MS = 1000
 
 export function CutEditorView({
@@ -180,6 +192,7 @@ export function CutEditorView({
   const [monitorEngaged, setMonitorEngaged] = useState(false)
   const [trackMutes, setTrackMutes] = useState<ProgramTrackMutes>({
     v1: false,
+    v2: false,
     a1: false,
     a2: false,
     ab: false,
@@ -194,7 +207,9 @@ export function CutEditorView({
   >({})
   const [cutTracks, setCutTracks] = useState<CutTrack[]>([])
   const [audioClips, setAudioClips] = useState<CutAudioClip[]>([])
+  const [videoClips, setVideoClips] = useState<CutVideoClip[]>([])
   const [selectedAudioClipId, setSelectedAudioClipId] = useState<string | null>(null)
+  const [selectedVideoClipId, setSelectedVideoClipId] = useState<string | null>(null)
 
   const timeline = useMemo(
     () =>
@@ -210,20 +225,25 @@ export function CutEditorView({
       ),
     [clips],
   )
-  const totalDurationMs = useMemo(
-    () =>
-      cutTotalDurationMs(
-        clips.map((clip) => ({
-          id: clip.scene.id,
-          position: clip.scene.position,
-          mediaAssetId: clip.scene.mediaAssetId,
-          startMs: clip.scene.startMs,
-          endMs: clip.scene.endMs,
-          timelineStartMs: clip.scene.timelineStartMs ?? 0,
-        })),
-      ),
-    [clips],
-  )
+  const totalDurationMs = useMemo(() => {
+    const v1 = cutTotalDurationMs(
+      clips.map((clip) => ({
+        id: clip.scene.id,
+        position: clip.scene.position,
+        mediaAssetId: clip.scene.mediaAssetId,
+        startMs: clip.scene.startMs,
+        endMs: clip.scene.endMs,
+        timelineStartMs: clip.scene.timelineStartMs ?? 0,
+      })),
+    )
+    const v2 = videoClips.reduce((max, clip) => {
+      const end = clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs)
+      return Math.max(max, end)
+    }, 0)
+    return Math.max(v1, v2)
+  }, [clips, videoClips])
+  const videoOverlayTrack = cutTracks.find((track) => track.kind === 'video_overlay') ?? null
+  const v2Muted = Boolean(trackMutes.v2 || videoOverlayTrack?.muted)
   const transcriptSegments = useMemo(
     () => mapTranscriptToCutTimeline(timeline, transcriptsByMediaId),
     [timeline, transcriptsByMediaId],
@@ -243,7 +263,20 @@ export function CutEditorView({
     clips[activeIndex] ??
     null
   const inTimelineGap = Boolean(
-    timeline.length > 0 && cutPlayheadMs < totalDurationMs && !findTimelineItemAtCutMs(timeline, cutPlayheadMs),
+    totalDurationMs > 0 &&
+      !findProgramVideoAtCutMs({
+        cutMs: cutPlayheadMs,
+        v1Scenes: clips.map((clip) => ({
+          id: clip.scene.id,
+          position: clip.scene.position,
+          mediaAssetId: clip.scene.mediaAssetId,
+          startMs: clip.scene.startMs,
+          endMs: clip.scene.endMs,
+          timelineStartMs: clip.scene.timelineStartMs ?? 0,
+        })),
+        v2Clips: videoClips,
+        v2Muted,
+      }),
   )
 
   const rememberSnapshot = useCallback(() => {
@@ -272,6 +305,7 @@ export function CutEditorView({
       >
       tracks?: CutTrack[]
       audioClips?: CutAudioClip[]
+      videoClips?: CutVideoClip[]
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || t('cutEditor.loadFailed'))
@@ -304,6 +338,7 @@ export function CutEditorView({
     )
     setCutTracks(body.tracks ?? [])
     setAudioClips(body.audioClips ?? [])
+    setVideoClips(body.videoClips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
     const nextVoice: Record<string, number[]> = {}
     const nextMusic: Record<string, number[]> = {}
@@ -417,8 +452,21 @@ export function CutEditorView({
       advanceLockRef.current = null
       const clamped = Math.max(0, Math.min(cutMs, totalDurationMs))
       setCutPlayheadMs(clamped)
-      const item = findTimelineItemAtCutMs(timeline, clamped)
-      if (!item) {
+      const v1Scenes = clips.map((clip) => ({
+        id: clip.scene.id,
+        position: clip.scene.position,
+        mediaAssetId: clip.scene.mediaAssetId,
+        startMs: clip.scene.startMs,
+        endMs: clip.scene.endMs,
+        timelineStartMs: clip.scene.timelineStartMs ?? 0,
+      }))
+      const hit = findProgramVideoAtCutMs({
+        cutMs: clamped,
+        v1Scenes,
+        v2Clips: videoClips,
+        v2Muted,
+      })
+      if (!hit) {
         const video = videoRef.current
         if (video && !video.paused) {
           playingRef.current = false
@@ -426,14 +474,29 @@ export function CutEditorView({
         }
         return
       }
-      setActiveIndex(item.index)
-      const sourceMs = item.scene.startMs + (clamped - item.cutStartMs)
+      if (hit.lane === 'v2') {
+        setSelectedVideoClipId(hit.clip.id)
+        setSelectedAudioClipId(null)
+        const mediaId = hit.clip.mediaAssetId
+        const url = playbackUrlByMediaId[mediaId] ?? playbackCacheRef.current.get(mediaId) ?? null
+        if (url) {
+          currentMediaIdRef.current = mediaId
+          setPlaybackUrl(url)
+        }
+        const video = videoRef.current
+        if (video && !Number.isNaN(video.duration)) {
+          video.currentTime = hit.sourceMs / 1000
+        }
+        return
+      }
+      setSelectedVideoClipId(null)
+      setActiveIndex(hit.item.index)
       const video = videoRef.current
       if (video && !Number.isNaN(video.duration)) {
-        video.currentTime = sourceMs / 1000
+        video.currentTime = hit.sourceMs / 1000
       }
     },
-    [timeline, totalDurationMs],
+    [clips, playbackUrlByMediaId, totalDurationMs, v2Muted, videoClips],
   )
 
   useEffect(() => {
@@ -441,6 +504,7 @@ export function CutEditorView({
       ...new Set([
         ...clips.map((clip) => clip.scene.mediaAssetId),
         ...audioClips.map((clip) => clip.mediaAssetId),
+        ...videoClips.map((clip) => clip.mediaAssetId),
       ]),
     ]
     if (mediaIds.length === 0) {
@@ -472,7 +536,7 @@ export function CutEditorView({
       cancelled = true
       globalThis.clearTimeout(timer)
     }
-  }, [clips, audioClips, platformProjectId])
+  }, [clips, audioClips, videoClips, platformProjectId])
 
   useEffect(() => {
     setLeftRailOpen(readCutRailOpen(CUT_LEFT_OPEN_KEY, true))
@@ -856,6 +920,21 @@ export function CutEditorView({
           'Voice-Over',
       })),
     [audioClips, audioBusTrack?.name, libraryMedia],
+  )
+
+  const timelineVideoClips = useMemo(
+    () =>
+      videoClips.map((clip) => ({
+        id: clip.id,
+        trackId: clip.trackId,
+        mediaAssetId: clip.mediaAssetId,
+        position: clip.position,
+        timelineStartMs: clip.timelineStartMs,
+        startMs: clip.startMs,
+        endMs: clip.endMs,
+        label: libraryMedia.find((media) => media.id === clip.mediaAssetId)?.originalFilename ?? 'V2',
+      })),
+    [libraryMedia, videoClips],
   )
 
   const addWholeVideoFromBin = async (mediaId: string) => {
@@ -1441,11 +1520,15 @@ export function CutEditorView({
           mixPeaksByMediaId={mixPeaksByMediaId}
           sourceDurationMsByMediaId={sourceDurationMsByMediaId}
           audioClips={timelineAudioClips}
+          videoClips={timelineVideoClips}
           audioBusLabel={audioBusTrack?.name ?? 'Voice-Over'}
           audioBusMuted={Boolean(audioBusTrack?.muted)}
+          videoOverlayMuted={Boolean(videoOverlayTrack?.muted)}
           selectedAudioClipId={selectedAudioClipId}
+          selectedVideoClipId={selectedVideoClipId}
           onSelectClip={(index) => {
             setSelectedAudioClipId(null)
+            setSelectedVideoClipId(null)
             setActiveIndex(index)
             setRightOpen(true)
           }}
@@ -1467,6 +1550,15 @@ export function CutEditorView({
             void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
           }
           onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
+          onDropVideoOverlay={(payload) =>
+            void patchTimeline({
+              action: 'addVideoClip',
+              mediaAssetId: payload.mediaAssetId,
+              startMs: payload.startMs,
+              endMs: payload.endMs,
+              timelineStartMs: payload.timelineStartMs,
+            })
+          }
           onDropAudioBus={(payload) =>
             void patchTimeline({
               action: 'addAudioClip',
@@ -1478,18 +1570,49 @@ export function CutEditorView({
           }
           onSelectAudioClip={(clipId) => {
             setSelectedAudioClipId(clipId)
-            if (clipId) setRightOpen(true)
+            if (clipId) {
+              setSelectedVideoClipId(null)
+              setRightOpen(true)
+            }
+          }}
+          onSelectVideoClip={(clipId) => {
+            setSelectedVideoClipId(clipId)
+            if (clipId) {
+              setSelectedAudioClipId(null)
+              setRightOpen(true)
+            }
           }}
           onMoveAudioClip={(clipId, timelineStartMs) =>
             void patchTimeline({ action: 'moveAudioClip', audioClipId: clipId, timelineStartMs })
           }
+          onMoveVideoClip={(clipId, timelineStartMs) =>
+            void patchTimeline({ action: 'moveVideoClip', videoClipId: clipId, timelineStartMs })
+          }
+          onTrimVideoClip={(clipId, startMs, endMs, timelineStartMs) =>
+            void patchTimeline({
+              action: 'trimVideoClip',
+              videoClipId: clipId,
+              startMs,
+              endMs,
+              ...(typeof timelineStartMs === 'number' ? { timelineStartMs } : {}),
+            })
+          }
           onDeleteAudioClip={(clipId) => void patchTimeline({ action: 'deleteAudioClip', audioClipId: clipId })}
+          onDeleteVideoClip={(clipId) => void patchTimeline({ action: 'deleteVideoClip', videoClipId: clipId })}
           onToggleAudioBusMuted={() => {
             if (!audioBusTrack) return
             void patchTimeline({
               action: 'setTrackMuted',
               trackId: audioBusTrack.id,
               muted: !audioBusTrack.muted,
+            })
+          }}
+          onToggleVideoOverlayMuted={() => {
+            if (!videoOverlayTrack) return
+            void patchTimeline({
+              action: 'setTrackMuted',
+              trackId: videoOverlayTrack.id,
+              muted: !videoOverlayTrack.muted,
             })
           }}
           onContextMenuRequest={openTimelineContextMenu}

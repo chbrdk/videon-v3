@@ -3,6 +3,8 @@ import type { RefObject } from 'react'
 
 export type ProgramTrackMutes = {
   v1: boolean
+  /** V2 video overlay mute (hides overlay; V1 remains). */
+  v2?: boolean
   a1: boolean
   a2: boolean
   /** Extra Cut audio bus (Voice-Over); optional for source editor. */

@@ -31,6 +31,17 @@ export type PremiereXmlBusClip = {
   zipMediaName?: string
 }
 
+/** V2 full-frame overlay clips on a second video track. */
+export type PremiereXmlOverlayClip = {
+  id: string
+  mediaAssetId: string
+  timelineStartMs: number
+  startMs: number
+  endMs: number
+  originalFilename: string
+  zipMediaName?: string
+}
+
 export type PremiereXmlCut = {
   id: string
   name: string
@@ -143,14 +154,19 @@ export function buildPremiereXmeml(input: {
   cut: PremiereXmlCut
   scenes: PremiereXmlScene[]
   busClips?: PremiereXmlBusClip[]
+  overlayClips?: PremiereXmlOverlayClip[]
 }): string {
   const fps = input.cut.frameRate && input.cut.frameRate > 0 ? input.cut.frameRate : 25
   const width = input.cut.width && input.cut.width > 0 ? input.cut.width : 1920
   const height = input.cut.height && input.cut.height > 0 ? input.cut.height : 1080
   const scenes = input.scenes
   const busClips = input.busClips ?? []
+  const overlayClips = input.overlayClips ?? []
   const n = scenes.length
-  const totalMs = scenes.reduce((sum, scene) => sum + Math.max(0, scene.endMs - scene.startMs), 0)
+  const o = overlayClips.length
+  const sceneEnds = scenes.map((scene, index) => timelineStartMs(scenes, index) + Math.max(0, scene.endMs - scene.startMs))
+  const overlayEnds = overlayClips.map((clip) => clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs))
+  const totalMs = Math.max(0, ...sceneEnds, ...overlayEnds, 0)
   const totalFrames = framesFromMs(totalMs, fps)
   const sequenceName = escapeXml(input.cut.name || 'Cut')
   const timebase = Math.round(fps)
@@ -158,10 +174,11 @@ export function buildPremiereXmeml(input: {
   const definedFiles = new Set<string>()
 
   // Audio clip ids continue after all video ids (auto-editor / Premiere convention).
-  const audioLFirstId = n + 1
-  const audioRFirstId = n * 2 + 1
-  const busLFirstId = n * 3 + 1
-  const busRFirstId = n * 3 + 1 + Math.max(busClips.length, 1)
+  const videoCount = n + o
+  const audioLFirstId = videoCount + 1
+  const audioRFirstId = videoCount * 2 + 1
+  const busLFirstId = videoCount * 3 + 1
+  const busRFirstId = videoCount * 3 + 1 + Math.max(busClips.length, 1)
 
   const videoLinkBlock = (index: number) => {
     const clipindex = index + 1
@@ -251,6 +268,59 @@ export function buildPremiereXmeml(input: {
 							<trackindex>1</trackindex>
 						</sourcetrack>
 						${videoLinkBlock(index)}
+					</clipitem>`
+    })
+    .join('')
+
+  const overlayVideoClips = overlayClips
+    .map((clip, index) => {
+      const clipDurMs = Math.max(0, clip.endMs - clip.startMs)
+      const displayName = escapeXml(clip.originalFilename || `overlay-${index + 1}`)
+      const clipIndex = n + index + 1
+      const fileId = `file-${clip.mediaAssetId}`
+      const zipName =
+        clip.zipMediaName || sanitizePremiereMediaBasename(clip.originalFilename || '', clip.mediaAssetId)
+      const fileXml = definedFiles.has(fileId)
+        ? `<file id="${fileId}"/>`
+        : (() => {
+            definedFiles.add(fileId)
+            return `<file id="${fileId}">
+							<name>${displayName}</name>
+							<pathurl>file://media/${escapeXml(zipName)}</pathurl>
+							${rate}
+							<duration></duration>
+							<timecode>
+								${rate}
+								<string>00:00:00:00</string>
+								<frame>0</frame>
+								<displayformat>NDF</displayformat>
+							</timecode>
+							<media>
+								<video>
+									<samplecharacteristics>
+										${rate}
+										<width>${width}</width>
+										<height>${height}</height>
+										<pixelaspectratio>square</pixelaspectratio>
+										<fielddominance>none</fielddominance>
+									</samplecharacteristics>
+								</video>
+							</media>
+						</file>`
+          })()
+      return `
+					<clipitem id="clipitem-${clipIndex}" premiereChannelType="video">
+						<name>${displayName}</name>
+						<enabled>TRUE</enabled>
+						<start>${framesFromMs(clip.timelineStartMs, fps)}</start>
+						<end>${framesFromMs(clip.timelineStartMs + clipDurMs, fps)}</end>
+						<in>${framesFromMs(clip.startMs, fps)}</in>
+						<out>${framesFromMs(clip.endMs, fps)}</out>
+						${fileXml}
+						<sourcetrack>
+							<mediatype>video</mediatype>
+							<trackindex>1</trackindex>
+						</sourcetrack>
 					</clipitem>`
     })
     .join('')
@@ -382,6 +452,13 @@ export function buildPremiereXmeml(input: {
 				<track>
 					${videoClips}
 				</track>
+				${
+          overlayClips.length > 0
+            ? `<track>
+					${overlayVideoClips}
+				</track>`
+            : ''
+        }
 			</video>
 			<audio>
 				<numOutputChannels>2</numOutputChannels>
