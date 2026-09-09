@@ -1,14 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
 import { useInViewOnce } from '@/lib/use-in-view'
-import { mediaFramePosterUrl } from '@/lib/media-frame-poster'
+import { FRAME_WIDTH_TIMELINE, mediaFramePosterUrl } from '@/lib/media-frame-poster'
 import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
-import { useFramePoster } from '@/lib/use-frame-poster'
 
 /**
  * Timeline / filmstrip poster.
- * Prefer Frame API when media ids are known; fall back to client capture from stream URL.
+ * Prefer Frame API URL (browser cache); fall back to client capture on error / missing ids.
  */
 export function TimelineClipThumbnail({
   sourceMs,
@@ -20,7 +20,6 @@ export function TimelineClipThumbnail({
   sourceMs: number
   mediaAssetId?: string
   platformProjectId?: string
-  /** Legacy fallback when Frame API ids are unavailable (Media editor filmstrip). */
   playbackUrl?: string | null
   lazy?: boolean
 }) {
@@ -28,22 +27,22 @@ export function TimelineClipThumbnail({
     enabled: lazy,
     rootMargin: '80px 0px',
   })
+  const [frameFailed, setFrameFailed] = useState(false)
   const shouldLoad = !lazy || inView
   const useFrame = Boolean(mediaAssetId && platformProjectId)
   const frameApiUrl =
     shouldLoad && useFrame && mediaAssetId && platformProjectId
-      ? mediaFramePosterUrl(mediaAssetId, platformProjectId, sourceMs)
+      ? mediaFramePosterUrl(mediaAssetId, platformProjectId, sourceMs, FRAME_WIDTH_TIMELINE)
       : null
-  const { src: frameBlobUrl, status } = useFramePoster(frameApiUrl)
   const streamFallback =
     useFrame && mediaAssetId && platformProjectId
       ? mediaStreamPlaybackUrl(mediaAssetId, platformProjectId)
       : playbackUrl
   const clientThumb = useClipThumbnail(
-    shouldLoad && (!useFrame || status === 'error') ? streamFallback : null,
+    shouldLoad && (!useFrame || frameFailed) ? streamFallback : null,
     sourceMs,
   )
-  const thumbnail = frameBlobUrl ?? clientThumb
+  const thumbnail = frameFailed || !useFrame ? clientThumb : frameApiUrl
 
   if (!thumbnail) {
     return (
@@ -55,11 +54,18 @@ export function TimelineClipThumbnail({
     )
   }
   return (
-    <div
-      ref={ref}
-      className="videon-cut-timeline__clip-thumb"
-      style={{ backgroundImage: `url(${thumbnail})` }}
-      aria-hidden="true"
-    />
+    <div ref={ref} className="videon-cut-timeline__clip-thumb" aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element -- same-origin Frame API */}
+      <img
+        src={thumbnail}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="videon-cut-timeline__clip-thumb-img"
+        onError={() => {
+          if (useFrame && !frameFailed) setFrameFailed(true)
+        }}
+      />
+    </div>
   )
 }

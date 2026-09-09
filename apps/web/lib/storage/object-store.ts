@@ -48,6 +48,25 @@ export function mediaReframeStorageKey(workspaceId: string, mediaAssetId: string
   return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/derivatives/reframe/${safe(reframeId, 'reframeId')}.mp4`
 }
 
+/** Eager / write-through JPEG posters for Frame API (Wave 4). */
+export function mediaPosterStorageKey(
+  workspaceId: string,
+  mediaAssetId: string,
+  maxWidth: number,
+  tMs: number,
+): string {
+  const safe = (value: string, label: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
+    return trimmed
+  }
+  const w = Math.floor(maxWidth)
+  const t = Math.floor(tMs)
+  if (!Number.isFinite(w) || w <= 0) throw new Error('maxWidth must be positive')
+  if (!Number.isFinite(t) || t < 0) throw new Error('tMs must be ≥ 0')
+  return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/posters/w${w}/t${t}.jpg`
+}
+
 export type CreateUploadTargetInput = {
   workspaceId: string
   mediaAssetId: string

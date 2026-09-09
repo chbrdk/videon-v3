@@ -314,6 +314,22 @@ export class S3ObjectStore implements ObjectStore {
     await pipeline(object.Body as Readable, createWriteStream(input.destinationPath))
   }
 
+  async downloadObjectBytes(input: {
+    workspaceId: string
+    storageKey: string
+  }): Promise<Buffer> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    const object = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
+    )
+    if (!object.Body) throw new Error('Stored object body is missing')
+    const chunks: Buffer[] = []
+    for await (const chunk of object.Body as Readable) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    return Buffer.concat(chunks)
+  }
+
   async openObjectStream(input: {
     workspaceId: string
     storageKey: string

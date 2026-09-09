@@ -1,42 +1,37 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { loadFramePosterBlobUrl } from '@/lib/media-frame-poster'
+import { useInViewOnce } from '@/lib/use-in-view'
+import { FRAME_WIDTH_DEFAULT, mediaFramePosterUrl } from '@/lib/media-frame-poster'
 
-export type FramePosterStatus = 'idle' | 'loading' | 'ready' | 'error'
-
-/** Load a Frame API URL through the shared concurrency gate (≤ 4). */
+/** True once in view — exposes the Frame URL for browser-native loading. */
 export function useFramePoster(frameUrl: string | null): {
   src: string | null
-  status: FramePosterStatus
+  status: 'idle' | 'ready'
 } {
-  const [src, setSrc] = useState<string | null>(null)
-  const [status, setStatus] = useState<FramePosterStatus>('idle')
+  return {
+    src: frameUrl,
+    status: frameUrl ? 'ready' : 'idle',
+  }
+}
 
-  useEffect(() => {
-    if (!frameUrl) {
-      setSrc(null)
-      setStatus('idle')
-      return
-    }
-    let cancelled = false
-    setStatus('loading')
-    setSrc(null)
-    void loadFramePosterBlobUrl(frameUrl)
-      .then((url) => {
-        if (cancelled) return
-        setSrc(url)
-        setStatus('ready')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setSrc(null)
-        setStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [frameUrl])
+/** Lazy Frame URL gated by IntersectionObserver. */
+export function useLazyFramePosterUrl(
+  buildUrl: () => string | null,
+  options?: { enabled?: boolean; rootMargin?: string },
+): { ref: ReturnType<typeof useInViewOnce<HTMLDivElement>>[0]; src: string | null } {
+  const [ref, inView] = useInViewOnce<HTMLDivElement>({
+    enabled: options?.enabled !== false,
+    rootMargin: options?.rootMargin ?? '120px 0px',
+  })
+  const src = inView ? buildUrl() : null
+  return { ref, src }
+}
 
-  return { src, status }
+export function framePosterUrl(
+  mediaAssetId: string,
+  platformProjectId: string,
+  atMs: number,
+  maxWidth = FRAME_WIDTH_DEFAULT,
+): string {
+  return mediaFramePosterUrl(mediaAssetId, platformProjectId, atMs, maxWidth)
 }

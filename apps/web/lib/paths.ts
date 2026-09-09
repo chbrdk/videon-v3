@@ -130,11 +130,21 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/playback?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaStream: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/stream?platformProjectId=${encodeURIComponent(platformProjectId)}`,
-    apiMediaFrame: (mediaAssetId: string, platformProjectId: string, tMs?: number) => {
+    apiMediaFrame: (
+      mediaAssetId: string,
+      platformProjectId: string,
+      tMs?: number,
+      maxWidth?: number,
+    ) => {
       const params = new URLSearchParams({ platformProjectId })
       if (tMs != null && Number.isFinite(tMs) && tMs >= 0) params.set('t', String(Math.floor(tMs)))
+      if (maxWidth != null && Number.isFinite(maxWidth) && maxWidth > 0) {
+        params.set('w', String(Math.floor(maxWidth)))
+      }
       return `/api/media/${encodeURIComponent(mediaAssetId)}/frame?${params.toString()}`
     },
+    apiMediaPeaksBackfill: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/peaks-backfill?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaPreview: (
       mediaAssetId: string,
       platformProjectId: string,

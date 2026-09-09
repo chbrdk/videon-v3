@@ -28,6 +28,7 @@ import { detectScenesFromFile } from '@/lib/pipeline/scene-detect'
 import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
 import { separateAndStoreAudioStems } from '@/lib/pipeline/audio-stems'
 import { peaksFromMonoWavFile, WAVEFORM_PEAK_BUCKETS } from '@/lib/pipeline/wav-peaks'
+import { warmMediaPosterFrames } from '@/lib/pipeline/poster-frames'
 import { upsertMediaWaveformPeaks } from '@/lib/db/media-waveform-peaks'
 import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
@@ -196,9 +197,25 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
         }
         return framesByScene
       })
+
+      await warmMediaPosterFrames({
+        store,
+        workspaceId: media.workspaceId,
+        mediaAssetId: media.id,
+        sourcePath: tempPath,
+        durationMs: probe.durationMs,
+        sceneStartMs: scenes.map((scene) => scene.startMs),
+      }).catch(() => 0)
     } else {
       await skipStage(analysisRunId, 'scene_detect', fingerprint)
       await skipStage(analysisRunId, 'frame_sample', fingerprint)
+      await warmMediaPosterFrames({
+        store,
+        workspaceId: media.workspaceId,
+        mediaAssetId: media.id,
+        sourcePath: tempPath,
+        durationMs: probe.durationMs,
+      }).catch(() => 0)
     }
 
     let transcriptSegments: TranscriptSegment[] = []

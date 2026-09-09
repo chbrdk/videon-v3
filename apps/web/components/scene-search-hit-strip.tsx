@@ -19,6 +19,7 @@ import { useToast } from '@msqdx/ui-client'
 import { appendScenesToActiveCut } from '@/lib/active-cut-append'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
 import { mediaFramePosterUrl } from '@/lib/media-frame-poster'
+import { FRAME_WIDTH_DEFAULT } from '@/lib/pipeline/poster-frames'
 import { paths } from '@/lib/paths'
 import {
   sceneHitAtMs,
@@ -27,7 +28,6 @@ import {
   sceneHitTimingLabel,
   type SceneSearchHitModel,
 } from '@/lib/scene-hit-model'
-import { useFramePoster } from '@/lib/use-frame-poster'
 import { useInViewOnce } from '@/lib/use-in-view'
 import { useT } from '@/lib/user-prefs'
 
@@ -43,15 +43,16 @@ function SceneHitShot({
   atMs: number
 }) {
   const [ref, inView] = useInViewOnce<HTMLDivElement>({ rootMargin: '120px 0px' })
-  const frameUrl = inView ? mediaFramePosterUrl(mediaAssetId, platformProjectId, atMs) : null
-  const { src: thumbnail } = useFramePoster(frameUrl)
-  if (!thumbnail) {
+  const frameUrl = inView
+    ? mediaFramePosterUrl(mediaAssetId, platformProjectId, atMs, FRAME_WIDTH_DEFAULT)
+    : null
+  if (!frameUrl) {
     return <div ref={ref} className="videon-scene-hit-shot videon-scene-hit-shot--empty" aria-hidden />
   }
   return (
     <div ref={ref} className="videon-scene-hit-shot-wrap">
-      {/* eslint-disable-next-line @next/next/no-img-element -- Frame API blob URL */}
-      <img src={thumbnail} alt="" className="videon-scene-hit-shot" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- Frame API URL, browser cache */}
+      <img src={frameUrl} alt="" className="videon-scene-hit-shot" loading="lazy" decoding="async" />
     </div>
   )
 }

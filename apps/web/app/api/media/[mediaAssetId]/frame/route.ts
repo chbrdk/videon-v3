@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,15 +10,19 @@ import {
   getCachedFrame,
   setCachedFrame,
 } from '@/lib/media-frame-cache'
+import { mediaFrameSeekMs } from '@/lib/pipeline/poster-frames'
 import { resolveMediaInWorkspace } from '@/lib/media-access'
 import { extractFrameJpegBytes } from '@/lib/pipeline/frame-sample'
+import {
+  readPosterJpeg,
+  snapFrameWidth,
+  uploadPosterJpeg,
+} from '@/lib/pipeline/poster-frames'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
-
-const FRAME_MAX_WIDTH = 480
 
 type RouteContext = { params: Promise<{ mediaAssetId: string }> }
 
@@ -25,12 +30,31 @@ function parseTimestampMs(raw: string | null): number {
   if (raw == null || raw.trim() === '') return 1000
   const n = Number(raw)
   if (!Number.isFinite(n) || n < 0) return 1000
-  return Math.floor(n)
+  return mediaFrameSeekMs(Math.floor(n))
+}
+
+function parseWidth(raw: string | null): number {
+  if (raw == null || raw.trim() === '') return snapFrameWidth(undefined)
+  return snapFrameWidth(Number(raw))
+}
+
+function jpegResponse(bytes: Buffer, cache: 's3' | 'memory' | 'miss') {
+  const etag = `"${createHash('sha1').update(bytes).digest('hex')}"`
+  return new Response(new Uint8Array(bytes), {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/jpeg',
+      'Cache-Control': 'private, max-age=86400',
+      'Content-Length': String(bytes.byteLength),
+      ETag: etag,
+      'X-Videon-Frame-Cache': cache,
+    },
+  })
 }
 
 /**
- * GET /api/media/:id/frame — single JPEG still for assistant posters.
- * Spec: specs/api/media-frame.md
+ * GET /api/media/:id/frame — JPEG still for assistant + editor posters.
+ * Spec: specs/api/media-frame.md · cut-editor-load-performance.md Wave 4
  */
 export async function GET(request: Request, context: RouteContext) {
   const userId = await requireSessionUserId()
@@ -50,6 +74,7 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 400, 'invalid_payload', 'platformProjectId is required')
   }
   const atMs = parseTimestampMs(url.searchParams.get('t'))
+  const maxWidth = parseWidth(url.searchParams.get('w'))
 
   const { mediaAssetId } = await context.params
   const resolved = await resolveMediaInWorkspace({
@@ -69,49 +94,62 @@ export async function GET(request: Request, context: RouteContext) {
     return apiError(request, 409, 'invalid_payload', 'Upload is not complete yet')
   }
 
+  const ifNoneMatch = request.headers.get('if-none-match')
   const cacheKey = frameCacheKey({
     workspaceId: resolved.workspace.id,
     mediaAssetId,
     tMs: atMs,
-    maxWidth: FRAME_MAX_WIDTH,
+    maxWidth,
   })
-  const cached = getCachedFrame(cacheKey)
-  if (cached) {
-    return new Response(new Uint8Array(cached), {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/jpeg',
-        'Cache-Control': 'private, max-age=300',
-        'Content-Length': String(cached.byteLength),
-        'X-Videon-Frame-Cache': 'hit',
-      },
-    })
+  const memoryHit = getCachedFrame(cacheKey)
+  if (memoryHit) {
+    const etag = `"${createHash('sha1').update(memoryHit).digest('hex')}"`
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag, 'X-Videon-Frame-Cache': 'memory' } })
+    }
+    return jpegResponse(memoryHit, 'memory')
+  }
+
+  const store = new S3ObjectStore()
+  const s3Hit = await readPosterJpeg({
+    store,
+    workspaceId: resolved.workspace.id,
+    mediaAssetId,
+    maxWidth,
+    tMs: atMs,
+  })
+  if (s3Hit) {
+    setCachedFrame(cacheKey, s3Hit, { ttlMs: 24 * 60 * 60 * 1000 })
+    const etag = `"${createHash('sha1').update(s3Hit).digest('hex')}"`
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      return new Response(null, { status: 304, headers: { ETag: etag, 'X-Videon-Frame-Cache': 's3' } })
+    }
+    return jpegResponse(s3Hit, 's3')
   }
 
   const tempPath = join(tmpdir(), `videon-frame-src-${randomUUID()}`)
   try {
-    const store = new S3ObjectStore()
     await store.downloadObjectToFile({
       workspaceId: resolved.workspace.id,
       storageKey: resolved.media.storageKey,
       destinationPath: tempPath,
     })
-    const jpeg = await extractFrameJpegBytes(tempPath, atMs, { maxWidth: FRAME_MAX_WIDTH })
+    const jpeg = await extractFrameJpegBytes(tempPath, atMs, { maxWidth })
     if (!jpeg) {
       return apiError(request, 503, 'dependency_unavailable', 'Frame extraction failed', {
         retryable: true,
       })
     }
-    setCachedFrame(cacheKey, jpeg)
-    return new Response(new Uint8Array(jpeg), {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/jpeg',
-        'Cache-Control': 'private, max-age=300',
-        'Content-Length': String(jpeg.byteLength),
-        'X-Videon-Frame-Cache': 'miss',
-      },
-    })
+    setCachedFrame(cacheKey, jpeg, { ttlMs: 24 * 60 * 60 * 1000 })
+    void uploadPosterJpeg({
+      store,
+      workspaceId: resolved.workspace.id,
+      mediaAssetId,
+      maxWidth,
+      tMs: atMs,
+      jpeg,
+    }).catch(() => {})
+    return jpegResponse(jpeg, 'miss')
   } catch {
     return apiError(request, 503, 'dependency_unavailable', 'Frame extraction unavailable', {
       retryable: true,

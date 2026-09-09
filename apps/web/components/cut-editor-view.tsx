@@ -44,6 +44,7 @@ import {
 } from '@/lib/cut-playback'
 import { type TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
+import { mediaFramePosterUrl, FRAME_WIDTH_DEFAULT } from '@/lib/media-frame-poster'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
 import {
   useProgramAudioMixer,
@@ -125,6 +126,7 @@ export function CutEditorView({
   const advanceLockRef = useRef<number | null>(null)
   const playbackCacheRef = useRef<Map<string, string>>(new Map())
   const currentMediaIdRef = useRef<string | null>(null)
+  const peaksBackfillAttemptedRef = useRef<Set<string>>(new Set())
   const [cut, setCut] = useState<CutDetail | null>(null)
   const [clips, setClips] = useState<Clip[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -167,6 +169,7 @@ export function CutEditorView({
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
+  const [monitorEngaged, setMonitorEngaged] = useState(false)
   const [trackMutes, setTrackMutes] = useState<ProgramTrackMutes>({
     v1: false,
     a1: false,
@@ -445,6 +448,68 @@ export function CutEditorView({
   }, [])
 
   useEffect(() => {
+    setMonitorEngaged(false)
+  }, [activeIndex, playbackUrl])
+
+  const activePosterUrl = useMemo(() => {
+    const clip = clips[activeIndex]
+    if (!clip) return null
+    const mediaId = clip.media?.id ?? clip.scene.mediaAssetId
+    if (!mediaId) return null
+    return mediaFramePosterUrl(mediaId, platformProjectId, clip.scene.startMs, FRAME_WIDTH_DEFAULT)
+  }, [activeIndex, clips, platformProjectId])
+
+  // Idle mixPeaks backfill for timeline media analyzed before Wave 3 (concurrency 1).
+  useEffect(() => {
+    const mediaIds = [
+      ...new Set(
+        clips
+          .map((clip) => clip.scene.mediaAssetId)
+          .filter(
+            (id) =>
+              !(voicePeaksByMediaId[id]?.length || mixPeaksByMediaId[id]?.length) &&
+              !peaksBackfillAttemptedRef.current.has(id),
+          ),
+      ),
+    ]
+    if (mediaIds.length === 0) return
+    let cancelled = false
+    const run = async () => {
+      for (const mediaId of mediaIds) {
+        if (cancelled) return
+        peaksBackfillAttemptedRef.current.add(mediaId)
+        try {
+          const response = await fetch(paths.routes.apiMediaPeaksBackfill(mediaId, platformProjectId), {
+            method: 'POST',
+          })
+          if (!response.ok) continue
+          const body = (await response.json()) as { status?: string; mixPeaks?: number[] }
+          if (body.status === 'ready' && body.mixPeaks?.length) {
+            setMixPeaksByMediaId((prev) =>
+              prev[mediaId] ? prev : { ...prev, [mediaId]: body.mixPeaks as number[] },
+            )
+          }
+        } catch {
+          // ignore idle backfill errors
+        }
+      }
+    }
+    const idle = typeof window !== 'undefined' ? window.requestIdleCallback : undefined
+    if (typeof idle === 'function') {
+      const idleId = idle(() => void run(), { timeout: 8000 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback?.(idleId)
+      }
+    }
+    const timer = globalThis.setTimeout(() => void run(), 2000)
+    return () => {
+      cancelled = true
+      globalThis.clearTimeout(timer)
+    }
+  }, [clips, mixPeaksByMediaId, platformProjectId, voicePeaksByMediaId])
+
+  useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
     void loadLibrary().catch(() => {})
   }, [load, loadLibrary])
@@ -614,6 +679,7 @@ export function CutEditorView({
     const video = videoRef.current
     if (!video) return
     if (video.paused) {
+      setMonitorEngaged(true)
       advanceLockRef.current = null
       playingRef.current = true
       await video.play()
@@ -1248,8 +1314,9 @@ export function CutEditorView({
                 ref={videoRef}
                 className="videon-nle__video"
                 src={playbackUrl}
+                poster={activePosterUrl ?? undefined}
                 playsInline
-                preload="metadata"
+                preload={monitorEngaged || isPlaying ? 'auto' : 'none'}
               />
             ) : (
               <div className="videon-nle__video-placeholder">

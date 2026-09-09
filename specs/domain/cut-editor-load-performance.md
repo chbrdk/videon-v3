@@ -1,8 +1,8 @@
 # Cut editor load performance
 
-**Status:** Active — Wave 3 (mixPeaks + Frame fallback + filmstrip)  
+**Status:** Active — Wave 4 (eager S3 posters + direct img cache + mixPeaks backfill)  
 **Product:** VIDEON v3  
-**Implements:** Progressive Cut open · Frame posters · Lazy Bin/Timeline thumbs · Visible/idle A1 waveform · Frame concurrency ≤ 4 · Playback dedupe · Persisted mixPeaks · Frame-fail client fallback ≤ 2 · Media editor filmstrip Frame API  
+**Implements:** Progressive Cut open · Eager poster frames in object storage · Direct browser-cached Frame URLs · Width tiers · mixPeaks backfill · Monitor poster-first  
 **API companions:** `specs/api/media-frame.md` · `specs/api/media-preview.md` · `specs/api/cuts.md` · `specs/api/media-list.md`  
 **UI companions:** `specs/domain/videon-ui-surfaces.md` · `specs/domain/cut-multi-source-compose.md` · `knowledge/paths.md`  
 **Federation:** `2026-05-plexon-federation-v3`
@@ -62,17 +62,22 @@ Open /cuts/:id
 
 ### Poster source of truth
 
-1. **Primary:** `paths.routes.apiMediaFrame(mediaAssetId, platformProjectId, tMs)` → `image/jpeg` (`specs/api/media-frame.md`).
-2. **Bin video card:** `t` ≈ mid duration (or `1000` when duration unknown).
-3. **Bin / timeline scene card:** `t` = scene `startMs` (clamped).
-4. **Fallback:** only if frame returns retryable failure after shell is up — optional client capture, concurrency ≤ 2, never blocks open.
-5. Frame route auth remains Access Model B; editor MUST pass `platformProjectId`.
+1. **Primary:** `paths.routes.apiMediaFrame(mediaAssetId, platformProjectId, tMs, width?)` → `image/jpeg` (`specs/api/media-frame.md`).
+2. **Bin video card:** `t` ≈ mid duration (or `1000` when duration unknown); width tier **160**.
+3. **Bin / timeline scene card:** `t` = scene `startMs` (clamped); timeline width tier **240**.
+4. **Evidence / assistant:** width tier **480** (default).
+5. **Eager assets (Wave 4):** During analysis (after probe / scene detect), the runner MUST extract and store JPEG posters in object storage under `…/posters/w{width}/t{bucketedMs}.jpg` for mid-point + scene starts (and default `t=1000` at 480). The Frame route MUST prefer these objects before downloading the source for ffmpeg.
+6. **Write-through:** WHEN the Frame route extracts on a miss THEN it SHOULD upload the JPEG to the poster key for subsequent hits.
+7. **Client cache:** Editors MUST use the Frame URL directly (`<img>` / CSS `background-image`) so the browser HTTP cache applies — NOT `fetch`→blob Object URLs as the default path.
+8. **Fallback:** only if frame returns retryable failure after shell is up — optional client capture, concurrency ≤ 2, never blocks open.
+9. Frame route auth remains Access Model B; editor MUST pass `platformProjectId`.
 
 ### Playback
 
 1. Prefer building the relative stream URL via `mediaStreamPlaybackUrl` when the session already proved Model B access for the Cut workspace (Cut detail success implies access) — OR keep `apiMediaPlayback` but **dedupe** concurrent callers with an in-flight map keyed by `mediaAssetId`.
 2. Prefetch playback URLs for **non-active** timeline media MUST be idle-deferred (requestIdleCallback / after first paint), not competing with the active monitor.
 3. Module/session caches for URL strings and frame blobs MAY persist for the tab lifetime; they MUST NOT bypass Model B on subsequent navigations to another Collection.
+4. **Wave 4:** Program monitor MUST show a Frame poster for the active clip and keep `preload="none"` until the operator starts playback (then MAY raise preload).
 
 ### Waveform
 
@@ -80,6 +85,7 @@ Open /cuts/:id
 2. Original (A1) peaks: WHEN not present on the Cut/media payload, the editor MUST NOT full-download+`decodeAudioData` during the critical open path. Defer until the waveform lane is visible or the document is idle.
 3. **Wave 3:** During the audio analysis stage (after `extractAudioTrack`, independent of Demucs), the runner MUST compute mix waveform peaks (default 240 buckets) from the mono WAV and persist them. Cut detail and media detail MUST return `mixPeaks` alongside stem peaks. Client stream decode is fallback-only when `mixPeaks` (and voice peaks for Cut A1) are absent.
 4. Storage: `media_waveform_peaks` keyed by `(media_asset_id, analysis_run_id)` — not shoehorned into `media_audio_stems` (which requires stem WAV bytes).
+5. **Wave 4 backfill:** WHEN Cut/media detail lacks `mixPeaks` for timeline media THEN the client MAY idle-request `POST /api/media/:id/peaks-backfill` (Model B, concurrency ≤ 1) so existing assets catch up without a full vision re-run.
 
 ### Bin / Timeline laziness
 
@@ -121,6 +127,9 @@ Open /cuts/:id
 - [x] Audio analysis persists `mixPeaks`; Cut/media detail return them; client decode is fallback-only when missing.
 - [x] Frame failure MAY fall back to client capture with concurrency ≤ 2.
 - [x] Media editor filmstrip + scene evidence prefer Frame API when media ids are known.
+- [x] Wave 4: Analysis warms S3 posters; Frame route prefers S3 + long HTTP cache; clients use direct Frame URLs.
+- [x] Wave 4: Program monitor uses Frame poster + `preload="none"` until play.
+- [x] Wave 4: Idle `peaks-backfill` for timeline media missing `mixPeaks`.
 - [ ] Staging smoke: open known Cut — chrome interactive before posters fill; timeline still editable while thumbs load.
 - [ ] Regression: insert from Bin (video + scene), playhead, export entry points still work.
 
@@ -136,7 +145,7 @@ Open /cuts/:id
 
 ## Out of scope follow-ups
 
-- HTTP caching headers / CDN for frames beyond process-local frame cache.
+- CDN in front of Frame objects (auth/signed delivery).
 - WebCodecs / MSE advanced players.
-- Backfill `mixPeaks` for media analyzed before migration `0014` (re-run audio/transcript analysis).
-- Persist original peaks into CDN-backed peak files (JSONB in Postgres is enough for ≤512 buckets).
+- Virtualized Bin / timeline DOM for very large libraries.
+- Prefetch preview MP4 for scrubbing.
