@@ -94,7 +94,7 @@ export function CutEditorRail({
             ×
           </ToolButton>
         </div>
-        <Panel title={title} className="videon-cut-rail__panel">
+        <Panel variant="flush" className="videon-cut-rail__panel">
           <div className="videon-cut-rail__body">{children}</div>
         </Panel>
       </div>

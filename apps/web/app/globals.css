@@ -585,11 +585,28 @@ main {
 
 .videon-stage--editor {
   padding-block-start: 0.75rem;
+  /* Fill shell so Cut/Media NLE can pin the timeline dock (not grow past viewport). */
   min-height: calc(100vh - 2rem);
+  height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .videon-stage--editor .videon-page-lead {
   display: none;
+}
+
+.videon-stage--editor .videon-hub--editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.videon-stage--editor .videon-hub--editor > .videon-nle {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .videon-nle {
@@ -615,6 +632,7 @@ main {
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
   min-height: min(82vh, 60rem);
+  height: min(82vh, 60rem);
   border: 1px solid var(--nle-border);
   border-radius: 0.35rem;
   overflow: hidden;
@@ -623,9 +641,12 @@ main {
 }
 
 .videon-nle--player-first {
-  min-height: min(86vh, 64rem);
-  /* Timeline row is content-sized — never clip tracks behind a vertical scroll. */
-  grid-template-rows: auto minmax(14rem, 1fr) auto;
+  /* Prefer filling the editor stage when available; fall back to viewport fraction. */
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  /* Toolbar · workspace (scrolls inside) · timeline dock always visible. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .videon-nle__top {
@@ -908,6 +929,8 @@ main {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 0;
+  overflow: hidden;
+  height: 100%;
 }
 
 .videon-cut-rail {
@@ -916,6 +939,9 @@ main {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
   background: var(--nle-panel);
   border-right: 1px solid var(--nle-border);
   z-index: 2;
@@ -949,6 +975,9 @@ main {
   border: none;
   border-radius: 0;
   background: transparent;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .videon-cut-rail__body {
@@ -957,7 +986,8 @@ main {
   display: grid;
   gap: 0.65rem;
   align-content: start;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .videon-cut-rail__resize {
@@ -1367,8 +1397,8 @@ main {
   border-top: 1px solid var(--nle-border-strong);
   background: var(--nle-panel);
   min-height: 0;
-  max-height: none;
-  overflow: visible;
+  max-height: min(42vh, 28rem);
+  overflow: auto;
 }
 
 .videon-nle__timeline-dock .videon-cut-timeline {
@@ -2551,9 +2581,13 @@ a.videon-cut-timeline__track-btn--link {
 @media (max-width: 1100px) {
   .videon-home-run-columns,
   .videon-home-cta-row,
-  .videon-editor__grid,
-  .videon-nle__workspace {
+  .videon-editor__grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Keep Cut dual-rail + program side-by-side; rails scroll internally. */
+  .videon-nle__workspace {
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .videon-nle__toolbar {
