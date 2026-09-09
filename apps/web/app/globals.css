@@ -357,6 +357,11 @@ main {
   background: color-mix(in srgb, var(--surface-2, var(--bg1)) 92%, transparent);
 }
 
+.videon-scene-hit-shot-wrap {
+  display: block;
+  width: 100%;
+}
+
 .videon-scene-hit-shot {
   display: block;
   width: 100%;
