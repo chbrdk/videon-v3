@@ -117,6 +117,11 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 7. WHEN the operator drags a clip body from V1 onto V2 (or V2 onto V1) THEN the editor MUST call `moveClipLane` and relocate the clip (not copy).
 8. WHEN V2 companion TX renders THEN segments MUST map from V2 clip media transcripts onto `timeline_start_ms` (same rules as V1 TX).
 9. WHEN timeline clips/lanes support authoring actions THEN right-click MUST use `ContextMenu` (`timeline-context-menu.md`).
+10. WHEN the operator moves or edge-trims a V1/V2 clip THEN the edit edge MUST magnet-snap to nearby foreign clip edges (V1 + V2) and the playhead within a small **pixel** threshold (~10 px); the active clip’s own edges MUST be excluded. WHILE snapped, the timeline MUST show a snap guide at that time.
+11. WHEN the operator uses trackpad/wheel on the Cut timeline viewport THEN:
+    - pinch / `ctrl`/`meta`+wheel MUST zoom toward the cursor (stepped zoom levels; scroll keeps time-under-cursor stable);
+    - two-finger horizontal pan / Shift+wheel / plain vertical wheel MUST scroll the timeline horizontally;
+    - Alt+wheel MUST jog the playhead (frame/coarse seek). Plain wheel MUST NOT steal pan for jog.
 
 ## Acceptance
 
@@ -127,3 +132,4 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 - Scenes inspect: truncated navigator + `InspectSection` / `ChatCollapsible` detail (Wave D).
 - Toolbar overflow uses Flyout pattern; editor selects use `Select`.
 - Timeline right-click uses `ContextMenu` (`timeline-context-menu.md`).
+- Cut timeline: edge snap + trackpad zoom/pan (Alt = jog).

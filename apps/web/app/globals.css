@@ -2901,6 +2901,17 @@ a.videon-cut-timeline__track-btn--link {
   background: color-mix(in srgb, var(--accent, #7dd3fc) 12%, transparent);
 }
 
+.videon-cut-timeline__snap-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid color-mix(in srgb, var(--accent, #7dd3fc) 85%, white);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #7dd3fc) 35%, transparent);
+  pointer-events: none;
+  z-index: 4;
+}
+
 .videon-cut-timeline__clip--scene {
   cursor: pointer;
   border-color: color-mix(in srgb, var(--accent, #7dd3fc) 55%, var(--nle-border, var(--line)));

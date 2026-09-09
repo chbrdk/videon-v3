@@ -28,10 +28,10 @@ import {
   timelineMsPerPixel,
   timelineWidthPx,
 } from '@/lib/timeline-layout'
-import { useJogShuttle } from '@/lib/use-jog-shuttle'
+import { useTimelineViewportGestures } from '@/lib/use-timeline-viewport-gestures'
 import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 import { computeTrimPreview, TRIM_MODE_HELP, TRIM_MODE_LABELS, type TrimMode } from '@/lib/trim-modes'
-import { cutEdgeSnapPoints, snapCutMs } from '@/lib/timeline-snap'
+import { buildCutSnapPoints, snapCutMsToPixels } from '@/lib/timeline-snap'
 import { resolveVideoLaneDrop, laneDropHighlight } from '@/lib/cut-lane-drop'
 import { armClickSuppress, bindPointerGesture } from '@/lib/cut-pointer-gesture'
 import type { CutTimelineContextMenuRequest } from '@/lib/cut-timeline-context-menu'
@@ -197,6 +197,7 @@ export function CutTimeline({
   } | null>(null)
   const [movePreview, setMovePreview] = useState<{ sceneId: string; timelineStartMs: number } | null>(null)
   const [laneDropTarget, setLaneDropTarget] = useState<'v1' | 'v2' | null>(null)
+  const [snapGuideMs, setSnapGuideMs] = useState<number | null>(null)
   const [dropHintMs, setDropHintMs] = useState<number | null>(null)
   const [tracks, setTracks] = useState(DEFAULT_CUT_TRACK_STATE)
   const trimRef = useRef<{
@@ -315,9 +316,39 @@ export function CutTimeline({
     return buildCutTimeline(scenes)
   }, [clips, trimPreview, movePreview])
 
-  const snapPoints = useMemo(
-    () => cutEdgeSnapPoints(timeline, cutPlayheadMs),
-    [timeline, cutPlayheadMs],
+  const snapPoints = useMemo(() => {
+    const v1 = timeline.map((item) => ({ cutStartMs: item.cutStartMs, cutEndMs: item.cutEndMs }))
+    const v2 = videoClips.map((clip) => {
+      const durationMs = Math.max(0, clip.endMs - clip.startMs)
+      return {
+        cutStartMs: clip.timelineStartMs,
+        cutEndMs: clip.timelineStartMs + durationMs,
+      }
+    })
+    return buildCutSnapPoints({ v1, v2, playheadMs: cutPlayheadMs })
+  }, [timeline, videoClips, cutPlayheadMs])
+
+  const snapEdit = useCallback(
+    (rawMs: number, exclude?: { lane: 'v1' | 'v2'; id: string } | null) => {
+      const v1 = timeline
+        .filter((item) => !(exclude?.lane === 'v1' && item.scene.id === exclude.id))
+        .map((item) => ({ cutStartMs: item.cutStartMs, cutEndMs: item.cutEndMs }))
+      const v2 = videoClips
+        .filter((clip) => !(exclude?.lane === 'v2' && clip.id === exclude.id))
+        .map((clip) => {
+          const durationMs = Math.max(0, clip.endMs - clip.startMs)
+          return {
+            cutStartMs: clip.timelineStartMs,
+            cutEndMs: clip.timelineStartMs + durationMs,
+          }
+        })
+      return snapCutMsToPixels(
+        rawMs,
+        buildCutSnapPoints({ v1, v2, playheadMs: cutPlayheadMs }),
+        msPerPixel,
+      )
+    },
+    [cutPlayheadMs, msPerPixel, timeline, videoClips],
   )
 
   const seekFromPointer = useCallback(
@@ -326,12 +357,20 @@ export function CutTimeline({
       const rect = track.getBoundingClientRect()
       const x = Math.min(Math.max(clientX - rect.left, 0), contentWidthPx)
       const raw = Math.floor(x * msPerPixel)
-      onSeek(snapCutMs(raw, snapPoints))
+      const snapped = snapCutMsToPixels(raw, snapPoints, msPerPixel)
+      onSeek(snapped.ms)
     },
     [contentWidthPx, msPerPixel, onSeek, snapPoints, totalDurationMs],
   )
 
-  useJogShuttle(viewportRef, (deltaMs) => onSeek(cutPlayheadMs + deltaMs), { enabled: !disabled })
+  useTimelineViewportGestures({
+    viewportRef,
+    zoomIndex,
+    setZoomIndex,
+    zoomLevels: TIMELINE_ZOOM_LEVELS,
+    onSeekDelta: (deltaMs) => onSeek(Math.max(0, Math.min(cutPlayheadMs + deltaMs, totalDurationMs))),
+    enabled: !disabled,
+  })
 
   const onTrackPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (disabled || (event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
@@ -362,7 +401,7 @@ export function CutTimeline({
           : cutPlayheadMs
       onContextMenuRequest({
         kind: 'cut-lane',
-        atMs: snapCutMs(raw, snapPoints),
+        atMs: snapCutMsToPixels(raw, snapPoints, msPerPixel).ms,
         clientX: event.clientX,
         clientY: event.clientY,
       })
@@ -448,6 +487,7 @@ export function CutTimeline({
     setMovePreview(null)
     setV2MovePreview(null)
     setLaneDropTarget(null)
+    setSnapGuideMs(null)
   }
 
   const startClipMove = (event: ReactPointerEvent<HTMLDivElement>, item: CutTimelineItem) => {
@@ -485,12 +525,14 @@ export function CutTimeline({
       current.armed = true
       current.lastClientY = moveEvent.clientY
       setDragSceneId(current.sceneId)
-      const nextStart = Math.max(
+      const rawStart = Math.max(
         0,
-        snapCutMs(current.originTimelineStartMs + Math.round(deltaPx * msPerPixel), snapPoints),
+        current.originTimelineStartMs + Math.round(deltaPx * msPerPixel),
       )
-      current.previewStartMs = nextStart
-      setMovePreview({ sceneId: current.sceneId, timelineStartMs: nextStart })
+      const snapped = snapEdit(rawStart, { lane: 'v1', id: current.sceneId })
+      current.previewStartMs = snapped.ms
+      setMovePreview({ sceneId: current.sceneId, timelineStartMs: snapped.ms })
+      setSnapGuideMs(snapped.guideMs)
       setLaneDropTarget(
         laneDropHighlight({
           fromLane: 'v1',
@@ -508,6 +550,7 @@ export function CutTimeline({
       setDragSceneId(null)
       setMovePreview(null)
       setLaneDropTarget(null)
+      setSnapGuideMs(null)
       if (!current.armed) return
       armClickSuppress(suppressClickRef)
       const clientY = typeof upEvent.clientY === 'number' ? upEvent.clientY : current.lastClientY
@@ -546,7 +589,7 @@ export function CutTimeline({
       const rect = lanesRef.current.getBoundingClientRect()
       const maxX = Math.max(contentWidthPx, rect.width)
       const x = Math.min(Math.max(event.clientX - rect.left, 0), maxX)
-      setDropHintMs(snapCutMs(Math.floor(x * msPerPixel), snapPoints))
+      setDropHintMs(snapCutMsToPixels(Math.floor(x * msPerPixel), snapPoints, msPerPixel).ms)
     }
   }
 
@@ -563,10 +606,11 @@ export function CutTimeline({
       const maxX = Math.max(contentWidthPx, rect?.width ?? 0)
       const cutMs =
         rect != null
-          ? snapCutMs(
+          ? snapCutMsToPixels(
               Math.floor(Math.min(Math.max(event.clientX - rect.left, 0), maxX) * msPerPixel),
               snapPoints,
-            )
+              msPerPixel,
+            ).ms
           : totalDurationMs
       onDropMedia({ ...payload, timelineStartMs: cutMs, afterSceneId: null })
     } catch {
@@ -601,13 +645,14 @@ export function CutTimeline({
       if (!payload.mediaAssetId) return
       const cutMs =
         lanesRef.current && totalDurationMs > 0
-          ? snapCutMs(
+          ? snapCutMsToPixels(
               Math.floor(
                 Math.min(Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0), contentWidthPx) *
                   msPerPixel,
               ),
               snapPoints,
-            )
+              msPerPixel,
+            ).ms
           : 0
       onDropAudioBus({ ...payload, timelineStartMs: cutMs })
     } catch {
@@ -670,18 +715,41 @@ export function CutTimeline({
         nextClip: trim.nextClip ?? null,
       })
       if (!preview) return
-      const timelineStartMs =
+      let startMs = preview.startMs
+      let endMs = preview.endMs
+      let timelineStartMs =
         trim.edge === 'start'
           ? Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
           : trim.timelineStartMs
-      trim.previewStartMs = preview.startMs
-      trim.previewEndMs = preview.endMs
+      if (trim.edge === 'start') {
+        const snapped = snapEdit(timelineStartMs, { lane: 'v1', id: item.scene.id })
+        const adjust = snapped.ms - timelineStartMs
+        if (endMs - (startMs + adjust) >= MIN_CUT_CLIP_MS) {
+          timelineStartMs = snapped.ms
+          startMs += adjust
+          setSnapGuideMs(snapped.guideMs)
+        } else {
+          setSnapGuideMs(null)
+        }
+      } else {
+        const timelineEndMs = timelineStartMs + (endMs - startMs)
+        const snapped = snapEdit(timelineEndMs, { lane: 'v1', id: item.scene.id })
+        const adjust = snapped.ms - timelineEndMs
+        if (endMs + adjust - startMs >= MIN_CUT_CLIP_MS) {
+          endMs += adjust
+          setSnapGuideMs(snapped.guideMs)
+        } else {
+          setSnapGuideMs(null)
+        }
+      }
+      trim.previewStartMs = startMs
+      trim.previewEndMs = endMs
       trim.previewTimelineStartMs = timelineStartMs
       trim.previewRollBoundaryMs = preview.rollBoundaryMs
       setTrimPreview({
         sceneId: trim.sceneId,
-        startMs: preview.startMs,
-        endMs: preview.endMs,
+        startMs,
+        endMs,
         timelineStartMs,
         rollBoundaryMs: preview.rollBoundaryMs,
       })
@@ -693,6 +761,7 @@ export function CutTimeline({
       const trim = trimRef.current
       trimRef.current = null
       setTrimPreview(null)
+      setSnapGuideMs(null)
       if (!trim) return
       if (trim.previewRollBoundaryMs !== undefined && onRollTrim) {
         if (trim.previewRollBoundaryMs !== trim.endMs) onRollTrim(trim.sceneId, trim.previewRollBoundaryMs)
@@ -798,7 +867,7 @@ export function CutTimeline({
       const rect = lanesRef.current.getBoundingClientRect()
       const maxX = Math.max(contentWidthPx, rect.width)
       const x = Math.min(Math.max(event.clientX - rect.left, 0), maxX)
-      setDropHintMs(snapCutMs(Math.floor(x * msPerPixel), snapPoints))
+      setDropHintMs(snapCutMsToPixels(Math.floor(x * msPerPixel), snapPoints, msPerPixel).ms)
     }
   }
 
@@ -815,10 +884,11 @@ export function CutTimeline({
       const maxX = Math.max(contentWidthPx, rect?.width ?? 0)
       const cutMs =
         rect != null
-          ? snapCutMs(
+          ? snapCutMsToPixels(
               Math.floor(Math.min(Math.max(event.clientX - rect.left, 0), maxX) * msPerPixel),
               snapPoints,
-            )
+              msPerPixel,
+            ).ms
           : 0
       onDropVideoOverlay({ ...payload, timelineStartMs: cutMs })
     } catch {
@@ -860,12 +930,14 @@ export function CutTimeline({
       if (!current.armed && Math.abs(deltaPx) < 4 && Math.abs(deltaPy) < 4) return
       current.armed = true
       current.lastClientY = moveEvent.clientY
-      const nextStart = Math.max(
+      const rawStart = Math.max(
         0,
-        snapCutMs(current.originTimelineStartMs + Math.round(deltaPx * msPerPixel), snapPoints),
+        current.originTimelineStartMs + Math.round(deltaPx * msPerPixel),
       )
-      current.previewStartMs = nextStart
-      setV2MovePreview({ clipId: current.clipId, timelineStartMs: nextStart })
+      const snapped = snapEdit(rawStart, { lane: 'v2', id: current.clipId })
+      current.previewStartMs = snapped.ms
+      setV2MovePreview({ clipId: current.clipId, timelineStartMs: snapped.ms })
+      setSnapGuideMs(snapped.guideMs)
       setLaneDropTarget(
         laneDropHighlight({
           fromLane: 'v2',
@@ -881,6 +953,7 @@ export function CutTimeline({
       v2MoveRef.current = null
       setV2MovePreview(null)
       setLaneDropTarget(null)
+      setSnapGuideMs(null)
       if (!current.armed) return
       armClickSuppress(suppressClickRef)
       const clientY = typeof upEvent.clientY === 'number' ? upEvent.clientY : current.lastClientY
@@ -938,14 +1011,37 @@ export function CutTimeline({
         nextClip: null,
       })
       if (!preview) return
-      const timelineStartMs =
+      let startMs = preview.startMs
+      let endMs = preview.endMs
+      let timelineStartMs =
         trim.edge === 'start'
           ? Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
           : trim.timelineStartMs
-      trim.previewStartMs = preview.startMs
-      trim.previewEndMs = preview.endMs
+      if (trim.edge === 'start') {
+        const snapped = snapEdit(timelineStartMs, { lane: 'v2', id: clip.id })
+        const adjust = snapped.ms - timelineStartMs
+        if (endMs - (startMs + adjust) >= MIN_CUT_CLIP_MS) {
+          timelineStartMs = snapped.ms
+          startMs += adjust
+          setSnapGuideMs(snapped.guideMs)
+        } else {
+          setSnapGuideMs(null)
+        }
+      } else {
+        const timelineEndMs = timelineStartMs + (endMs - startMs)
+        const snapped = snapEdit(timelineEndMs, { lane: 'v2', id: clip.id })
+        const adjust = snapped.ms - timelineEndMs
+        if (endMs + adjust - startMs >= MIN_CUT_CLIP_MS) {
+          endMs += adjust
+          setSnapGuideMs(snapped.guideMs)
+        } else {
+          setSnapGuideMs(null)
+        }
+      }
+      trim.previewStartMs = startMs
+      trim.previewEndMs = endMs
       trim.previewTimelineStartMs = timelineStartMs
-      setV2TrimPreview({ clipId: trim.clipId, ...preview, timelineStartMs })
+      setV2TrimPreview({ clipId: trim.clipId, startMs, endMs, timelineStartMs })
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -953,6 +1049,7 @@ export function CutTimeline({
       const trim = v2TrimRef.current
       v2TrimRef.current = null
       setV2TrimPreview(null)
+      setSnapGuideMs(null)
       if (!trim || !onTrimVideoClip) return
       if (
         trim.previewStartMs === trim.startMs &&
@@ -1453,7 +1550,7 @@ export function CutTimeline({
                           onDrop={(event) => {
                             event.preventDefault()
                             if (!onMoveAudioClip || !lanesRef.current) return
-                            const cutMs = snapCutMs(
+                            const cutMs = snapCutMsToPixels(
                               Math.floor(
                                 Math.min(
                                   Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0),
@@ -1461,7 +1558,8 @@ export function CutTimeline({
                                 ) * msPerPixel,
                               ),
                               snapPoints,
-                            )
+                              msPerPixel,
+                            ).ms
                             onMoveAudioClip(clip.id, cutMs)
                           }}
                           onClick={(event) => {
@@ -1494,6 +1592,13 @@ export function CutTimeline({
                 style={{ left: `${playheadLeftPx}px` }}
                 onPointerDown={startPlayheadDrag}
               />
+              {snapGuideMs != null ? (
+                <div
+                  className="videon-cut-timeline__snap-guide"
+                  style={{ left: `${timelineLeftPx(snapGuideMs, msPerPixel)}px` }}
+                  aria-hidden="true"
+                />
+              ) : null}
             </div>
           </div>
         </div>
