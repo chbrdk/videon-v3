@@ -132,6 +132,8 @@ function findingBadgeTone(finding: BrandFinding): BadgeTone {
 
 function EvidenceStrip(props: {
   playbackUrl: string | null
+  mediaAssetId?: string
+  platformProjectId?: string
   frameRefs: SceneFrameRef[]
   evidenceFrameIds?: string[]
   timestampsMs?: number[]
@@ -145,12 +147,18 @@ function EvidenceStrip(props: {
         .filter((frame) => Number.isFinite(frame.timestampMs))
     : props.frameRefs.filter((frame) => (props.evidenceFrameIds ?? []).includes(frame.id))
 
-  if (!byTimestamp.length || !props.playbackUrl) return null
+  const canPoster = Boolean(props.playbackUrl || (props.mediaAssetId && props.platformProjectId))
+  if (!byTimestamp.length || !canPoster) return null
   return (
     <div className="videon-scene-insight__evidence" data-testid="scene-evidence-strip">
       {byTimestamp.map((frame) => (
         <div key={frame.id} className="videon-scene-insight__evidence-frame" title={frame.id}>
-          <TimelineClipThumbnail playbackUrl={props.playbackUrl} sourceMs={frame.timestampMs} />
+          <TimelineClipThumbnail
+            mediaAssetId={props.mediaAssetId}
+            platformProjectId={props.platformProjectId}
+            playbackUrl={props.playbackUrl}
+            sourceMs={frame.timestampMs}
+          />
           <Text role="meta" as="span">
             {formatClock(frame.timestampMs)}
           </Text>
@@ -165,6 +173,8 @@ function EntityRow(props: {
   title: string
   meta: string
   playbackUrl: string | null
+  mediaAssetId?: string
+  platformProjectId?: string
   frameRefs: SceneFrameRef[]
   evidenceFrameIds: string[]
 }) {
@@ -188,6 +198,8 @@ function EntityRow(props: {
       </div>
       <EvidenceStrip
         playbackUrl={props.playbackUrl}
+        mediaAssetId={props.mediaAssetId}
+        platformProjectId={props.platformProjectId}
         frameRefs={props.frameRefs}
         evidenceFrameIds={props.evidenceFrameIds}
       />
@@ -199,9 +211,11 @@ export function SceneInsightInspector(props: {
   insight: SceneInsight
   frameRefs: SceneFrameRef[]
   playbackUrl: string | null
+  mediaAssetId?: string
+  platformProjectId?: string
   brandCheck?: BrandCheckView | null
 }) {
-  const { insight, frameRefs, playbackUrl } = props
+  const { insight, frameRefs, playbackUrl, mediaAssetId, platformProjectId } = props
   const brandCheck = props.brandCheck ?? null
   const brandStatus = brandCheck?.status ?? 'unchecked'
   const failedFindings = brandCheck?.findings.filter((f) => !f.passed && !f.skipped) ?? []
@@ -327,6 +341,8 @@ export function SceneInsightInspector(props: {
               </Text>
               <EvidenceStrip
                 playbackUrl={playbackUrl}
+                mediaAssetId={mediaAssetId}
+                platformProjectId={platformProjectId}
                 frameRefs={frameRefs}
                 timestampsMs={
                   brandCheck.evidenceTimestampsMs.length
@@ -431,6 +447,8 @@ export function SceneInsightInspector(props: {
                     .filter(Boolean)
                     .join(' · ')}
                   playbackUrl={playbackUrl}
+                  mediaAssetId={mediaAssetId}
+                  platformProjectId={platformProjectId}
                   frameRefs={frameRefs}
                   evidenceFrameIds={person.evidenceFrameIds}
                 />
@@ -453,6 +471,8 @@ export function SceneInsightInspector(props: {
                     .filter(Boolean)
                     .join(' · ')}
                   playbackUrl={playbackUrl}
+                  mediaAssetId={mediaAssetId}
+                  platformProjectId={platformProjectId}
                   frameRefs={frameRefs}
                   evidenceFrameIds={object.evidenceFrameIds}
                 />
@@ -492,6 +512,8 @@ export function SceneInsightInspector(props: {
                     </div>
                     <EvidenceStrip
                       playbackUrl={playbackUrl}
+                      mediaAssetId={mediaAssetId}
+                      platformProjectId={platformProjectId}
                       frameRefs={frameRefs}
                       evidenceFrameIds={action.evidenceFrameIds}
                     />

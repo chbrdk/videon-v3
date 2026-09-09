@@ -27,6 +27,8 @@ import {
 import { detectScenesFromFile } from '@/lib/pipeline/scene-detect'
 import { extractAudioTrack } from '@/lib/pipeline/audio-extract'
 import { separateAndStoreAudioStems } from '@/lib/pipeline/audio-stems'
+import { peaksFromMonoWavFile, WAVEFORM_PEAK_BUCKETS } from '@/lib/pipeline/wav-peaks'
+import { upsertMediaWaveformPeaks } from '@/lib/db/media-waveform-peaks'
 import { upsertMediaTranscript } from '@/lib/db/transcript'
 import { replaceSearchEntriesForAnalysis } from '@/lib/db/search'
 import { sampleSceneFrames } from '@/lib/pipeline/frame-sample'
@@ -216,6 +218,25 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
           return 'no_audio_track'
         }
 
+        let mixPeakResult = 'mix_peaks_skipped'
+        try {
+          const mixPeaks = await peaksFromMonoWavFile(audioPath, WAVEFORM_PEAK_BUCKETS)
+          if (mixPeaks.length > 0) {
+            await upsertMediaWaveformPeaks({
+              mediaAssetId: media.id,
+              analysisRunId,
+              peaks: mixPeaks,
+              buckets: WAVEFORM_PEAK_BUCKETS,
+              method: 'ffmpeg_mono_wav',
+            })
+            mixPeakResult = 'mix_peaks_ready'
+          } else {
+            mixPeakResult = 'mix_peaks_empty'
+          }
+        } catch {
+          mixPeakResult = 'mix_peaks_failed'
+        }
+
         let stemResult: string = 'stems_skipped'
         if (wantsStems) {
           stemResult = await separateAndStoreAudioStems({
@@ -236,7 +257,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
             transcriptText: null,
             segments: [],
           })
-          return `transcription_skipped:${stemResult}`
+          return `transcription_skipped:${stemResult}:${mixPeakResult}`
         }
 
         try {
@@ -249,7 +270,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
               transcriptText: null,
               segments: [],
             })
-            return `transcription_disabled:${stemResult}`
+            return `transcription_disabled:${stemResult}:${mixPeakResult}`
           }
 
           transcriptSegments = transcript.segments
@@ -261,7 +282,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
             segments: transcript.segments,
           })
           const transcriptLabel = transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
-          return `${transcriptLabel}:${stemResult}`
+          return `${transcriptLabel}:${stemResult}:${mixPeakResult}`
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Transcription failed'
           await upsertMediaTranscript({
@@ -271,7 +292,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
             transcriptText: null,
             segments: [],
           })
-          return `transcription_failed:${message.slice(0, 240)}:${stemResult}`
+          return `transcription_failed:${message.slice(0, 240)}:${stemResult}:${mixPeakResult}`
         }
       })
     } else {

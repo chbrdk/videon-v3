@@ -177,6 +177,7 @@ export function CutEditorView({
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
   const [voicePeaksByMediaId, setVoicePeaksByMediaId] = useState<Record<string, number[]>>({})
   const [musicPeaksByMediaId, setMusicPeaksByMediaId] = useState<Record<string, number[]>>({})
+  const [mixPeaksByMediaId, setMixPeaksByMediaId] = useState<Record<string, number[]>>({})
   const [stemPresenceByMediaId, setStemPresenceByMediaId] = useState<
     Record<string, { voice: boolean; music: boolean }>
   >({})
@@ -243,6 +244,7 @@ export function CutEditorView({
         {
           voicePeaks?: number[]
           musicPeaks?: number[]
+          mixPeaks?: number[]
           method?: string | null
           voice?: boolean
           music?: boolean
@@ -277,10 +279,12 @@ export function CutEditorView({
     setTranscriptsByMediaId(body.transcripts ?? {})
     const nextVoice: Record<string, number[]> = {}
     const nextMusic: Record<string, number[]> = {}
+    const nextMix: Record<string, number[]> = {}
     const nextPresence: Record<string, { voice: boolean; music: boolean }> = {}
     for (const [mediaId, stem] of Object.entries(body.stems ?? {})) {
       if (stem.voicePeaks?.length) nextVoice[mediaId] = stem.voicePeaks
       if (stem.musicPeaks?.length) nextMusic[mediaId] = stem.musicPeaks
+      if (stem.mixPeaks?.length) nextMix[mediaId] = stem.mixPeaks
       nextPresence[mediaId] = {
         voice: Boolean(stem.voice ?? stem.voicePeaks?.length),
         music: Boolean(stem.music ?? stem.musicPeaks?.length),
@@ -288,6 +292,7 @@ export function CutEditorView({
     }
     setVoicePeaksByMediaId(nextVoice)
     setMusicPeaksByMediaId(nextMusic)
+    setMixPeaksByMediaId(nextMix)
     setStemPresenceByMediaId(nextPresence)
     setActiveIndex((current) => Math.min(current, Math.max((body.clips?.length ?? 1) - 1, 0)))
   }, [cutId, platformProjectId, t])
@@ -1322,6 +1327,7 @@ export function CutEditorView({
           playbackUrlByMediaId={playbackUrlByMediaId}
           voicePeaksByMediaId={voicePeaksByMediaId}
           musicPeaksByMediaId={musicPeaksByMediaId}
+          mixPeaksByMediaId={mixPeaksByMediaId}
           sourceDurationMsByMediaId={sourceDurationMsByMediaId}
           audioClips={timelineAudioClips}
           audioBusLabel={audioBusTrack?.name ?? 'Voice-Over'}

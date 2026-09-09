@@ -3,6 +3,33 @@
 import { useEffect, useState } from 'react'
 
 const thumbnailCache = new Map<string, string>()
+const MAX_CLIENT_THUMBS = 2
+let activeClientThumbs = 0
+const clientThumbWaiters: Array<() => void> = []
+
+function releaseClientThumbSlot() {
+  activeClientThumbs = Math.max(0, activeClientThumbs - 1)
+  clientThumbWaiters.shift()?.()
+}
+
+async function withClientThumbSlot<T>(run: () => Promise<T>): Promise<T> {
+  await new Promise<void>((resolve) => {
+    const tryAcquire = () => {
+      if (activeClientThumbs < MAX_CLIENT_THUMBS) {
+        activeClientThumbs += 1
+        resolve()
+        return
+      }
+      clientThumbWaiters.push(tryAcquire)
+    }
+    tryAcquire()
+  })
+  try {
+    return await run()
+  } finally {
+    releaseClientThumbSlot()
+  }
+}
 
 async function captureThumbnail(videoUrl: string, atMs: number): Promise<string | null> {
   const bucketMs = Math.round(atMs / 250) * 250
@@ -15,64 +42,68 @@ async function captureThumbnail(videoUrl: string, atMs: number): Promise<string 
     (typeof window !== 'undefined' &&
       (videoUrl.startsWith(window.location.origin) || videoUrl.startsWith(`${window.location.origin}/`)))
 
-  return new Promise((resolve) => {
-    const video = document.createElement('video')
-    if (!sameOrigin) video.crossOrigin = 'anonymous'
-    video.muted = true
-    video.preload = 'auto'
-    video.playsInline = true
+  return withClientThumbSlot(
+    () =>
+      new Promise((resolve) => {
+        const video = document.createElement('video')
+        if (!sameOrigin) video.crossOrigin = 'anonymous'
+        video.muted = true
+        video.preload = 'auto'
+        video.playsInline = true
 
-    const cleanup = () => {
-      video.removeAttribute('src')
-      video.load()
-    }
-
-    const onError = () => {
-      cleanup()
-      resolve(null)
-    }
-
-    video.addEventListener('error', onError, { once: true })
-    video.addEventListener(
-      'loadeddata',
-      () => {
-        const seekTo = Math.max(0, bucketMs / 1000)
-        const onSeeked = () => {
-          try {
-            const canvas = document.createElement('canvas')
-            canvas.width = 160
-            canvas.height = 90
-            const context = canvas.getContext('2d')
-            if (!context || video.videoWidth <= 0) {
-              cleanup()
-              resolve(null)
-              return
-            }
-            const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight)
-            const width = video.videoWidth * scale
-            const height = video.videoHeight * scale
-            context.fillStyle = '#000'
-            context.fillRect(0, 0, canvas.width, canvas.height)
-            context.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.72)
-            thumbnailCache.set(cacheKey, dataUrl)
-            cleanup()
-            resolve(dataUrl)
-          } catch {
-            cleanup()
-            resolve(null)
-          }
+        const cleanup = () => {
+          video.removeAttribute('src')
+          video.load()
         }
-        video.addEventListener('seeked', onSeeked, { once: true })
-        video.currentTime = Math.min(seekTo, Math.max(video.duration - 0.05, 0))
-      },
-      { once: true },
-    )
 
-    video.src = videoUrl
-  })
+        const onError = () => {
+          cleanup()
+          resolve(null)
+        }
+
+        video.addEventListener('error', onError, { once: true })
+        video.addEventListener(
+          'loadeddata',
+          () => {
+            const seekTo = Math.max(0, bucketMs / 1000)
+            const onSeeked = () => {
+              try {
+                const canvas = document.createElement('canvas')
+                canvas.width = 160
+                canvas.height = 90
+                const context = canvas.getContext('2d')
+                if (!context || video.videoWidth <= 0) {
+                  cleanup()
+                  resolve(null)
+                  return
+                }
+                const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight)
+                const width = video.videoWidth * scale
+                const height = video.videoHeight * scale
+                context.fillStyle = '#000'
+                context.fillRect(0, 0, canvas.width, canvas.height)
+                context.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.72)
+                thumbnailCache.set(cacheKey, dataUrl)
+                cleanup()
+                resolve(dataUrl)
+              } catch {
+                cleanup()
+                resolve(null)
+              }
+            }
+            video.addEventListener('seeked', onSeeked, { once: true })
+            video.currentTime = Math.min(seekTo, Math.max(video.duration - 0.05, 0))
+          },
+          { once: true },
+        )
+
+        video.src = videoUrl
+      }),
+  )
 }
 
+/** Client video→canvas capture — Frame API fallback only; concurrency ≤ 2. */
 export function useClipThumbnail(videoUrl: string | null, atMs: number): string | null {
   const [thumbnail, setThumbnail] = useState<string | null>(null)
 

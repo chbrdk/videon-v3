@@ -149,6 +149,7 @@ export function MediaEditorView({
   const [transcript, setTranscript] = useState<TranscriptState>(null)
   const [voicePeaks, setVoicePeaks] = useState<number[]>([])
   const [musicPeaks, setMusicPeaks] = useState<number[]>([])
+  const [mixPeaks, setMixPeaks] = useState<number[]>([])
   const [stemMethodUsed, setStemMethodUsed] = useState<string | null>(null)
   const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false)
   const [reframeDialogOpen, setReframeDialogOpen] = useState(false)
@@ -195,7 +196,9 @@ export function MediaEditorView({
     },
     [toast],
   )
-  const { peaks: waveformPeaks } = useWaveformPeaks(playbackUrl)
+  const needsClientWaveform = mixPeaks.length === 0 && voicePeaks.length === 0
+  const { peaks: clientWaveformPeaks } = useWaveformPeaks(needsClientWaveform ? playbackUrl : null)
+  const waveformPeaks = mixPeaks.length ? mixPeaks : clientWaveformPeaks
   const markedRange = useMemo(
     () =>
       normalizeInOutRange({
@@ -220,6 +223,7 @@ export function MediaEditorView({
       stems?: {
         voicePeaks?: number[]
         musicPeaks?: number[]
+        mixPeaks?: number[]
         method?: string | null
         voice?: boolean
         music?: boolean
@@ -235,6 +239,7 @@ export function MediaEditorView({
     setTranscript(body.transcript ?? null)
     setVoicePeaks(body.stems?.voicePeaks ?? [])
     setMusicPeaks(body.stems?.musicPeaks ?? [])
+    setMixPeaks(body.stems?.mixPeaks ?? [])
     setHasVoiceStem(Boolean(body.stems?.voice ?? body.stems?.voicePeaks?.length))
     setHasMusicStem(Boolean(body.stems?.music ?? body.stems?.musicPeaks?.length))
     setStemMethodUsed(body.stems?.method ?? null)
@@ -1001,6 +1006,8 @@ export function MediaEditorView({
           durationMs={timelineDuration}
           playheadMs={currentMs}
           playbackUrl={playbackUrl}
+          mediaAssetId={mediaAssetId}
+          platformProjectId={platformProjectId}
           mediaLabel={media.originalFilename}
           scenes={scenes.map((scene) => ({
             sceneKey: scene.sceneKey,
@@ -1078,6 +1085,8 @@ export function MediaEditorView({
                     insight={activeScene.insight}
                     frameRefs={activeScene.frameRefs ?? []}
                     playbackUrl={playbackUrl}
+                    mediaAssetId={mediaAssetId}
+                    platformProjectId={platformProjectId}
                     brandCheck={
                       brandChecks.find((check) => check.sceneKey === activeScene.sceneKey) ?? null
                     }

@@ -42,15 +42,17 @@ function SceneHitShot({
   platformProjectId: string
   atMs: number
 }) {
-  const [ref, inView] = useInViewOnce<HTMLElement>({ rootMargin: '120px 0px' })
+  const [ref, inView] = useInViewOnce<HTMLDivElement>({ rootMargin: '120px 0px' })
   const frameUrl = inView ? mediaFramePosterUrl(mediaAssetId, platformProjectId, atMs) : null
-  const thumbnail = useFramePoster(frameUrl)
+  const { src: thumbnail } = useFramePoster(frameUrl)
   if (!thumbnail) {
     return <div ref={ref} className="videon-scene-hit-shot videon-scene-hit-shot--empty" aria-hidden />
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- Frame API blob URL
-    <img ref={ref} src={thumbnail} alt="" className="videon-scene-hit-shot" />
+    <div ref={ref} className="videon-scene-hit-shot-wrap">
+      {/* eslint-disable-next-line @next/next/no-img-element -- Frame API blob URL */}
+      <img src={thumbnail} alt="" className="videon-scene-hit-shot" />
+    </div>
   )
 }
 

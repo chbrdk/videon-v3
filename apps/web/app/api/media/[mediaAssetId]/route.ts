@@ -10,6 +10,7 @@ import { resolveMediaInWorkspace, resolveWorkspaceForMediaRequest } from '@/lib/
 import { requireSessionUserId } from '@/lib/session-user'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMedia } from '@/lib/db/media-stems'
+import { findLatestWaveformPeaksForMedia } from '@/lib/db/media-waveform-peaks'
 import { listBrandChecksForAnalysis } from '@/lib/db/brand-checks'
 import { toBrandCheckView } from '@/lib/brand-findings'
 
@@ -58,12 +59,15 @@ export async function GET(request: Request, context: RouteContext) {
   const stemRows = await listLatestAudioStemsForMedia(resolved.media.id)
   const voice = stemRows.find((stem) => stem.stemKind === 'voice')
   const music = stemRows.find((stem) => stem.stemKind === 'music')
+  const mixPeaksRow = await findLatestWaveformPeaksForMedia(resolved.media.id)
+  const mixPeaks = mixPeaksRow?.peaks ?? []
   const stems =
-    voice || music
+    voice || music || mixPeaks.length > 0
       ? {
           voicePeaks: voice?.peaks ?? [],
           musicPeaks: music?.peaks ?? [],
-          method: voice?.method ?? music?.method ?? null,
+          mixPeaks,
+          method: voice?.method ?? music?.method ?? mixPeaksRow?.method ?? null,
           voice: Boolean(voice),
           music: Boolean(music),
         }

@@ -66,6 +66,19 @@ Create a Cut.
 
 `GET /api/cuts/:id` includes `tracks` and `audioClips` (empty arrays when none).
 
+### Waveform peaks on Cut detail
+
+`stems[mediaAssetId]` MAY include:
+
+| Field | Notes |
+|-------|--------|
+| `voicePeaks` / `musicPeaks` | From `media_audio_stems` when Demucs (or intentional stem run) produced them |
+| `mixPeaks` | From `media_waveform_peaks` after audio extract (upload default path) |
+| `voice` / `music` | Presence flags for stem WAVs |
+| `method` | Stem method label when stems exist |
+
+Client A1 prefers `voicePeaks`, then `mixPeaks`, then deferred stream decode. A2 uses `musicPeaks` only.
+
 ## Exports
 
 ### `POST /api/cuts/:cutId/exports?platformProjectId=`

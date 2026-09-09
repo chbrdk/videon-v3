@@ -30,6 +30,7 @@ import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { CUT_CANVAS_DEFAULT_FPS, resolveCutCanvas } from '@/lib/cut-canvas'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
 import { listLatestAudioStemsForMediaIds } from '@/lib/db/media-stems'
+import { listLatestWaveformPeaksForMediaIds } from '@/lib/db/media-waveform-peaks'
 import type { TranscriptSegment } from '@/lib/cut-timeline'
 import { requireSessionUserId } from '@/lib/session-user'
 import { resolveWorkspaceForMediaRequest } from '@/lib/media-access'
@@ -92,19 +93,29 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const stemsByMediaId = await listLatestAudioStemsForMediaIds(mediaIds)
+  const mixPeaksByMediaId = await listLatestWaveformPeaksForMediaIds(mediaIds)
   const stems: Record<
     string,
-    { voicePeaks: number[]; musicPeaks: number[]; method: string | null; voice: boolean; music: boolean }
+    {
+      voicePeaks: number[]
+      musicPeaks: number[]
+      mixPeaks: number[]
+      method: string | null
+      voice: boolean
+      music: boolean
+    }
   > = {}
   for (const mediaAssetId of mediaIds) {
     const list = stemsByMediaId[mediaAssetId] ?? []
     const voice = list.find((stem) => stem.stemKind === 'voice')
     const music = list.find((stem) => stem.stemKind === 'music')
-    if (!voice && !music) continue
+    const mixPeaks = mixPeaksByMediaId[mediaAssetId]?.peaks ?? []
+    if (!voice && !music && mixPeaks.length === 0) continue
     stems[mediaAssetId] = {
       voicePeaks: voice?.peaks ?? [],
       musicPeaks: music?.peaks ?? [],
-      method: voice?.method ?? music?.method ?? null,
+      mixPeaks,
+      method: voice?.method ?? music?.method ?? mixPeaksByMediaId[mediaAssetId]?.method ?? null,
       voice: Boolean(voice),
       music: Boolean(music),
     }

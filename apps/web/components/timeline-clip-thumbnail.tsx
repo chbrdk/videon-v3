@@ -3,6 +3,7 @@
 import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
 import { useInViewOnce } from '@/lib/use-in-view'
 import { mediaFramePosterUrl } from '@/lib/media-frame-poster'
+import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import { useFramePoster } from '@/lib/use-frame-poster'
 
 /**
@@ -33,9 +34,13 @@ export function TimelineClipThumbnail({
     shouldLoad && useFrame && mediaAssetId && platformProjectId
       ? mediaFramePosterUrl(mediaAssetId, platformProjectId, sourceMs)
       : null
-  const frameBlobUrl = useFramePoster(frameApiUrl)
+  const { src: frameBlobUrl, status } = useFramePoster(frameApiUrl)
+  const streamFallback =
+    useFrame && mediaAssetId && platformProjectId
+      ? mediaStreamPlaybackUrl(mediaAssetId, platformProjectId)
+      : playbackUrl
   const clientThumb = useClipThumbnail(
-    shouldLoad && !useFrame ? playbackUrl : null,
+    shouldLoad && (!useFrame || status === 'error') ? streamFallback : null,
     sourceMs,
   )
   const thumbnail = frameBlobUrl ?? clientThumb

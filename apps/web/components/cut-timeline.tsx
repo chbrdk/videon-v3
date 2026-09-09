@@ -77,6 +77,7 @@ type CutTimelineProps = {
   peaksByUrl?: Record<string, number[]>
   voicePeaksByMediaId?: Record<string, number[]>
   musicPeaksByMediaId?: Record<string, number[]>
+  mixPeaksByMediaId?: Record<string, number[]>
   sourceDurationMsByMediaId?: Record<string, number>
   audioClips?: CutTimelineAudioClip[]
   audioBusLabel?: string
@@ -113,6 +114,7 @@ export function CutTimeline({
   peaksByUrl = {},
   voicePeaksByMediaId = {},
   musicPeaksByMediaId = {},
+  mixPeaksByMediaId = {},
   sourceDurationMsByMediaId = {},
   audioClips = [],
   audioBusLabel = 'Voice-Over',
@@ -686,6 +688,7 @@ export function CutTimeline({
                     msPerPixel={msPerPixel}
                     peaksByUrl={peaksByUrl}
                     peaksByMediaId={voicePeaksByMediaId}
+                    mixPeaksByMediaId={mixPeaksByMediaId}
                     playbackUrlByMediaId={playbackUrlByMediaId}
                     sourceDurationMsByMediaId={sourceDurationMsByMediaId}
                     clips={clips}

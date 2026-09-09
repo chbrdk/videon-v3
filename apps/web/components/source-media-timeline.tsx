@@ -47,6 +47,8 @@ type SourceMediaTimelineProps = {
   durationMs: number
   playheadMs: number
   playbackUrl?: string | null
+  mediaAssetId?: string
+  platformProjectId?: string
   mediaLabel?: string
   scenes: SourceSceneInsight[]
   transcriptSegments?: SourceTranscriptSegment[]
@@ -113,6 +115,8 @@ export function SourceMediaTimeline({
   durationMs,
   playheadMs,
   playbackUrl = null,
+  mediaAssetId,
+  platformProjectId,
   mediaLabel = 'Quelle',
   scenes,
   transcriptSegments = [],
@@ -494,7 +498,13 @@ export function SourceMediaTimeline({
                     >
                       <div className="videon-cut-timeline__filmstrip">
                         {filmstripThumbs.map((ms) => (
-                          <TimelineClipThumbnail key={ms} playbackUrl={playbackUrl} sourceMs={ms} />
+                          <TimelineClipThumbnail
+                            key={ms}
+                            mediaAssetId={mediaAssetId}
+                            platformProjectId={platformProjectId}
+                            playbackUrl={playbackUrl}
+                            sourceMs={ms}
+                          />
                         ))}
                       </div>
                       <span className="videon-cut-timeline__clip-label">{mediaLabel}</span>

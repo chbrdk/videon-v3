@@ -1,8 +1,8 @@
 # Cut editor load performance
 
-**Status:** Active — Wave 2 (visible A1 peaks + frame concurrency)  
+**Status:** Active — Wave 3 (mixPeaks + Frame fallback + filmstrip)  
 **Product:** VIDEON v3  
-**Implements:** Progressive Cut open · Frame posters · Lazy Bin/Timeline thumbs · Visible/idle A1 waveform · Frame concurrency ≤ 4 · Playback dedupe  
+**Implements:** Progressive Cut open · Frame posters · Lazy Bin/Timeline thumbs · Visible/idle A1 waveform · Frame concurrency ≤ 4 · Playback dedupe · Persisted mixPeaks · Frame-fail client fallback ≤ 2 · Media editor filmstrip Frame API  
 **API companions:** `specs/api/media-frame.md` · `specs/api/media-preview.md` · `specs/api/cuts.md` · `specs/api/media-list.md`  
 **UI companions:** `specs/domain/videon-ui-surfaces.md` · `specs/domain/cut-multi-source-compose.md` · `knowledge/paths.md`  
 **Federation:** `2026-05-plexon-federation-v3`
@@ -78,13 +78,16 @@ Open /cuts/:id
 
 1. Stem voice/music peaks already returned on Cut detail MUST remain the source for A2 / stem lanes — no client re-decode.
 2. Original (A1) peaks: WHEN not present on the Cut/media payload, the editor MUST NOT full-download+`decodeAudioData` during the critical open path. Defer until the waveform lane is visible or the document is idle.
-3. Follow-up (same sprint if capacity): persist original peaks at analysis/ingest (mirror stem peak storage) and return them on Cut detail / media detail — then client decode becomes fallback-only.
+3. **Wave 3:** During the audio analysis stage (after `extractAudioTrack`, independent of Demucs), the runner MUST compute mix waveform peaks (default 240 buckets) from the mono WAV and persist them. Cut detail and media detail MUST return `mixPeaks` alongside stem peaks. Client stream decode is fallback-only when `mixPeaks` (and voice peaks for Cut A1) are absent.
+4. Storage: `media_waveform_peaks` keyed by `(media_asset_id, analysis_run_id)` — not shoehorned into `media_audio_stems` (which requires stem WAV bytes).
 
 ### Bin / Timeline laziness
 
 1. `CutBinPanel` / `MediaCardThumb`: load poster only when the card intersects the rail viewport (root ≈ rail body); cap concurrent frame requests (≤ 4).
 2. `TimelineClipThumbnail`: load only for clips intersecting the timeline viewport (or adjacent buffer of ±1 clip).
 3. Placeholder chrome MUST reserve aspect ratio so layout does not jump when JPEG arrives.
+4. WHERE Frame API fails after the shell is up THEN optional client capture MAY run with concurrency ≤ 2 — never on the open critical path.
+5. Media editor filmstrip and scene evidence strips MUST prefer Frame API when `mediaAssetId` + `platformProjectId` are known.
 
 ## Surfaces
 
@@ -115,6 +118,9 @@ Open /cuts/:id
 - [x] No full-media `decodeAudioData` on the critical open path (assert via code contract test / optional staging trace). *(A1: visible lane + idle; no bulk prefetch)*
 - [x] A1 waveform decode starts only when the audio lane is near-viewport, then idle-deferred (`TimelineAudioTrack` `lazyPeaks`).
 - [x] Frame poster fetches share a concurrency gate of ≤ 4 (`withFrameRequestSlot` / `useFramePoster`).
+- [x] Audio analysis persists `mixPeaks`; Cut/media detail return them; client decode is fallback-only when missing.
+- [x] Frame failure MAY fall back to client capture with concurrency ≤ 2.
+- [x] Media editor filmstrip + scene evidence prefer Frame API when media ids are known.
 - [ ] Staging smoke: open known Cut — chrome interactive before posters fill; timeline still editable while thumbs load.
 - [ ] Regression: insert from Bin (video + scene), playhead, export entry points still work.
 
@@ -132,4 +138,5 @@ Open /cuts/:id
 
 - HTTP caching headers / CDN for frames beyond process-local frame cache.
 - WebCodecs / MSE advanced players.
-- Media editor (`/media/:id`) performance parity (MAY reuse helpers; not sprint gate).
+- Backfill `mixPeaks` for media analyzed before migration `0014` (re-run audio/transcript analysis).
+- Persist original peaks into CDN-backed peak files (JSONB in Postgres is enough for ≤512 buckets).

@@ -13,6 +13,8 @@ type TimelineAudioTrackProps = {
   msPerPixel: number
   peaksByUrl: Record<string, number[]>
   peaksByMediaId?: Record<string, number[]>
+  /** Mix/original peaks when stem voice peaks are absent (A1 fallback). */
+  mixPeaksByMediaId?: Record<string, number[]>
   playbackUrlByMediaId: Record<string, string>
   sourceDurationMsByMediaId: Record<string, number>
   clips: Array<{ scene: { mediaAssetId: string; startMs: number; endMs: number } }>
@@ -44,6 +46,7 @@ export function TimelineAudioTrack({
   msPerPixel,
   peaksByUrl,
   peaksByMediaId = {},
+  mixPeaksByMediaId = {},
   playbackUrlByMediaId,
   sourceDurationMsByMediaId,
   clips,
@@ -61,12 +64,12 @@ export function TimelineAudioTrack({
     const urls = new Set<string>()
     for (const clip of clips) {
       const mediaId = clip.scene.mediaAssetId
-      if (peaksByMediaId[mediaId]?.length) continue
+      if (peaksByMediaId[mediaId]?.length || mixPeaksByMediaId[mediaId]?.length) continue
       const url = playbackUrlByMediaId[mediaId]
       if (url) urls.add(url)
     }
     return [...urls]
-  }, [clips, peaksByMediaId, playbackUrlByMediaId])
+  }, [clips, mixPeaksByMediaId, peaksByMediaId, playbackUrlByMediaId])
 
   useEffect(() => {
     if (lazyPeaks && !inView) return
@@ -112,6 +115,7 @@ export function TimelineAudioTrack({
         const url = playbackUrlByMediaId[clip.scene.mediaAssetId]
         const peaks =
           peaksByMediaId[clip.scene.mediaAssetId] ??
+          mixPeaksByMediaId[clip.scene.mediaAssetId] ??
           (url ? localPeaksByUrl[url] ?? peaksByUrl[url] : null)
         if (!peaks?.length) return null
 
