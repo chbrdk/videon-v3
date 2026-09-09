@@ -461,7 +461,7 @@ export function CutEditorView({
 
   useEffect(() => {
     setLeftRailOpen(readCutRailOpen(CUT_LEFT_OPEN_KEY, true))
-    setRightRailOpen(readCutRailOpen(CUT_RIGHT_OPEN_KEY, true))
+    setRightRailOpen(readCutRailOpen(CUT_RIGHT_OPEN_KEY, false))
   }, [])
 
   useEffect(() => {
@@ -1009,6 +1009,9 @@ export function CutEditorView({
       <div className="videon-nle__top">
       <header className="videon-nle__toolbar">
         <div className="videon-nle__toolbar-title">
+          <Link className="videon-nle__back" href={paths.routes.cutsFor(platformProjectId)}>
+            ← Alle Cuts
+          </Link>
           <h2>{cut.name}</h2>
           <p className="videon-nle__toolbar-meta">
             Cut · {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}

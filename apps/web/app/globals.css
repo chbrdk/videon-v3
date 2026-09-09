@@ -584,13 +584,19 @@ main {
 }
 
 .videon-stage--editor {
-  padding-block-start: 0.75rem;
+  padding-block-start: 0;
   /* Fill shell so Cut/Media NLE can pin the timeline dock (not grow past viewport). */
-  min-height: calc(100vh - 2rem);
-  height: calc(100vh - 2rem);
+  min-height: calc(100dvh - 0.5rem);
+  height: calc(100dvh - 0.5rem);
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: 100%;
+}
+
+/* Cut/Media: reclaim AppFrame side gutters so the program uses nearly full stage width. */
+.app-frame:has(.videon-stage--editor) {
+  --main-gutter: 0.65rem;
 }
 
 .videon-stage--editor .videon-page-lead {
@@ -602,11 +608,18 @@ main {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: none;
+}
+
+.videon-stage--editor .videon-hub__header-row--editor {
+  display: none; /* Back link lives in Cut/Media toolbar */
 }
 
 .videon-stage--editor .videon-hub--editor > .videon-nle {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
 }
 
 .videon-nle {
@@ -926,30 +939,43 @@ main {
 }
 
 .videon-nle__workspace {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* Program always owns the full workspace width; Cut rails overlay edges. */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   height: 100%;
 }
 
 .videon-cut-rail {
-  position: relative;
+  position: absolute;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   max-height: 100%;
   overflow: hidden;
-  background: var(--nle-panel);
+  background: color-mix(in srgb, var(--nle-panel) 94%, transparent);
+  backdrop-filter: blur(10px);
   border-right: 1px solid var(--nle-border);
-  z-index: 2;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 4%, transparent),
+    12px 0 28px color-mix(in srgb, var(--ink) 12%, transparent);
+  z-index: 24;
+}
+
+.videon-cut-rail--left {
+  left: 0;
 }
 
 .videon-cut-rail--right {
+  right: 0;
   border-right: none;
   border-left: 1px solid var(--nle-border);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 4%, transparent),
+    -12px 0 28px color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .videon-cut-rail__chrome {
@@ -2585,9 +2611,9 @@ a.videon-cut-timeline__track-btn--link {
     grid-template-columns: 1fr;
   }
 
-  /* Keep Cut dual-rail + program side-by-side; rails scroll internally. */
+  /* Keep Cut dual-rail overlays; program stays full width. */
   .videon-nle__workspace {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .videon-nle__toolbar {
