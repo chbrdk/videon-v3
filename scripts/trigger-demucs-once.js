@@ -48,12 +48,12 @@ async function main() {
 
   const analysisId = randomUUID()
   const caps = JSON.stringify(['probe', 'scene_detect', 'vision', 'aggregate', 'stems.demucs'])
-  const fingerprint = `videon.pipeline.v1:videon.scene-insight.v2:${row.checksum_sha256}`
+  const fingerprint = `videon.pipeline.v2:videon.scene-insight.v2:${row.checksum_sha256}`
   await client.query(
     `insert into analysis_runs (
        id, media_asset_id, requested_by_plexon_user_id, pipeline_version, scene_schema_version,
        requested_capabilities, input_fingerprint, idempotency_key, status
-     ) values ($1,$2,$3,'videon.pipeline.v1','videon.scene-insight.v2',$4::jsonb,$5,$6,'queued')`,
+     ) values ($1,$2,$3,'videon.pipeline.v2','videon.scene-insight.v2',$4::jsonb,$5,$6,'queued')`,
     [
       analysisId,
       MEDIA,
