@@ -1,12 +1,13 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { createUploadingMediaAsset } from '@/lib/db/media'
+import { createMediaMultipartUpload } from '@/lib/db/media-multipart'
 import { paths } from '@/lib/paths'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 import { pendingChecksumForMedia } from '@/lib/storage/pending-checksum'
 import { mediaSourceStorageKey } from '@/lib/storage/object-store'
-import { S3ObjectStore } from '@/lib/storage/s3-object-store'
+import { MULTIPART_PART_SIZE_BYTES, S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { resolveAccessibleWorkspace } from '@/lib/workspace-access'
 import { randomUUID } from 'node:crypto'
 
@@ -66,21 +67,10 @@ export async function POST(request: Request) {
 
     const mediaAssetId = randomUUID()
     const checksumSha256 = pendingChecksumForMedia(mediaAssetId)
+    const storageKey = mediaSourceStorageKey(resolved.workspace.id, mediaAssetId)
     const store = new S3ObjectStore()
-    const preferProxy = !store.canSignBrowserUpload()
-    const target = preferProxy
-      ? {
-          storageKey: mediaSourceStorageKey(resolved.workspace.id, mediaAssetId),
-          uploadUrl: paths.routes.apiMediaUpload(mediaAssetId, platformProjectId),
-          headers: { 'content-type': mimeType },
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        }
-      : await store.createUploadTarget({
-          workspaceId: resolved.workspace.id,
-          mediaAssetId,
-          mimeType,
-          bytes,
-        })
+    const useDirect = await store.canUseBrowserDirectUpload()
+
     const media = await createUploadingMediaAsset({
       id: mediaAssetId,
       workspace: resolved.workspace,
@@ -89,7 +79,39 @@ export async function POST(request: Request) {
       mimeType,
       bytes,
       checksumSha256,
-      storageKey: target.storageKey,
+      storageKey,
+    })
+
+    if (useDirect) {
+      const target = await store.createUploadTarget({
+        workspaceId: resolved.workspace.id,
+        mediaAssetId,
+        mimeType,
+        bytes,
+      })
+      return apiJson(
+        request,
+        {
+          media,
+          upload: {
+            ...target,
+            mode: 'direct' as const,
+          },
+        },
+        201,
+      )
+    }
+
+    // MinIO community (and similar) cannot set bucket CORS → chunked same-origin multipart.
+    const { uploadId } = await store.createMultipartUpload({
+      workspaceId: resolved.workspace.id,
+      storageKey,
+      mimeType,
+    })
+    await createMediaMultipartUpload({
+      mediaAssetId,
+      workspaceId: resolved.workspace.id,
+      s3UploadId: uploadId,
     })
 
     return apiJson(
@@ -97,8 +119,12 @@ export async function POST(request: Request) {
       {
         media,
         upload: {
-          ...target,
-          mode: preferProxy ? ('proxy' as const) : ('direct' as const),
+          mode: 'multipart' as const,
+          storageKey,
+          partSizeBytes: MULTIPART_PART_SIZE_BYTES,
+          partUrl: paths.routes.apiMediaUploadPart(mediaAssetId, platformProjectId),
+          headers: { 'content-type': mimeType },
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         },
       },
       201,

@@ -1,6 +1,10 @@
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import { finalizeMediaUploaded, findMediaAsset, findMediaByChecksumInWorkspace } from '@/lib/db/media'
+import {
+  deleteMediaMultipartUpload,
+  findMediaMultipartUpload,
+} from '@/lib/db/media-multipart'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
@@ -33,7 +37,10 @@ export async function POST(request: Request, context: RouteContext) {
     body = {}
   }
   const platformProjectId =
-    body && typeof body === 'object' && !Array.isArray(body) && typeof (body as { platformProjectId?: unknown }).platformProjectId === 'string'
+    body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    typeof (body as { platformProjectId?: unknown }).platformProjectId === 'string'
       ? (body as { platformProjectId: string }).platformProjectId.trim()
       : ''
 
@@ -55,6 +62,20 @@ export async function POST(request: Request, context: RouteContext) {
 
   const store = new S3ObjectStore()
   try {
+    const multipart = await findMediaMultipartUpload(media.id)
+    if (multipart) {
+      if (multipart.parts.length === 0) {
+        return apiError(request, 422, 'invalid_payload', 'No multipart parts uploaded yet')
+      }
+      await store.completeMultipartUpload({
+        workspaceId: resolved.workspace.id,
+        storageKey: media.storageKey,
+        uploadId: multipart.s3UploadId,
+        parts: multipart.parts,
+      })
+      await deleteMediaMultipartUpload(media.id)
+    }
+
     const checksumSha256 = await store.hashStoredObject({
       workspaceId: resolved.workspace.id,
       storageKey: media.storageKey,

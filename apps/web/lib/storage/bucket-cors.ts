@@ -29,6 +29,16 @@ export function isMissingCorsConfigurationError(error: unknown): boolean {
   )
 }
 
+/** MinIO community returns this for PutBucketCors (AIStor-only). */
+export function isCorsApiUnsupportedError(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return (
+    message.includes('not implemented') ||
+    message.includes('not supported') ||
+    message.includes('unsupported')
+  )
+}
+
 export function uploadAllowedOrigins(): string[] {
   const origins = new Set<string>()
   const publicUrl = process.env.NEXT_PUBLIC_VIDEON_URL?.trim()
@@ -50,15 +60,23 @@ export function browserUploadCorsRule(allowedOrigins: string[]): CORSRule {
     AllowedHeaders: ['*'],
     AllowedMethods: [...BROWSER_UPLOAD_METHODS],
     AllowedOrigins: origins,
-    ExposeHeaders: ['ETag'],
+    ExposeHeaders: ['ETag', 'etag'],
     MaxAgeSeconds: 3600,
   }
 }
 
-/** Idempotently allow browser PUT to the private bucket from VIDEON origins. */
-export async function ensureBrowserUploadCors(client: S3Client, bucket: string): Promise<void> {
+export type BrowserCorsEnsureResult = 'ready' | 'unsupported' | 'failed'
+
+/**
+ * Idempotently allow browser PUT from VIDEON origins.
+ * Returns `unsupported` when the provider has no bucket CORS API (e.g. MinIO community).
+ */
+export async function ensureBrowserUploadCors(
+  client: S3Client,
+  bucket: string,
+): Promise<BrowserCorsEnsureResult> {
   const requiredOrigins = uploadAllowedOrigins()
-  if (requiredOrigins.length === 0) return
+  if (requiredOrigins.length === 0) return 'ready'
 
   const desiredRules = [browserUploadCorsRule(requiredOrigins)]
   let existingRules: CORSRule[] = []
@@ -66,15 +84,26 @@ export async function ensureBrowserUploadCors(client: S3Client, bucket: string):
     const current = await client.send(new GetBucketCorsCommand({ Bucket: bucket }))
     existingRules = current.CORSRules ?? []
   } catch (error) {
-    if (!isMissingCorsConfigurationError(error)) throw error
+    if (isCorsApiUnsupportedError(error)) return 'unsupported'
+    if (!isMissingCorsConfigurationError(error)) {
+      console.warn('[VIDEON-v3] GetBucketCors failed:', error instanceof Error ? error.message : error)
+      return 'failed'
+    }
   }
 
-  if (corsRulesEqual(existingRules, desiredRules)) return
+  if (corsRulesEqual(existingRules, desiredRules)) return 'ready'
 
-  await client.send(
-    new PutBucketCorsCommand({
-      Bucket: bucket,
-      CORSConfiguration: { CORSRules: desiredRules },
-    }),
-  )
+  try {
+    await client.send(
+      new PutBucketCorsCommand({
+        Bucket: bucket,
+        CORSConfiguration: { CORSRules: desiredRules },
+      }),
+    )
+    return 'ready'
+  } catch (error) {
+    if (isCorsApiUnsupportedError(error)) return 'unsupported'
+    console.warn('[VIDEON-v3] PutBucketCors failed:', error instanceof Error ? error.message : error)
+    return 'failed'
+  }
 }

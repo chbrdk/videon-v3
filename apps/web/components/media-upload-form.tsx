@@ -8,7 +8,7 @@ import { paths } from '@/lib/paths'
 
 function putFileWithProgress(
   url: string,
-  file: File,
+  file: Blob,
   headers: Record<string, string>,
   onProgress: (percent: number) => void,
 ): Promise<void> {
@@ -37,9 +37,6 @@ function putFileWithProgress(
       } catch {
         // ignore non-JSON error bodies
       }
-      if (xhr.status === 408 || xhr.status === 413) {
-        message = `Upload fehlgeschlagen (${xhr.status}) — Datei zu groß für Proxy oder Timeout. Direct-Upload/CORS prüfen.`
-      }
       reject(new Error(message))
     }
     xhr.onerror = () =>
@@ -53,6 +50,30 @@ function putFileWithProgress(
     xhr.onabort = () => reject(new Error('Upload abgebrochen'))
     xhr.send(file)
   })
+}
+
+async function uploadMultipartChunks(input: {
+  file: File
+  partSizeBytes: number
+  partUrlBase: string
+  headers: Record<string, string>
+  onProgress: (percent: number) => void
+}): Promise<void> {
+  const totalParts = Math.ceil(input.file.size / input.partSizeBytes)
+  let uploadedBytes = 0
+  for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+    const start = (partNumber - 1) * input.partSizeBytes
+    const end = Math.min(start + input.partSizeBytes, input.file.size)
+    const chunk = input.file.slice(start, end)
+    const url = `${input.partUrlBase}&partNumber=${partNumber}`
+    await putFileWithProgress(url, chunk, input.headers, (partPercent) => {
+      const partDone = Math.round((chunk.size * partPercent) / 100)
+      const overall = Math.min(100, Math.round(((uploadedBytes + partDone) / input.file.size) * 100))
+      input.onProgress(overall)
+    })
+    uploadedBytes += chunk.size
+    input.onProgress(Math.min(100, Math.round((uploadedBytes / input.file.size) * 100)))
+  }
 }
 
 export function MediaUploadForm({ platformProjectId }: { platformProjectId: string }) {
@@ -87,7 +108,13 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
       })
       const intentBody = (await intentResponse.json()) as {
         media?: { id: string }
-        upload?: { uploadUrl: string; headers: Record<string, string>; mode?: 'direct' | 'proxy' }
+        upload?: {
+          uploadUrl?: string
+          headers: Record<string, string>
+          mode?: 'direct' | 'proxy' | 'multipart'
+          partSizeBytes?: number
+          partUrl?: string
+        }
         error?: { message?: string }
       }
       if (!intentResponse.ok || !intentBody.media || !intentBody.upload) {
@@ -95,23 +122,38 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
       }
 
       const mediaId = intentBody.media.id
-      const proxyUrl = paths.routes.apiMediaUpload(mediaId, platformProjectId)
-      const proxyHeaders = {
-        'content-type': file.type || 'video/mp4',
-      }
+      const mode = intentBody.upload.mode ?? 'direct'
 
-      const uploadVia = async (url: string, headers: Record<string, string>, label: string) => {
-        setProgress(`${label} … 0 %`)
-        await putFileWithProgress(url, file, headers, (percent) => {
-          setProgress(`${label} … ${percent} %`)
+      if (mode === 'multipart') {
+        if (!intentBody.upload.partUrl || !intentBody.upload.partSizeBytes) {
+          throw new Error('Multipart-Upload unvollständig konfiguriert')
+        }
+        setProgress('Datei wird in Teilen übertragen … 0 %')
+        await uploadMultipartChunks({
+          file,
+          partSizeBytes: intentBody.upload.partSizeBytes,
+          partUrlBase: intentBody.upload.partUrl,
+          headers: intentBody.upload.headers,
+          onProgress: (percent) => setProgress(`Datei wird in Teilen übertragen … ${percent} %`),
         })
-      }
-
-      if (intentBody.upload.mode === 'proxy') {
-        await uploadVia(proxyUrl, proxyHeaders, 'Datei wird übertragen (Proxy)')
+      } else if (mode === 'proxy') {
+        setProgress('Datei wird übertragen (Proxy) … 0 %')
+        await putFileWithProgress(
+          paths.routes.apiMediaUpload(mediaId, platformProjectId),
+          file,
+          { 'content-type': file.type || 'video/mp4' },
+          (percent) => setProgress(`Datei wird übertragen (Proxy) … ${percent} %`),
+        )
       } else {
+        if (!intentBody.upload.uploadUrl) throw new Error('Direct-Upload-URL fehlt')
         try {
-          await uploadVia(intentBody.upload.uploadUrl, intentBody.upload.headers, 'Datei wird übertragen')
+          setProgress('Datei wird übertragen … 0 %')
+          await putFileWithProgress(
+            intentBody.upload.uploadUrl,
+            file,
+            intentBody.upload.headers,
+            (percent) => setProgress(`Datei wird übertragen … ${percent} %`),
+          )
         } catch (directError) {
           const message = directError instanceof Error ? directError.message : ''
           const looksCors =
@@ -119,8 +161,20 @@ export function MediaUploadForm({ platformProjectId }: { platformProjectId: stri
             message.includes('Object Storage nicht erreichbar') ||
             message.includes('Netzwerkfehler')
           if (!looksCors) throw directError
+          // CORS unexpectedly blocked — restart via multipart intent would need a new media row;
+          // fall back to same-origin single proxy for small files only.
+          if (file.size > 12 * 1024 * 1024) {
+            throw new Error(
+              'Direct-Upload blockiert (CORS). Bitte erneut versuchen — der Server sollte Multipart wählen.',
+            )
+          }
           setProgress('Direct-Upload blockiert — wechsle auf Same-Origin-Proxy …')
-          await uploadVia(proxyUrl, proxyHeaders, 'Datei wird übertragen (Proxy)')
+          await putFileWithProgress(
+            paths.routes.apiMediaUpload(mediaId, platformProjectId),
+            file,
+            { 'content-type': file.type || 'video/mp4' },
+            (percent) => setProgress(`Datei wird übertragen (Proxy) … ${percent} %`),
+          )
         }
       }
 

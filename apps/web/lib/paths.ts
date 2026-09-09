@@ -119,6 +119,8 @@ export const paths = {
     apiMediaUploadIntent: '/api/media/upload-intent',
     apiMediaUpload: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/upload?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaUploadPart: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/upload-part?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaComplete: (mediaAssetId: string) => `/api/media/${encodeURIComponent(mediaAssetId)}/complete`,
     apiMediaDetail: (mediaAssetId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,

@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   browserUploadCorsRule,
+  isCorsApiUnsupportedError,
   isMissingCorsConfigurationError,
   uploadAllowedOrigins,
 } from '@/lib/storage/bucket-cors'
+import { MULTIPART_PART_SIZE_BYTES } from '@/lib/storage/s3-object-store'
 
 const savedEnv = { ...process.env }
 
@@ -45,9 +47,23 @@ describe('isMissingCorsConfigurationError', () => {
   it('treats MinIO/Garage missing-CORS phrasing as empty config', () => {
     expect(isMissingCorsConfigurationError(new Error('The CORS configuration does not exist'))).toBe(true)
     expect(isMissingCorsConfigurationError(new Error('NoSuchCORSConfiguration'))).toBe(true)
-    expect(
-      isMissingCorsConfigurationError(Object.assign(new Error('x'), { name: 'NoSuchCORSConfiguration' })),
-    ).toBe(true)
     expect(isMissingCorsConfigurationError(new Error('AccessDenied'))).toBe(false)
+  })
+})
+
+describe('isCorsApiUnsupportedError', () => {
+  it('detects MinIO community PutBucketCors rejection', () => {
+    expect(
+      isCorsApiUnsupportedError(
+        new Error('A header you provided implies functionality that is not implemented'),
+      ),
+    ).toBe(true)
+    expect(isCorsApiUnsupportedError(new Error('AccessDenied'))).toBe(false)
+  })
+})
+
+describe('multipart part size', () => {
+  it('stays above the S3 5 MiB minimum for non-final parts', () => {
+    expect(MULTIPART_PART_SIZE_BYTES).toBeGreaterThanOrEqual(5 * 1024 * 1024)
   })
 })

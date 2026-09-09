@@ -10,7 +10,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | Federation contract | `2026-05-plexon-federation-v3` |
 | Staging app | `https://videon.projects-a.plygrnd.tech` |
 | Staging Brandion | `https://brandion-v3.projects-a.plygrnd.tech` |
-| Object storage | `VIDEON_OBJECT_STORAGE_*`; optional `VIDEON_OBJECT_STORAGE_PUBLIC_ENDPOINT` for browser signed URLs; CORS extras via `VIDEON_OBJECT_STORAGE_CORS_ORIGINS`. Direct PUT falls back to `PUT /api/media/:id/upload`. |
+| Object storage | `VIDEON_OBJECT_STORAGE_*`; optional `VIDEON_OBJECT_STORAGE_PUBLIC_ENDPOINT` for browser signed URLs. MinIO community has **no bucket CORS** → upload uses same-origin **multipart chunks** (`PUT /api/media/:id/upload-part`). |
 
 ## UI / DS
 
