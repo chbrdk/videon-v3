@@ -1,8 +1,8 @@
 # Cut editor load performance
 
-**Status:** Active — Wave 1 (Frame posters + lazy thumbs + playback/waveform defer) in progress  
+**Status:** Active — Wave 2 (visible A1 peaks + frame concurrency)  
 **Product:** VIDEON v3  
-**Implements:** Progressive Cut open · Frame posters · Lazy Bin/Timeline thumbs · Waveform defer · Playback dedupe  
+**Implements:** Progressive Cut open · Frame posters · Lazy Bin/Timeline thumbs · Visible/idle A1 waveform · Frame concurrency ≤ 4 · Playback dedupe  
 **API companions:** `specs/api/media-frame.md` · `specs/api/media-preview.md` · `specs/api/cuts.md` · `specs/api/media-list.md`  
 **UI companions:** `specs/domain/videon-ui-surfaces.md` · `specs/domain/cut-multi-source-compose.md` · `knowledge/paths.md`  
 **Federation:** `2026-05-plexon-federation-v3`
@@ -109,10 +109,12 @@ Open /cuts/:id
 ## Acceptance
 
 - [x] Specs: this doc + `media-frame.md` notes editor poster reuse; `knowledge/paths.md` already lists `apiMediaFrame`.
-- [x] Open Cut with 1 clip + ≥ 8 library videos: Bin does not fire ≥ 8 frame/stream poster loads before first paint of the grid placeholders. *(lazy `useInViewOnce`)*
+- [x] Open Cut with 1 clip + ≥ 8 library videos: Bin does not fire ≥ 8 frame/stream poster loads before first paint of the grid placeholders. *(lazy `useInViewOnce` + `withFrameRequestSlot` ≤ 4)*
 - [x] Network: at most one playback-URL resolution for the active media during open (no duplicate `apiMediaPlayback` race). *(direct `mediaStreamPlaybackUrl`; idle map for others)*
 - [x] Bin + timeline posters use Frame API in code paths (`MediaCardThumb` / `TimelineClipThumbnail` or shared helper).
-- [x] No full-media `decodeAudioData` on the critical open path (assert via code contract test / optional staging trace). *(waveform prefetch idle-deferred)*
+- [x] No full-media `decodeAudioData` on the critical open path (assert via code contract test / optional staging trace). *(A1: visible lane + idle; no bulk prefetch)*
+- [x] A1 waveform decode starts only when the audio lane is near-viewport, then idle-deferred (`TimelineAudioTrack` `lazyPeaks`).
+- [x] Frame poster fetches share a concurrency gate of ≤ 4 (`withFrameRequestSlot` / `useFramePoster`).
 - [ ] Staging smoke: open known Cut — chrome interactive before posters fill; timeline still editable while thumbs load.
 - [ ] Regression: insert from Bin (video + scene), playhead, export entry points still work.
 

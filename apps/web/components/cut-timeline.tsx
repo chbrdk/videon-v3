@@ -690,6 +690,7 @@ export function CutTimeline({
                     sourceDurationMsByMediaId={sourceDurationMsByMediaId}
                     clips={clips}
                     label="Source Audio · Voice"
+                    lazyPeaks
                   />
                 ) : null}
               </div>

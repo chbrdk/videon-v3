@@ -30,3 +30,54 @@ export function mediaFramePosterAtDuration(
       : Math.max(0, Math.floor((durationMs ?? 2000) / 2))
   return mediaFramePosterUrl(mediaAssetId, platformProjectId, seek)
 }
+
+const MAX_CONCURRENT_FRAMES = 4
+let activeFrameLoads = 0
+const frameWaiters: Array<() => void> = []
+
+function releaseFrameSlot() {
+  activeFrameLoads = Math.max(0, activeFrameLoads - 1)
+  const next = frameWaiters.shift()
+  if (next) next()
+}
+
+/** Cap concurrent Frame API fetches (Bin / timeline / search posters). */
+export async function withFrameRequestSlot<T>(run: () => Promise<T>): Promise<T> {
+  await new Promise<void>((resolve) => {
+    const tryAcquire = () => {
+      if (activeFrameLoads < MAX_CONCURRENT_FRAMES) {
+        activeFrameLoads += 1
+        resolve()
+        return
+      }
+      frameWaiters.push(tryAcquire)
+    }
+    tryAcquire()
+  })
+  try {
+    return await run()
+  } finally {
+    releaseFrameSlot()
+  }
+}
+
+const frameBlobCache = new Map<string, string>()
+
+/**
+ * Fetch a Frame JPEG through the concurrency gate and return a blob:/cached URL.
+ * Callers that unmount before resolve should ignore the result (hook handles revoke).
+ */
+export async function loadFramePosterBlobUrl(frameUrl: string): Promise<string> {
+  const cached = frameBlobCache.get(frameUrl)
+  if (cached) return cached
+  return withFrameRequestSlot(async () => {
+    const hit = frameBlobCache.get(frameUrl)
+    if (hit) return hit
+    const response = await fetch(frameUrl)
+    if (!response.ok) throw new Error(`Frame ${response.status}`)
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    frameBlobCache.set(frameUrl, objectUrl)
+    return objectUrl
+  })
+}

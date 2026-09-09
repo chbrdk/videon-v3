@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { TimelineClip, Waveform } from '@msqdx/ui'
 import type { CutTimelineItem } from '@/lib/cut-timeline'
 import { timelineLeftPx, timelineWidthPx } from '@/lib/timeline-layout'
+import { prefetchWaveformPeaks } from '@/lib/use-waveform'
+import { useInViewOnce } from '@/lib/use-in-view'
 
 type TimelineAudioTrackProps = {
   timeline: CutTimelineItem[]
@@ -14,6 +17,8 @@ type TimelineAudioTrackProps = {
   sourceDurationMsByMediaId: Record<string, number>
   clips: Array<{ scene: { mediaAssetId: string; startMs: number; endMs: number } }>
   label?: string
+  /** When true, decode stream peaks only after the lane is near the viewport. */
+  lazyPeaks?: boolean
 }
 
 function samplePeaks(peaks: number[], targetBars: number): number[] {
@@ -43,16 +48,71 @@ export function TimelineAudioTrack({
   sourceDurationMsByMediaId,
   clips,
   label = 'Audio-Spur A1',
+  lazyPeaks = false,
 }: TimelineAudioTrackProps) {
   const contentWidthPx = Math.max(timelineLeftPx(totalDurationMs, msPerPixel), 1)
+  const [laneRef, inView] = useInViewOnce<HTMLDivElement>({
+    enabled: lazyPeaks,
+    rootMargin: '200px 0px',
+  })
+  const [localPeaksByUrl, setLocalPeaksByUrl] = useState<Record<string, number[]>>({})
+
+  const urlsNeeded = useMemo(() => {
+    const urls = new Set<string>()
+    for (const clip of clips) {
+      const mediaId = clip.scene.mediaAssetId
+      if (peaksByMediaId[mediaId]?.length) continue
+      const url = playbackUrlByMediaId[mediaId]
+      if (url) urls.add(url)
+    }
+    return [...urls]
+  }, [clips, peaksByMediaId, playbackUrlByMediaId])
+
+  useEffect(() => {
+    if (lazyPeaks && !inView) return
+    let cancelled = false
+    const run = () => {
+      for (const url of urlsNeeded) {
+        if (peaksByUrl[url]?.length) continue
+        void prefetchWaveformPeaks(url)
+          .then((peaks) => {
+            if (cancelled || !peaks.length) return
+            setLocalPeaksByUrl((prev) => (prev[url] ? prev : { ...prev, [url]: peaks }))
+          })
+          .catch(() => {})
+      }
+    }
+    // Even when the lane is visible, wait for idle so open critical path stays free.
+    if (lazyPeaks) {
+      const idle = typeof window !== 'undefined' ? window.requestIdleCallback : undefined
+      if (typeof idle === 'function') {
+        const idleId = idle(run, { timeout: 2500 })
+        return () => {
+          cancelled = true
+          window.cancelIdleCallback?.(idleId)
+        }
+      }
+      const timer = globalThis.setTimeout(run, 400)
+      return () => {
+        cancelled = true
+        globalThis.clearTimeout(timer)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [inView, lazyPeaks, peaksByUrl, urlsNeeded])
 
   return (
-    <div className="videon-cut-timeline__audio-lane" aria-label={label}>
+    <div ref={laneRef} className="videon-cut-timeline__audio-lane" aria-label={label}>
       {timeline.map((item) => {
         const clip = clips[item.index]
         if (!clip) return null
         const url = playbackUrlByMediaId[clip.scene.mediaAssetId]
-        const peaks = peaksByMediaId[clip.scene.mediaAssetId] ?? (url ? peaksByUrl[url] : null)
+        const peaks =
+          peaksByMediaId[clip.scene.mediaAssetId] ??
+          (url ? localPeaksByUrl[url] ?? peaksByUrl[url] : null)
         if (!peaks?.length) return null
 
         const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
@@ -78,7 +138,7 @@ export function TimelineAudioTrack({
             tone="audio"
             className="videon-cut-timeline__clip videon-cut-timeline__clip--audio"
           >
-            <Waveform peaks={sampled} height={28} aria-label={`${label} Clip ${item.index + 1}`} />
+            <Waveform peaks={sampled} className="videon-cut-timeline__audio-canvas" />
           </TimelineClip>
         )
       })}

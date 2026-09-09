@@ -2,6 +2,7 @@
 
 import { useInViewOnce } from '@/lib/use-in-view'
 import { mediaFramePosterAtDuration } from '@/lib/media-frame-poster'
+import { useFramePoster } from '@/lib/use-frame-poster'
 
 /** Shared Mediathek / Cut-Bin poster via Frame API (lazy when in view). */
 export function MediaCardThumb({
@@ -28,9 +29,10 @@ export function MediaCardThumb({
     rootMargin: '160px 0px',
   })
   const shouldLoad = ready && (!lazy || inView)
-  const posterUrl = shouldLoad
+  const frameUrl = shouldLoad
     ? mediaFramePosterAtDuration(mediaAssetId, platformProjectId, durationMs, atMs)
     : null
+  const posterUrl = useFramePoster(frameUrl)
 
   if (!posterUrl) {
     return <div ref={ref} className={`${className} ${className}--empty`} aria-hidden />

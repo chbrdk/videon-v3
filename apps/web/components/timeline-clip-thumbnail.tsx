@@ -3,6 +3,7 @@
 import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
 import { useInViewOnce } from '@/lib/use-in-view'
 import { mediaFramePosterUrl } from '@/lib/media-frame-poster'
+import { useFramePoster } from '@/lib/use-frame-poster'
 
 /**
  * Timeline / filmstrip poster.
@@ -28,15 +29,16 @@ export function TimelineClipThumbnail({
   })
   const shouldLoad = !lazy || inView
   const useFrame = Boolean(mediaAssetId && platformProjectId)
-  const frameUrl =
+  const frameApiUrl =
     shouldLoad && useFrame && mediaAssetId && platformProjectId
       ? mediaFramePosterUrl(mediaAssetId, platformProjectId, sourceMs)
       : null
+  const frameBlobUrl = useFramePoster(frameApiUrl)
   const clientThumb = useClipThumbnail(
     shouldLoad && !useFrame ? playbackUrl : null,
     sourceMs,
   )
-  const thumbnail = frameUrl ?? clientThumb
+  const thumbnail = frameBlobUrl ?? clientThumb
 
   if (!thumbnail) {
     return (

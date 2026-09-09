@@ -45,7 +45,6 @@ import {
 import { type TrimMode } from '@/lib/trim-modes'
 import { paths } from '@/lib/paths'
 import { useEditorKeyboard } from '@/lib/use-editor-keyboard'
-import { prefetchWaveformPeaks } from '@/lib/use-waveform'
 import {
   useProgramAudioMixer,
   type ProgramTrackMutes,
@@ -176,7 +175,6 @@ export function CutEditorView({
   })
   const [trimMode, setTrimMode] = useState<TrimMode>('trim')
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
-  const [peaksByUrl, setPeaksByUrl] = useState<Record<string, number[]>>({})
   const [voicePeaksByMediaId, setVoicePeaksByMediaId] = useState<Record<string, number[]>>({})
   const [musicPeaksByMediaId, setMusicPeaksByMediaId] = useState<Record<string, number[]>>({})
   const [stemPresenceByMediaId, setStemPresenceByMediaId] = useState<
@@ -435,40 +433,6 @@ export function CutEditorView({
       globalThis.clearTimeout(timer)
     }
   }, [clips, audioClips, platformProjectId])
-
-  useEffect(() => {
-    const urls = [...new Set(Object.values(playbackUrlByMediaId))]
-    if (urls.length === 0) {
-      setPeaksByUrl({})
-      return
-    }
-    let cancelled = false
-    const run = () => {
-      void Promise.all(
-        urls.map(async (url) => {
-          const peaks = await prefetchWaveformPeaks(url)
-          return [url, peaks] as const
-        }),
-      ).then((entries) => {
-        if (cancelled) return
-        setPeaksByUrl(Object.fromEntries(entries))
-      })
-    }
-    // Full-stream waveform decode MUST NOT race the open critical path.
-    const idle = typeof window !== 'undefined' ? window.requestIdleCallback : undefined
-    if (typeof idle === 'function') {
-      const idleId = idle(run, { timeout: 5000 })
-      return () => {
-        cancelled = true
-        window.cancelIdleCallback?.(idleId)
-      }
-    }
-    const timer = globalThis.setTimeout(run, 1200)
-    return () => {
-      cancelled = true
-      globalThis.clearTimeout(timer)
-    }
-  }, [playbackUrlByMediaId])
 
   useEffect(() => {
     setLeftRailOpen(readCutRailOpen(CUT_LEFT_OPEN_KEY, true))
@@ -1356,7 +1320,6 @@ export function CutEditorView({
           disabled={busy}
           platformProjectId={platformProjectId}
           playbackUrlByMediaId={playbackUrlByMediaId}
-          peaksByUrl={peaksByUrl}
           voicePeaksByMediaId={voicePeaksByMediaId}
           musicPeaksByMediaId={musicPeaksByMediaId}
           sourceDurationMsByMediaId={sourceDurationMsByMediaId}

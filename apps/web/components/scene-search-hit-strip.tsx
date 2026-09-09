@@ -18,7 +18,7 @@ import {
 import { useToast } from '@msqdx/ui-client'
 import { appendScenesToActiveCut } from '@/lib/active-cut-append'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
-import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
+import { mediaFramePosterUrl } from '@/lib/media-frame-poster'
 import { paths } from '@/lib/paths'
 import {
   sceneHitAtMs,
@@ -27,7 +27,8 @@ import {
   sceneHitTimingLabel,
   type SceneSearchHitModel,
 } from '@/lib/scene-hit-model'
-import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
+import { useFramePoster } from '@/lib/use-frame-poster'
+import { useInViewOnce } from '@/lib/use-in-view'
 import { useT } from '@/lib/user-prefs'
 
 export type { SceneSearchHitModel }
@@ -41,14 +42,15 @@ function SceneHitShot({
   platformProjectId: string
   atMs: number
 }) {
-  const playbackUrl = mediaStreamPlaybackUrl(mediaAssetId, platformProjectId)
-  const thumbnail = useClipThumbnail(playbackUrl, atMs)
+  const [ref, inView] = useInViewOnce<HTMLElement>({ rootMargin: '120px 0px' })
+  const frameUrl = inView ? mediaFramePosterUrl(mediaAssetId, platformProjectId, atMs) : null
+  const thumbnail = useFramePoster(frameUrl)
   if (!thumbnail) {
-    return <div className="videon-scene-hit-shot videon-scene-hit-shot--empty" aria-hidden />
+    return <div ref={ref} className="videon-scene-hit-shot videon-scene-hit-shot--empty" aria-hidden />
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- data-URL frame from clip thumbnail hook
-    <img src={thumbnail} alt="" className="videon-scene-hit-shot" />
+    // eslint-disable-next-line @next/next/no-img-element -- Frame API blob URL
+    <img ref={ref} src={thumbnail} alt="" className="videon-scene-hit-shot" />
   )
 }
 
