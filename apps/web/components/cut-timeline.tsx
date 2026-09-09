@@ -50,7 +50,7 @@ import { armClickSuppress, bindPointerGesture } from '@/lib/cut-pointer-gesture'
 import type { CutTimelineContextMenuRequest } from '@/lib/cut-timeline-context-menu'
 import { CutTimelineMinimap } from '@/components/cut-timeline-minimap'
 import { expandGroupMoveWithRipple } from '@/lib/timeline-ripple'
-import { marqueeHitClipIds, normalizeMarqueeRect } from '@/lib/timeline-marquee'
+import { beginLaneMarquee } from '@/lib/timeline-marquee'
 import { clipIntersectsView, viewportTimeRange } from '@/lib/timeline-viewport-cull'
 import type { TimelineZoomAnchor } from '@/lib/use-timeline-viewport-gestures'
 
@@ -1644,44 +1644,29 @@ export function CutTimeline({
                     onTrackPointerDown(event)
                     return
                   }
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  const origin = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-                  setMarquee({ lane: 'v1', x0: origin.x, y0: origin.y, x1: origin.x, y1: origin.y })
-                  const onMove = (moveEvent: PointerEvent) => {
-                    setMarquee((current) =>
-                      current
-                        ? { ...current, x1: moveEvent.clientX - rect.left, y1: moveEvent.clientY - rect.top }
-                        : current,
-                    )
-                  }
-                  const onUp = (upEvent: PointerEvent) => {
-                    window.removeEventListener('pointermove', onMove)
-                    window.removeEventListener('pointerup', onUp)
-                    const end = { x: upEvent.clientX - rect.left, y: upEvent.clientY - rect.top }
-                    const box = normalizeMarqueeRect(origin, end)
-                    if (Math.abs(box.right - box.left) < 4 && Math.abs(box.bottom - box.top) < 4) {
-                      setMarquee(null)
-                      onTrackPointerDown(event)
-                      return
-                    }
-                    const hits = marqueeHitClipIds(
-                      box,
+                  const trackRect = event.currentTarget.getBoundingClientRect()
+                  beginLaneMarquee({
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    trackRect,
+                    lane: 'v1',
+                    shiftKey: event.shiftKey,
+                    getClipBoxes: (trackHeight) =>
                       timeline.map((item) => {
                         const left = timelineLeftPx(item.cutStartMs, msPerPixel)
                         const width = timelineWidthPx(item.durationMs, msPerPixel)
-                        return { id: item.scene.id, left, right: left + width, top: 0, bottom: rect.height }
+                        return { id: item.scene.id, left, right: left + width, top: 0, bottom: trackHeight }
                       }),
-                    )
-                    const next = hits.map((id) => ({ lane: 'v1' as const, id }))
-                    setSelection(
-                      event.shiftKey
-                        ? [...selection, ...next.filter((item) => !isCutSelected(selection, 'v1', item.id))]
-                        : next,
-                    )
-                    setMarquee(null)
-                  }
-                  window.addEventListener('pointermove', onMove)
-                  window.addEventListener('pointerup', onUp)
+                    setMarquee,
+                    setSelection: (next, additive) => {
+                      setSelection(
+                        additive
+                          ? [...selection, ...next.filter((item) => !isCutSelected(selection, 'v1', item.id))]
+                          : next,
+                      )
+                    },
+                    onEmptyClick: () => onTrackPointerDown(event),
+                  })
                 }}
                 onContextMenu={emitLaneContextMenu}
                 onDragOver={onTrackDragOver}
@@ -1835,7 +1820,36 @@ export function CutTimeline({
               <div
                 ref={videoOverlayTrackRef}
                 className={`videon-cut-timeline__track videon-cut-timeline__track--video videon-cut-timeline__track--v2${tracks.v2.hidden ? ' is-collapsed' : ''}${tracks.v2.muted ? ' is-muted' : ''}${laneDropTarget === 'v2' ? ' is-lane-drop-target' : ''}`}
-                onPointerDown={onTrackPointerDown}
+                onPointerDown={(event) => {
+                  if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip')) {
+                    onTrackPointerDown(event)
+                    return
+                  }
+                  const trackRect = event.currentTarget.getBoundingClientRect()
+                  beginLaneMarquee({
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    trackRect,
+                    lane: 'v2',
+                    shiftKey: event.shiftKey,
+                    getClipBoxes: (trackHeight) =>
+                      visibleVideoClips.map((clip) => {
+                        const durationMs = Math.max(0, clip.endMs - clip.startMs)
+                        const left = timelineLeftPx(clip.timelineStartMs, msPerPixel)
+                        const width = timelineWidthPx(durationMs, msPerPixel)
+                        return { id: clip.id, left, right: left + width, top: 0, bottom: trackHeight }
+                      }),
+                    setMarquee,
+                    setSelection: (next, additive) => {
+                      setSelection(
+                        additive
+                          ? [...selection, ...next.filter((item) => !isCutSelected(selection, 'v2', item.id))]
+                          : next,
+                      )
+                    },
+                    onEmptyClick: () => onTrackPointerDown(event),
+                  })
+                }}
                 onDragOver={onV2TrackDragOver}
                 onDragLeave={() => setDropHintMs(null)}
                 onDrop={onV2TrackDrop}
@@ -1983,6 +1997,36 @@ export function CutTimeline({
 
               <div
                 className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--bus${tracks.ab.hidden ? ' is-collapsed' : ''}${tracks.ab.muted ? ' is-muted' : ''}`}
+                onPointerDown={(event) => {
+                  if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip')) return
+                  const trackRect = event.currentTarget.getBoundingClientRect()
+                  beginLaneMarquee({
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    trackRect,
+                    lane: 'audio',
+                    shiftKey: event.shiftKey,
+                    getClipBoxes: (trackHeight) =>
+                      audioClips.map((clip) => {
+                        const duration = Math.max(0, clip.endMs - clip.startMs)
+                        const left = timelineLeftPx(clip.timelineStartMs, msPerPixel)
+                        const width = timelineWidthPx(duration, msPerPixel, 8)
+                        return { id: clip.id, left, right: left + width, top: 0, bottom: trackHeight }
+                      }),
+                    setMarquee,
+                    setSelection: (next, additive) => {
+                      setSelection(
+                        additive
+                          ? [
+                              ...selection,
+                              ...next.filter((item) => !isCutSelected(selection, 'audio', item.id)),
+                            ]
+                          : next,
+                      )
+                    },
+                    onEmptyClick: () => onTrackPointerDown(event),
+                  })
+                }}
                 onDragOver={onBusDragOver}
                 onDrop={onBusDrop}
                 aria-label={audioBusLabel}

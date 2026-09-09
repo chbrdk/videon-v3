@@ -9,6 +9,8 @@ import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-c
 import { AspectPresetChips } from '@/components/aspect-preset-chips'
 import { CutTimeline, type CutTimelineViewportApi } from '@/components/cut-timeline'
 import { type CutSelection } from '@/lib/cut-timeline-selection'
+import { CUT_EDITOR_SHORTCUTS } from '@/lib/cut-editor-shortcuts'
+import { pruneLockedClipIds, readLockedClipIds, writeLockedClipIds } from '@/lib/cut-clip-locks'
 import {
   applyCutSnap,
   buildCutSnapPoints,
@@ -242,6 +244,24 @@ export function CutEditorView({
   const [zoomAnchor, setZoomAnchor] = useState<TimelineZoomAnchor>('cursor')
   const [lockedIds, setLockedIds] = useState<string[]>([])
   const [linkAudio, setLinkAudio] = useState(false)
+
+  useEffect(() => {
+    setLockedIds(readLockedClipIds(cutId))
+  }, [cutId])
+
+  useEffect(() => {
+    const known = [
+      ...clips.map((clip) => clip.scene.id),
+      ...videoClips.map((clip) => clip.id),
+      ...audioClips.map((clip) => clip.id),
+    ]
+    setLockedIds((current) => {
+      const pruned = pruneLockedClipIds(current, known)
+      if (pruned.length === current.length && pruned.every((id, i) => id === current[i])) return current
+      writeLockedClipIds(cutId, pruned)
+      return pruned
+    })
+  }, [audioClips, clips, cutId, videoClips])
 
   const timeline = useMemo(
     () =>
@@ -1333,7 +1353,9 @@ export function CutEditorView({
           if (allLocked) set.delete(id)
           else set.add(id)
         }
-        return [...set]
+        const next = [...set]
+        writeLockedClipIds(cutId, next)
+        return next
       })
     },
     onToggleLinkAudio: () => setLinkAudio((current) => !current),
@@ -1992,28 +2014,17 @@ export function CutEditorView({
             </ToolButton>
           </div>
           <ul>
-            <li>
-              <kbd>Space</kbd> / <kbd>K</kbd> Play/Pause · Hold <kbd>J</kbd>/<kbd>L</kbd> Shuttle
-            </li>
-            <li>
-              <kbd>,</kbd> / <kbd>.</kbd> Frame · <kbd>⇧←</kbd>/<kbd>⇧→</kbd> ±1 s · <kbd>Alt←</kbd>/<kbd>Alt→</kbd> Clip-Nudge
-            </li>
-            <li>
-              <kbd>A</kbd> Select · <kbd>T</kbd> Trim · <kbd>U</kbd> Slip/Resize/Roll · <kbd>R</kbd> Ripple
-            </li>
-            <li>
-              <kbd>N</kbd> Snap · <kbd>⇧N</kbd> Snap-Filter · <kbd>\</kbd> Zoom-Anker · <kbd>Z</kbd>/<kbd>⇧Z</kbd> Fit
-            </li>
-            <li>
-              <kbd>;</kbd> zur Selection · <kbd>'</kbd> Selection → Playhead · <kbd>⇧L</kbd> Lock · <kbd>⇧A</kbd> Link Audio
-            </li>
-            <li>
-              <kbd>I</kbd>/<kbd>O</kbd> Mark In/Out · <kbd>S</kbd> Teilen · <kbd>⌫</kbd> Löschen
-            </li>
-            <li>
-              <kbd>⌘Z</kbd> Undo · <kbd>⌘⇧Z</kbd> Redo · <kbd>F</kbd> Vollbild · <kbd>?</kbd> Hilfe · <kbd>Esc</kbd>
-            </li>
-            <li>Pinch Zoom · Zwei-Finger Pan · Alt+Wheel Jog · Minimap klicken · Marquee auf V1</li>
+            {CUT_EDITOR_SHORTCUTS.map((row) => (
+              <li key={`${row.keys}-${row.action}`}>
+                {row.keys ? (
+                  <>
+                    <kbd>{row.keys}</kbd> {row.action}
+                  </>
+                ) : (
+                  row.action
+                )}
+              </li>
+            ))}
           </ul>
         </div>
       ) : null}

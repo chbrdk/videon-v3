@@ -1,6 +1,7 @@
 'use client'
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { minimapPointerToScrollLeft } from '@/lib/timeline-minimap-pan'
 
 type CutTimelineMinimapProps = {
   totalDurationMs: number
@@ -32,15 +33,43 @@ export function CutTimelineMinimap({
       ? Math.min(100 - windowLeftPct, Math.max(4, (viewportWidthPx / contentWidthPx) * 100))
       : 100
 
-  const onPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const panFromClientX = (track: HTMLElement, clientX: number) => {
+    const rect = track.getBoundingClientRect()
+    onPanRatio(
+      minimapPointerToScrollLeft({
+        clientX,
+        trackLeft: rect.left,
+        trackWidth: rect.width,
+        contentWidthPx,
+        viewportWidthPx,
+      }),
+    )
+  }
+
+  const onTrackPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const x = Math.min(Math.max(event.clientX - rect.left, 0), rect.width)
     const ratio = rect.width > 0 ? x / rect.width : 0
     if (event.shiftKey) {
-      onPanRatio(Math.max(0, ratio * contentWidthPx - viewportWidthPx / 2))
+      panFromClientX(event.currentTarget, event.clientX)
       return
     }
     onSeek(Math.floor(ratio * duration))
+  }
+
+  const onWindowPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.stopPropagation()
+    event.preventDefault()
+    const track = event.currentTarget.parentElement
+    if (!track) return
+    panFromClientX(track, event.clientX)
+    const onMove = (moveEvent: PointerEvent) => panFromClientX(track, moveEvent.clientX)
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
   }
 
   return (
@@ -51,7 +80,7 @@ export function CutTimelineMinimap({
       aria-valuemin={0}
       aria-valuemax={totalDurationMs}
       aria-valuenow={cutPlayheadMs}
-      onPointerDown={onPointer}
+      onPointerDown={onTrackPointer}
     >
       {selection ? (
         <div
@@ -65,6 +94,8 @@ export function CutTimelineMinimap({
       <div
         className="videon-cut-timeline__minimap-window"
         style={{ left: `${windowLeftPct}%`, width: `${windowWidthPct}%` }}
+        onPointerDown={onWindowPointerDown}
+        title="Viewport ziehen zum Pannen"
       />
       <div className="videon-cut-timeline__minimap-playhead" style={{ left: `${playheadPct}%` }} />
     </div>

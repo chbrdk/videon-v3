@@ -2962,7 +2962,12 @@ a.videon-cut-timeline__track-btn--link {
   bottom: 0;
   background: color-mix(in srgb, var(--accent, #7dd3fc) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent, #7dd3fc) 45%, transparent);
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.videon-cut-timeline__minimap-window:active {
+  cursor: grabbing;
 }
 
 .videon-cut-timeline__minimap-selection {

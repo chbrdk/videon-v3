@@ -21,6 +21,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | `apps/web/components/topbar-trail-host.tsx` | CREATION-style trail host for Cut/Media editor tools in `AppFrame.topbar` |
 | `apps/web/lib/msqdx-ui-client.ts` | Client overlays barrel |
 | `hubIndexLayoutKey` | Session storage for cards/list hub layout |
+| `videon.cut.lockedClipIds.<cutId>` | localStorage JSON string[] of UI-locked clip ids (Wave 3) |
 | `defaultTheme` | `light` → SSR `data-theme=msqdx` via `resolveThemeId` |
 | `themeStorageKey` / `localeStorageKey` / `accentStorageKey` | `videon.v3.*` prefs |
 | `knowledge/i18n.md` | DE/EN UI dictionaries |
