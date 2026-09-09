@@ -2912,6 +2912,29 @@ a.videon-cut-timeline__track-btn--link {
   z-index: 4;
 }
 
+.videon-cut-timeline__clip.is-selected {
+  outline: 1px solid color-mix(in srgb, var(--accent, #7dd3fc) 65%, transparent);
+  outline-offset: -1px;
+}
+
+.videon-cut-timeline__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid color-mix(in srgb, var(--fg, #e8e4dc) 70%, transparent);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.videon-cut-timeline__mark--in {
+  border-left-color: color-mix(in srgb, var(--accent, #7dd3fc) 90%, white);
+}
+
+.videon-cut-timeline__mark--out {
+  border-left-color: color-mix(in srgb, #f59e0b 85%, white);
+}
+
 .videon-cut-timeline__clip--scene {
   cursor: pointer;
   border-color: color-mix(in srgb, var(--accent, #7dd3fc) 55%, var(--nle-border, var(--line)));

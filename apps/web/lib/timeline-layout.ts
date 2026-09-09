@@ -28,6 +28,37 @@ export function timelineContentWidthPx(totalDurationMs: number, zoomLevel: numbe
   return Math.max(Math.ceil(totalDurationMs / msPerPixel), minWidthPx)
 }
 
+/** Largest stepped zoom whose span fits in viewportWidthPx; else minimum zoom. */
+export function zoomIndexToFit(
+  durationMs: number,
+  viewportWidthPx: number,
+  levels: readonly TimelineZoomLevel[] = TIMELINE_ZOOM_LEVELS,
+): number {
+  const width = Math.max(viewportWidthPx, 1)
+  const span = Math.max(durationMs, 1)
+  let best = 0
+  for (let i = 0; i < levels.length; i += 1) {
+    const level = levels[i]!
+    const contentPx = span / timelineMsPerPixel(level)
+    if (contentPx <= width) best = i
+  }
+  return best
+}
+
+/** Scroll so [startMs, endMs] is centered (clamped). */
+export function scrollLeftToCenterRange(input: {
+  startMs: number
+  endMs: number
+  msPerPixel: number
+  viewportWidthPx: number
+  contentWidthPx: number
+}): number {
+  const midMs = (input.startMs + input.endMs) / 2
+  const midPx = midMs / Math.max(input.msPerPixel, 0.001)
+  const maxScroll = Math.max(0, input.contentWidthPx - input.viewportWidthPx)
+  return Math.max(0, Math.min(midPx - input.viewportWidthPx / 2, maxScroll))
+}
+
 export function timelineLeftPx(ms: number, msPerPixel: number): number {
   return ms / msPerPixel
 }

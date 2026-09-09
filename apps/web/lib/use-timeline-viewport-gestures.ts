@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { scrollLeftAfterZoom } from '@/lib/timeline-snap'
+import { applyInertiaScrollLeft, nextInertiaVelocity } from '@/lib/timeline-pan-inertia'
 import { timelineMsPerPixel, type TimelineZoomLevel } from '@/lib/timeline-layout'
 
 type TimelineViewportGesturesOptions = {
@@ -18,7 +19,7 @@ type TimelineViewportGesturesOptions = {
 /**
  * Cut timeline viewport wheel:
  * - pinch / ctrl|meta+wheel → stepped zoom toward cursor
- * - deltaX / shift+wheel / plain deltaY → horizontal pan
+ * - deltaX / shift+wheel / plain deltaY → horizontal pan (+ inertia)
  * - alt+wheel → jog seek (former useJogShuttle default)
  */
 export function useTimelineViewportGestures(options: TimelineViewportGesturesOptions): void {
@@ -43,11 +44,49 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
     if (!element || !enabled) return
 
     let zoomAccum = 0
+    let panVelocity = 0
+    let lastPanAt = 0
+    let inertiaRaf = 0
+    let idleTimer = 0
+
+    const cancelInertia = () => {
+      if (inertiaRaf) {
+        cancelAnimationFrame(inertiaRaf)
+        inertiaRaf = 0
+      }
+      if (idleTimer) {
+        window.clearTimeout(idleTimer)
+        idleTimer = 0
+      }
+      panVelocity = 0
+    }
+
+    const runInertia = () => {
+      inertiaRaf = 0
+      panVelocity = nextInertiaVelocity(panVelocity)
+      if (panVelocity === 0) return
+      element.scrollLeft = applyInertiaScrollLeft(element.scrollLeft, panVelocity)
+      inertiaRaf = requestAnimationFrame(runInertia)
+    }
+
+    const scheduleInertia = () => {
+      if (idleTimer) window.clearTimeout(idleTimer)
+      idleTimer = window.setTimeout(() => {
+        idleTimer = 0
+        if (Math.abs(panVelocity) < 0.2) {
+          panVelocity = 0
+          return
+        }
+        if (inertiaRaf) cancelAnimationFrame(inertiaRaf)
+        inertiaRaf = requestAnimationFrame(runInertia)
+      }, 100)
+    }
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
 
       if (event.altKey) {
+        cancelInertia()
         const magnitude = Math.min(Math.abs(event.deltaY) || Math.abs(event.deltaX), 120)
         const steps = Math.max(1, Math.round(magnitude / 40))
         const unit = event.shiftKey ? coarseMs : frameMs
@@ -58,6 +97,7 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
       }
 
       if (event.ctrlKey || event.metaKey) {
+        cancelInertia()
         zoomAccum += event.deltaY
         if (Math.abs(zoomAccum) < 20) return
         const direction = zoomAccum > 0 ? -1 : 1
@@ -82,6 +122,11 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
         return
       }
 
+      if (inertiaRaf) {
+        cancelAnimationFrame(inertiaRaf)
+        inertiaRaf = 0
+      }
+
       const useShiftAsHorizontal = event.shiftKey
       const dx =
         Math.abs(event.deltaX) >= Math.abs(event.deltaY) || useShiftAsHorizontal
@@ -90,9 +135,19 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
             : event.deltaX || event.deltaY
           : event.deltaY
       element.scrollLeft += dx
+
+      const now = performance.now()
+      const dt = Math.max(1, now - lastPanAt)
+      lastPanAt = now
+      // Blend toward recent wheel delta as velocity (px/frame-ish).
+      panVelocity = panVelocity * 0.35 + (dx * (16 / dt)) * 0.65
+      scheduleInertia()
     }
 
     element.addEventListener('wheel', onWheel, { passive: false })
-    return () => element.removeEventListener('wheel', onWheel)
+    return () => {
+      cancelInertia()
+      element.removeEventListener('wheel', onWheel)
+    }
   }, [coarseMs, enabled, frameMs, setZoomIndex, viewportRef, zoomLevels])
 }

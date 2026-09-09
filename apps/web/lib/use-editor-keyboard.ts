@@ -17,6 +17,11 @@ export type EditorKeyboardHandlers = {
   onDelete?: () => void
   onUndo?: () => void
   onRedo?: () => void
+  onToggleSnap?: () => void
+  onFitSelection?: () => void
+  onFitAll?: () => void
+  onNudgeLeft?: (coarse: boolean) => void
+  onNudgeRight?: (coarse: boolean) => void
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -78,6 +83,17 @@ export function useEditorKeyboard(handlers: EditorKeyboardHandlers): void {
         handlersRef.current.onMarkOut?.()
         return
       }
+      if (key === 'n' && !meta) {
+        event.preventDefault()
+        handlersRef.current.onToggleSnap?.()
+        return
+      }
+      if (key === 'z' && !meta) {
+        event.preventDefault()
+        if (event.shiftKey) handlersRef.current.onFitAll?.()
+        else handlersRef.current.onFitSelection?.()
+        return
+      }
       if (event.key === ',' || event.key === '<') {
         event.preventDefault()
         handlersRef.current.onFrameBack?.()
@@ -86,6 +102,16 @@ export function useEditorKeyboard(handlers: EditorKeyboardHandlers): void {
       if (event.key === '.' || event.key === '>') {
         event.preventDefault()
         handlersRef.current.onFrameForward?.()
+        return
+      }
+      if (event.altKey && key === 'arrowleft') {
+        event.preventDefault()
+        handlersRef.current.onNudgeLeft?.(event.shiftKey)
+        return
+      }
+      if (event.altKey && key === 'arrowright') {
+        event.preventDefault()
+        handlersRef.current.onNudgeRight?.(event.shiftKey)
         return
       }
       if (key === 'arrowleft' && event.shiftKey) {

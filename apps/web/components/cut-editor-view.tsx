@@ -7,7 +7,9 @@ import { useRouter } from 'next/navigation'
 import { Button, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
 import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AspectPresetChips } from '@/components/aspect-preset-chips'
-import { CutTimeline } from '@/components/cut-timeline'
+import { CutTimeline, type CutTimelineViewportApi } from '@/components/cut-timeline'
+import { type CutSelection } from '@/lib/cut-timeline-selection'
+import { applyCutSnap, buildCutSnapPoints, nudgeTimelineStartMs } from '@/lib/timeline-snap'
 import { CutEditorRail } from '@/components/cut-editor-rail'
 import { CutBinPanel } from '@/components/cut-bin-panel'
 import { CutClipInspector } from '@/components/cut-clip-inspector'
@@ -221,6 +223,10 @@ export function CutEditorView({
   const [videoClips, setVideoClips] = useState<CutVideoClip[]>([])
   const [selectedAudioClipId, setSelectedAudioClipId] = useState<string | null>(null)
   const [selectedVideoClipId, setSelectedVideoClipId] = useState<string | null>(null)
+  const [markInMs, setMarkInMs] = useState<number | null>(null)
+  const [markOutMs, setMarkOutMs] = useState<number | null>(null)
+  const [timelineSelection, setTimelineSelection] = useState<CutSelection[]>([])
+  const timelineViewportApiRef = useRef<CutTimelineViewportApi | null>(null)
 
   const timeline = useMemo(
     () =>
@@ -900,6 +906,64 @@ export function CutEditorView({
     nudgePlayhead(direction * frameDurationMs(cut?.frameRate))
   }
 
+  const nudgeSelectedClips = (direction: -1 | 1, coarse: boolean) => {
+    const deltaMs = direction * (coarse ? SEEK_STEP_MS : frameDurationMs(cut?.frameRate))
+    const selected =
+      timelineSelection.length > 0
+        ? timelineSelection
+        : selectedAudioClipId
+          ? ([{ lane: 'audio', id: selectedAudioClipId }] as CutSelection[])
+          : selectedVideoClipId
+            ? ([{ lane: 'v2', id: selectedVideoClipId }] as CutSelection[])
+            : activeClip
+              ? ([{ lane: 'v1', id: activeClip.scene.id }] as CutSelection[])
+              : []
+    if (selected.length === 0) return
+
+    const v1Edges = timeline.map((item) => ({ cutStartMs: item.cutStartMs, cutEndMs: item.cutEndMs }))
+    const v2Edges = videoClips.map((clip) => ({
+      cutStartMs: clip.timelineStartMs,
+      cutEndMs: clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs),
+    }))
+    const audioEdges = audioClips.map((clip) => ({
+      cutStartMs: clip.timelineStartMs,
+      cutEndMs: clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs),
+    }))
+    const points = buildCutSnapPoints({
+      v1: v1Edges,
+      v2: v2Edges,
+      audio: audioEdges,
+      playheadMs: cutPlayheadMs,
+      sequenceEndMs: totalDurationMs,
+      marks: { inMs: markInMs, outMs: markOutMs },
+    })
+    // Nudge uses ~10px at 1x zoom as a stable default for keyboard.
+    const msPerPixel = 24
+    const snapOn = timelineViewportApiRef.current?.getSnapEnabled() ?? true
+
+    for (const entry of selected) {
+      if (entry.lane === 'v1') {
+        const clip = clips.find((item) => item.scene.id === entry.id)
+        if (!clip) continue
+        const raw = nudgeTimelineStartMs(clip.scene.timelineStartMs ?? 0, deltaMs)
+        const next = applyCutSnap(raw, points, msPerPixel, snapOn).ms
+        void patchTimeline({ action: 'moveScene', sceneId: entry.id, timelineStartMs: next })
+      } else if (entry.lane === 'v2') {
+        const clip = videoClips.find((item) => item.id === entry.id)
+        if (!clip) continue
+        const raw = nudgeTimelineStartMs(clip.timelineStartMs, deltaMs)
+        const next = applyCutSnap(raw, points, msPerPixel, snapOn).ms
+        void patchTimeline({ action: 'moveVideoClip', videoClipId: entry.id, timelineStartMs: next })
+      } else {
+        const clip = audioClips.find((item) => item.id === entry.id)
+        if (!clip) continue
+        const raw = nudgeTimelineStartMs(clip.timelineStartMs, deltaMs)
+        const next = applyCutSnap(raw, points, msPerPixel, snapOn).ms
+        void patchTimeline({ action: 'moveAudioClip', audioClipId: entry.id, timelineStartMs: next })
+      }
+    }
+  }
+
   const deleteCut = async () => {
     if (!window.confirm('Cut archivieren?')) return
     setBusy(true)
@@ -1177,6 +1241,13 @@ export function CutEditorView({
     onStepForward: () => stepClip(1),
     onFrameBack: () => frameStep(-1),
     onFrameForward: () => frameStep(1),
+    onMarkIn: () => setMarkInMs(cutPlayheadRef.current),
+    onMarkOut: () => setMarkOutMs(cutPlayheadRef.current),
+    onToggleSnap: () => timelineViewportApiRef.current?.toggleSnap(),
+    onFitSelection: () => timelineViewportApiRef.current?.fitSelection(),
+    onFitAll: () => timelineViewportApiRef.current?.fitAll(),
+    onNudgeLeft: (coarse) => nudgeSelectedClips(-1, coarse),
+    onNudgeRight: (coarse) => nudgeSelectedClips(1, coarse),
     onSplit: () => {
       if (!splitTarget) return
       void patchTimeline({ action: 'split', sceneId: splitTarget.sceneId, atMs: splitTarget.atMs })
@@ -1622,6 +1693,13 @@ export function CutEditorView({
           videoOverlayMuted={Boolean(videoOverlayTrack?.muted)}
           selectedAudioClipId={selectedAudioClipId}
           selectedVideoClipId={selectedVideoClipId}
+          markInMs={markInMs}
+          markOutMs={markOutMs}
+          selection={timelineSelection}
+          onSelectionChange={setTimelineSelection}
+          onViewportApi={(api) => {
+            timelineViewportApiRef.current = api
+          }}
           onSelectClip={(index) => {
             setSelectedAudioClipId(null)
             setSelectedVideoClipId(null)
