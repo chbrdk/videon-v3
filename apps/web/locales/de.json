@@ -184,14 +184,14 @@
     "canvasFailed": "Canvas konnte nicht gesetzt werden",
     "exportFormat": "Export",
     "exportMp4": "MP4",
-    "exportPremiere": "Premiere XML",
+    "exportPremiere": "Premiere Pro (ZIP)",
     "exportStart": "Exportieren",
     "exportBusy": "Export …",
     "exportStarted": "Export gestartet …",
     "exportReady": "Export fertig — Download verfügbar",
     "exportFailed": "Export fehlgeschlagen",
     "downloadMp4": "MP4 herunterladen",
-    "downloadXml": "Premiere XML herunterladen"
+    "downloadXml": "Premiere-Paket herunterladen"
   },
   "home": {
     "kicker": "VIDEON",

@@ -34,7 +34,8 @@ export function cutExportStorageKey(
     if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
     return trimmed
   }
-  const ext = format === 'premiere_xml' ? 'xml' : 'mp4'
+  // premiere_xml ships as ZIP (XMEML + media/); see specs/domain/cut-export-extras.md
+  const ext = format === 'premiere_xml' ? 'zip' : 'mp4'
   return `${safe(workspaceId, 'workspaceId')}/cuts/${safe(cutId, 'cutId')}/exports/${safe(exportId, 'exportId')}.${ext}`
 }
 

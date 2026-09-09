@@ -1,5 +1,5 @@
 /**
- * Premiere Pro XMEML v4 (XML-only, no media ZIP).
+ * Premiere Pro XMEML v4 + ZIP media package helpers.
  * Spec: specs/domain/cut-export-extras.md
  */
 
@@ -9,6 +9,8 @@ export type PremiereXmlScene = {
   startMs: number
   endMs: number
   originalFilename: string
+  /** Basename under `media/` in the ZIP; defaults to sanitized originalFilename. */
+  zipMediaName?: string
   /** Full source media duration in ms (file duration); falls back to endMs. */
   mediaDurationMs?: number | null
 }
@@ -50,7 +52,63 @@ function rateXml(fps: number): string {
 		</rate>`
 }
 
-/** Build XMEML v4 sequence from Cut scenes; media paths are placeholders for relink. */
+/** Safe single-path basename for ZIP `media/` entries. */
+export function sanitizePremiereMediaBasename(filename: string, fallbackId: string): string {
+  const base = filename.replace(/\\/g, '/').split('/').pop()?.trim() || ''
+  const cleaned = base.replace(/[^\w.\- ()[\]]+/g, '_').replace(/^\.+/, '')
+  if (cleaned && cleaned !== '.' && cleaned !== '..') return cleaned
+  return `${fallbackId.replace(/[^\w.-]+/g, '_') || 'media'}.mp4`
+}
+
+/** Unique basename per media asset (disambiguate colliding originals). */
+export function assignPremiereZipMediaNames(
+  items: Array<{ mediaAssetId: string; originalFilename: string }>,
+): Map<string, string> {
+  const used = new Set<string>()
+  const map = new Map<string, string>()
+  for (const item of items) {
+    if (map.has(item.mediaAssetId)) continue
+    let name = sanitizePremiereMediaBasename(item.originalFilename, item.mediaAssetId)
+    if (used.has(name.toLowerCase())) {
+      const dot = name.lastIndexOf('.')
+      const stem = dot > 0 ? name.slice(0, dot) : name
+      const ext = dot > 0 ? name.slice(dot) : '.mp4'
+      let n = 2
+      while (used.has(`${stem}-${n}${ext}`.toLowerCase())) n += 1
+      name = `${stem}-${n}${ext}`
+    }
+    used.add(name.toLowerCase())
+    map.set(item.mediaAssetId, name)
+  }
+  return map
+}
+
+export function sanitizePremiereXmlFilename(cutName: string): string {
+  const cleaned = cutName
+    .trim()
+    .replace(/[^\w.\- ()[\]]+/g, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 120)
+  return `${cleaned || 'cut'}.xml`
+}
+
+export function premierePackageReadme(cutName: string, xmlFilename: string): string {
+  return `VIDEON Premiere Pro export
+
+Cut: ${cutName}
+
+Contents:
+- ${xmlFilename} — Adobe Premiere Pro XMEML sequence
+- media/ — source media referenced by the sequence
+
+How to use:
+1. Extract this ZIP into one folder (keep media/ next to the XML).
+2. In Premiere Pro: File → Import → select ${xmlFilename}.
+3. Clips should link to media/ automatically via file://media/… paths.
+`
+}
+
+/** Build XMEML v4 sequence; pathurl values point at ZIP-relative media/. */
 export function buildPremiereXmeml(input: {
   cut: PremiereXmlCut
   scenes: PremiereXmlScene[]
@@ -72,13 +130,16 @@ export function buildPremiereXmeml(input: {
         scene.mediaDurationMs != null && scene.mediaDurationMs > 0
           ? scene.mediaDurationMs
           : Math.max(scene.endMs, clipDurMs)
-      const name = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+      const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+      const zipName =
+        scene.zipMediaName ||
+        sanitizePremiereMediaBasename(scene.originalFilename || '', scene.mediaAssetId)
       const fileId = `file-${scene.mediaAssetId}`
-      const pathUrl = `file://media/${escapeXml(scene.originalFilename || `${scene.mediaAssetId}.mp4`)}`
+      const pathUrl = `file://media/${escapeXml(zipName)}`
       return `
 					<clipitem id="clipitem-${index + 1}" premiereChannelType="video">
 						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
-						<name>${name}</name>
+						<name>${displayName}</name>
 						<enabled>TRUE</enabled>
 						<duration>${framesFromMs(clipDurMs, fps)}</duration>
 						${rate}
@@ -89,7 +150,7 @@ export function buildPremiereXmeml(input: {
 						<pproTicksIn>${framesFromMs(scene.startMs, fps) * 1000000}</pproTicksIn>
 						<pproTicksOut>${framesFromMs(scene.endMs, fps) * 1000000}</pproTicksOut>
 						<file id="${fileId}">
-							<name>${name}</name>
+							<name>${displayName}</name>
 							<pathurl>${pathUrl}</pathurl>
 							${rate}
 							<duration>${framesFromMs(fileDurMs, fps)}</duration>
@@ -130,12 +191,12 @@ export function buildPremiereXmeml(input: {
     .map((scene, index) => {
       const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
       const tlStart = timelineStartMs(scenes, index)
-      const name = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+      const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
       const fileId = `file-${scene.mediaAssetId}`
       return `
 					<clipitem id="clipitem-a-${index + 1}" premiereChannelType="stereo">
 						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
-						<name>${name}</name>
+						<name>${displayName}</name>
 						<enabled>TRUE</enabled>
 						<duration>${framesFromMs(clipDurMs, fps)}</duration>
 						${rate}

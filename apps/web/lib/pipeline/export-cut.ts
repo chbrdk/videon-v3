@@ -12,7 +12,8 @@ import {
   markCutExportSucceeded,
 } from '@/lib/db/cut-exports'
 import { findMediaAssetDetail, type MediaAssetDetail } from '@/lib/db/media'
-import { buildPremiereXmeml } from '@/lib/pipeline/export-premiere-xml'
+import { buildPremiereXmeml, assignPremiereZipMediaNames, premierePackageReadme, sanitizePremiereXmlFilename } from '@/lib/pipeline/export-premiere-xml'
+import { safeUnlink, writePremiereExportZip } from '@/lib/pipeline/export-premiere-zip'
 import { cutExportStorageKey } from '@/lib/storage/object-store'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
@@ -195,35 +196,65 @@ async function runPremiereXmlExport(input: {
   cut: Cut
   scenes: CutScene[]
 }): Promise<void> {
+  const store = new S3ObjectStore()
   const mediaById = new Map<string, MediaAssetDetail>()
-  for (const scene of input.scenes) {
-    if (mediaById.has(scene.mediaAssetId)) continue
-    const media = await findMediaAssetDetail(scene.mediaAssetId)
-    if (!media || media.workspaceId !== input.cut.workspaceId) {
-      throw new Error(`Source media unavailable for scene ${scene.id}`)
-    }
-    mediaById.set(media.id, media)
-  }
+  const sourceCache = new Map<string, string>()
+  const zipPath = join(tmpdir(), `videon-export-${input.exportId}.zip`)
 
-  const xml = buildPremiereXmeml({
-    cut: input.cut,
-    scenes: input.scenes.map((scene) => {
-      const media = mediaById.get(scene.mediaAssetId)!
-      return {
-        id: scene.id,
-        mediaAssetId: scene.mediaAssetId,
-        startMs: scene.startMs,
-        endMs: scene.endMs,
-        originalFilename: media.originalFilename,
-        mediaDurationMs: media.durationMs,
-      }
-    }),
-  })
-
-  const outputPath = join(tmpdir(), `videon-export-${input.exportId}.xml`)
   try {
-    await writeFile(outputPath, xml, 'utf8')
-    const store = new S3ObjectStore()
+    for (const scene of input.scenes) {
+      if (mediaById.has(scene.mediaAssetId)) continue
+      const media = await findMediaAssetDetail(scene.mediaAssetId)
+      if (!media || media.workspaceId !== input.cut.workspaceId) {
+        throw new Error(`Source media unavailable for scene ${scene.id}`)
+      }
+      mediaById.set(media.id, media)
+      const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
+      await store.downloadObjectToFile({
+        workspaceId: media.workspaceId,
+        storageKey: media.storageKey,
+        destinationPath: sourcePath,
+      })
+      sourceCache.set(media.id, sourcePath)
+    }
+
+    const zipNames = assignPremiereZipMediaNames(
+      [...mediaById.values()].map((media) => ({
+        mediaAssetId: media.id,
+        originalFilename: media.originalFilename,
+      })),
+    )
+
+    const xmlFilename = sanitizePremiereXmlFilename(input.cut.name)
+    const xml = buildPremiereXmeml({
+      cut: input.cut,
+      scenes: input.scenes.map((scene) => {
+        const media = mediaById.get(scene.mediaAssetId)!
+        return {
+          id: scene.id,
+          mediaAssetId: scene.mediaAssetId,
+          startMs: scene.startMs,
+          endMs: scene.endMs,
+          originalFilename: media.originalFilename,
+          zipMediaName: zipNames.get(scene.mediaAssetId),
+          mediaDurationMs: media.durationMs,
+        }
+      }),
+    })
+
+    const mediaFiles = [...mediaById.values()].map((media) => ({
+      absolutePath: sourceCache.get(media.id)!,
+      zipMediaName: zipNames.get(media.id)!,
+    }))
+
+    await writePremiereExportZip({
+      zipPath,
+      xmlFilename,
+      xmlContent: xml,
+      readmeContent: premierePackageReadme(input.cut.name || 'Cut', xmlFilename),
+      mediaFiles,
+    })
+
     const storageKey = cutExportStorageKey(
       input.cut.workspaceId,
       input.cut.id,
@@ -233,12 +264,13 @@ async function runPremiereXmlExport(input: {
     const bytes = await store.uploadFileFromPath({
       workspaceId: input.cut.workspaceId,
       storageKey,
-      filePath: outputPath,
-      mimeType: 'application/xml',
+      filePath: zipPath,
+      mimeType: 'application/zip',
     })
     await markCutExportSucceeded({ exportId: input.exportId, storageKey, bytes })
   } finally {
-    await unlink(outputPath).catch(() => {})
+    await safeUnlink(zipPath)
+    for (const path of sourceCache.values()) await safeUnlink(path)
   }
 }
 

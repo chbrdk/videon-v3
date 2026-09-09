@@ -75,11 +75,12 @@ Returns `{ cut }` with updated `width`/`height`. Spec: `cut-export-extras.md`.
 ### `POST /api/cuts/:cutId/exports?platformProjectId=`
 
 Body: `{ "format"?: "mp4" | "premiere_xml", "idempotencyKey"?: string }` — default `mp4`.  
+`premiere_xml` stores a **ZIP** (XMEML + `media/` sources), not bare XML.  
 Response `202` `{ export }`.
 
 ### `GET /api/cuts/:cutId/exports/:exportId`
 
-Returns `{ export, downloadUrl? }`. Download filename `.mp4` or `.xml` by format; MIME accordingly.
+Returns `{ export, downloadUrl? }`. Download filename `.mp4` or `.zip` by format; MIME `video/mp4` or `application/zip`.
 
 ## Errors
 

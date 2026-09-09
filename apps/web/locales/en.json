@@ -184,14 +184,14 @@
     "canvasFailed": "Could not set canvas",
     "exportFormat": "Export",
     "exportMp4": "MP4",
-    "exportPremiere": "Premiere XML",
+    "exportPremiere": "Premiere Pro (ZIP)",
     "exportStart": "Export",
     "exportBusy": "Exporting…",
     "exportStarted": "Export started…",
     "exportReady": "Export ready — download available",
     "exportFailed": "Export failed",
     "downloadMp4": "Download MP4",
-    "downloadXml": "Download Premiere XML"
+    "downloadXml": "Download Premiere package"
   },
   "home": {
     "kicker": "VIDEON",

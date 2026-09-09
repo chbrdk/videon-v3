@@ -534,7 +534,7 @@ export function registerVideonTools(server: ToolServer) {
     {
       title: 'Start cut export',
       description:
-        'POST /api/cuts/:id/exports — enqueue export job (mp4 or premiere_xml). Prefer Collection Flow when available. Write tool — confirm. Access Model B via actorUserId + service auth.',
+        'POST /api/cuts/:id/exports — enqueue export job (mp4 or premiere_xml ZIP with media). Prefer Collection Flow when available. Write tool — confirm. Access Model B via actorUserId + service auth.',
       inputSchema: z.object({
         actorUserId,
         cutId: z.string(),
