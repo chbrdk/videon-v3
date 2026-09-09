@@ -51,6 +51,7 @@ README.txt
 - `<pathurl>` values MUST be `file://media/{basename}` matching ZIP entries under `media/`.
 - Each distinct `media_asset_id` appears once under `media/` (full source file, not trimmed segments).
 - Duplicate original filenames MUST be disambiguated (`clip.mp4`, `clip-2.mp4`, …).
+- XMEML MUST emit a stereo pair: one video track + two audio tracks (`sourcetrack` 1/2) with bidirectional `<link>` + `<groupindex>` so Premiere applies the same `<in>`/`<out>` to audio as to video.
 - Operator flow: extract ZIP → Import XML in Premiere → clips link offline-ready when relative `media/` resolves.
 
 ## Surfaces

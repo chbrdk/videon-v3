@@ -117,39 +117,53 @@ export function buildPremiereXmeml(input: {
   const width = input.cut.width && input.cut.width > 0 ? input.cut.width : 1920
   const height = input.cut.height && input.cut.height > 0 ? input.cut.height : 1080
   const scenes = input.scenes
+  const n = scenes.length
   const totalMs = scenes.reduce((sum, scene) => sum + Math.max(0, scene.endMs - scene.startMs), 0)
   const totalFrames = framesFromMs(totalMs, fps)
   const sequenceName = escapeXml(input.cut.name || 'Cut')
   const rate = rateXml(fps)
+  const definedFiles = new Set<string>()
 
-  const videoClips = scenes
-    .map((scene, index) => {
-      const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
-      const tlStart = timelineStartMs(scenes, index)
-      const fileDurMs =
-        scene.mediaDurationMs != null && scene.mediaDurationMs > 0
-          ? scene.mediaDurationMs
-          : Math.max(scene.endMs, clipDurMs)
-      const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
-      const zipName =
-        scene.zipMediaName ||
-        sanitizePremiereMediaBasename(scene.originalFilename || '', scene.mediaAssetId)
-      const fileId = `file-${scene.mediaAssetId}`
-      const pathUrl = `file://media/${escapeXml(zipName)}`
-      return `
-					<clipitem id="clipitem-${index + 1}" premiereChannelType="video">
-						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
-						<name>${displayName}</name>
-						<enabled>TRUE</enabled>
-						<duration>${framesFromMs(clipDurMs, fps)}</duration>
-						${rate}
-						<start>${framesFromMs(tlStart, fps)}</start>
-						<end>${framesFromMs(tlStart + clipDurMs, fps)}</end>
-						<in>${framesFromMs(scene.startMs, fps)}</in>
-						<out>${framesFromMs(scene.endMs, fps)}</out>
-						<pproTicksIn>${framesFromMs(scene.startMs, fps) * 1000000}</pproTicksIn>
-						<pproTicksOut>${framesFromMs(scene.endMs, fps) * 1000000}</pproTicksOut>
-						<file id="${fileId}">
+  const linkBlock = (index: number) => {
+    const videoId = `clipitem-${index + 1}`
+    const audioLId = `clipitem-${index + 1 + n}`
+    const audioRId = `clipitem-${index + 1 + n * 2}`
+    const clipindex = index + 1
+    return `
+						<link>
+							<linkclipref>${videoId}</linkclipref>
+							<mediatype>video</mediatype>
+							<trackindex>1</trackindex>
+							<clipindex>${clipindex}</clipindex>
+						</link>
+						<link>
+							<linkclipref>${audioLId}</linkclipref>
+							<mediatype>audio</mediatype>
+							<trackindex>1</trackindex>
+							<clipindex>${clipindex}</clipindex>
+							<groupindex>1</groupindex>
+						</link>
+						<link>
+							<linkclipref>${audioRId}</linkclipref>
+							<mediatype>audio</mediatype>
+							<trackindex>2</trackindex>
+							<clipindex>${clipindex}</clipindex>
+							<groupindex>1</groupindex>
+						</link>`
+  }
+
+  const fileBlock = (scene: PremiereXmlScene, index: number, fileDurMs: number) => {
+    const fileId = `file-${scene.mediaAssetId}`
+    if (definedFiles.has(fileId)) {
+      return `<file id="${fileId}"/>`
+    }
+    definedFiles.add(fileId)
+    const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+    const zipName =
+      scene.zipMediaName ||
+      sanitizePremiereMediaBasename(scene.originalFilename || '', scene.mediaAssetId)
+    const pathUrl = `file://media/${escapeXml(zipName)}`
+    return `<file id="${fileId}">
 							<name>${displayName}</name>
 							<pathurl>${pathUrl}</pathurl>
 							${rate}
@@ -171,62 +185,86 @@ export function buildPremiereXmeml(input: {
 									</samplecharacteristics>
 								</video>
 								<audio>
+									<channelcount>2</channelcount>
 									<samplecharacteristics>
 										<depth>16</depth>
 										<samplerate>48000</samplerate>
 									</samplecharacteristics>
-									<channelcount>2</channelcount>
 								</audio>
 							</media>
-						</file>
+						</file>`
+  }
+
+  const videoClips = scenes
+    .map((scene, index) => {
+      const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
+      const tlStart = timelineStartMs(scenes, index)
+      const fileDurMs =
+        scene.mediaDurationMs != null && scene.mediaDurationMs > 0
+          ? scene.mediaDurationMs
+          : Math.max(scene.endMs, clipDurMs)
+      const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+      const inFrames = framesFromMs(scene.startMs, fps)
+      const outFrames = framesFromMs(scene.endMs, fps)
+      return `
+					<clipitem id="clipitem-${index + 1}" premiereChannelType="video">
+						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
+						<name>${displayName}</name>
+						<enabled>TRUE</enabled>
+						<duration>${framesFromMs(fileDurMs, fps)}</duration>
+						${rate}
+						<start>${framesFromMs(tlStart, fps)}</start>
+						<end>${framesFromMs(tlStart + clipDurMs, fps)}</end>
+						<in>${inFrames}</in>
+						<out>${outFrames}</out>
+						<pproTicksIn>${inFrames * 1000000}</pproTicksIn>
+						<pproTicksOut>${outFrames * 1000000}</pproTicksOut>
+						${fileBlock(scene, index, fileDurMs)}
 						<sourcetrack>
 							<mediatype>video</mediatype>
 							<trackindex>1</trackindex>
 						</sourcetrack>
+						${linkBlock(index)}
 					</clipitem>`
     })
     .join('')
 
-  const audioClips = scenes
-    .map((scene, index) => {
-      const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
-      const tlStart = timelineStartMs(scenes, index)
-      const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
-      const fileId = `file-${scene.mediaAssetId}`
-      return `
-					<clipitem id="clipitem-a-${index + 1}" premiereChannelType="stereo">
+  const audioTrackClips = (channelTrackIndex: 1 | 2) =>
+    scenes
+      .map((scene, index) => {
+        const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
+        const tlStart = timelineStartMs(scenes, index)
+        const fileDurMs =
+          scene.mediaDurationMs != null && scene.mediaDurationMs > 0
+            ? scene.mediaDurationMs
+            : Math.max(scene.endMs, clipDurMs)
+        const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+        const fileId = `file-${scene.mediaAssetId}`
+        const clipId = `clipitem-${index + 1 + n * channelTrackIndex}`
+        const inFrames = framesFromMs(scene.startMs, fps)
+        const outFrames = framesFromMs(scene.endMs, fps)
+        return `
+					<clipitem id="${clipId}" premiereChannelType="stereo">
 						<masterclipid>masterclip-${scene.mediaAssetId}</masterclipid>
 						<name>${displayName}</name>
 						<enabled>TRUE</enabled>
-						<duration>${framesFromMs(clipDurMs, fps)}</duration>
+						<duration>${framesFromMs(fileDurMs, fps)}</duration>
 						${rate}
 						<start>${framesFromMs(tlStart, fps)}</start>
 						<end>${framesFromMs(tlStart + clipDurMs, fps)}</end>
-						<in>${framesFromMs(scene.startMs, fps)}</in>
-						<out>${framesFromMs(scene.endMs, fps)}</out>
-						<pproTicksIn>${framesFromMs(scene.startMs, fps) * 1000000}</pproTicksIn>
-						<pproTicksOut>${framesFromMs(scene.endMs, fps) * 1000000}</pproTicksOut>
+						<in>${inFrames}</in>
+						<out>${outFrames}</out>
+						<pproTicksIn>${inFrames * 1000000}</pproTicksIn>
+						<pproTicksOut>${outFrames * 1000000}</pproTicksOut>
 						<file id="${fileId}"/>
 						<sourcetrack>
 							<mediatype>audio</mediatype>
-							<trackindex>1</trackindex>
+							<trackindex>${channelTrackIndex}</trackindex>
 						</sourcetrack>
-						<link>
-							<linkclipref>clipitem-${index + 1}</linkclipref>
-							<mediatype>video</mediatype>
-							<trackindex>1</trackindex>
-							<clipindex>${index + 1}</clipindex>
-						</link>
-						<gain>
-							<parameter>
-								<parameterid>gain</parameterid>
-								<name>Level</name>
-								<value>1</value>
-							</parameter>
-						</gain>
+						${linkBlock(index)}
 					</clipitem>`
-    })
-    .join('')
+      })
+      .join('')
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE xmeml>
@@ -254,11 +292,24 @@ export function buildPremiereXmeml(input: {
 				</track>
 			</video>
 			<audio>
+				<numOutputChannels>2</numOutputChannels>
+				<format>
+					<samplecharacteristics>
+						<depth>16</depth>
+						<samplerate>48000</samplerate>
+					</samplecharacteristics>
+				</format>
 				<track>
-					${audioClips}
+					${audioTrackClips(1)}
 					<enabled>TRUE</enabled>
 					<locked>FALSE</locked>
 					<outputchannelindex>1</outputchannelindex>
+				</track>
+				<track>
+					${audioTrackClips(2)}
+					<enabled>TRUE</enabled>
+					<locked>FALSE</locked>
+					<outputchannelindex>2</outputchannelindex>
 				</track>
 			</audio>
 		</media>
@@ -266,3 +317,4 @@ export function buildPremiereXmeml(input: {
 </xmeml>
 `
 }
+

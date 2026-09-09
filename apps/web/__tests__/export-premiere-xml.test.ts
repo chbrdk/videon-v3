@@ -47,6 +47,12 @@ describe('buildPremiereXmeml', () => {
     expect(xml).toContain('<timebase>25</timebase>')
     expect(xml).toContain('file://media/clip-a.mp4')
     expect(xml).toContain('Test Cut')
+    expect(xml).toContain('<groupindex>1</groupindex>')
+    expect(xml).toContain('<trackindex>2</trackindex>')
+    expect(xml).toContain('clipitem-3') // audio L for scene 1 when n=2 → index+1+n = 3
+    expect(xml).toContain('clipitem-5') // audio R for scene 1 → index+1+2n = 5
+    // Audio in-point for second scene (startMs 500 @ 25fps = 13 frames)
+    expect(xml).toMatch(/<clipitem id="clipitem-4"[\s\S]*?<in>13<\/in>/)
   })
 })
 
