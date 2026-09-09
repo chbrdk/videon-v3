@@ -1,17 +1,10 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
-import {
-  AppFrame,
-  MsqdxLogoMark,
-  NavRail,
-  ShellBackButton,
-  shellFrameStyle,
-  type RailDockEdge,
-} from '../lib/msqdx-ui-shell'
+import { AppFrame, shellFrameStyle } from '../lib/msqdx-ui-shell'
 import { Avatar } from '@msqdx/ui'
 import { useActiveCollection } from './collection-context'
 import {
@@ -58,12 +51,10 @@ export function AppShell({
   editor?: boolean
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { data: session } = useSession()
   const { platformProjectId } = useActiveCollection()
   const { displayName: prefName } = useUserPrefs()
   const t = useT()
-  const [railEdge, setRailEdge] = useState<RailDockEdge>(paths.railDockEdge)
   const displayName =
     prefName.trim() && prefName !== paths.defaultDisplayName
       ? prefName
@@ -75,9 +66,9 @@ export function AppShell({
         railInsetRem: paths.railInsetRem,
         railGapRem: paths.railGapRem,
         railWidthRem: paths.railWidthRem,
-        mainGutterRem: paths.mainGutterRem,
+        mainGutterRem: editor ? 0 : paths.mainGutterRem,
       }),
-    [],
+    [editor],
   )
 
   function isActive(route: string, href: string): boolean {
@@ -87,7 +78,8 @@ export function AppShell({
         pathname.startsWith(paths.routes.projects) || pathname.startsWith(paths.routes.collections)
       )
     }
-    return pathname === href.split('?')[0] || pathname.startsWith(href.split('?')[0])
+    const base = href.split('?')[0]
+    return pathname === base || pathname.startsWith(`${base}/`)
   }
 
   const navItems = useMemo(
@@ -105,7 +97,6 @@ export function AppShell({
           id: item.id,
           href,
           label,
-          ariaLabel: label,
           icon: item.icon,
           active: isActive(item.route, href),
         }
@@ -113,33 +104,57 @@ export function AppShell({
     [pathname, platformProjectId, t],
   )
 
+  const settingsActive = pathname.startsWith(paths.routes.settings)
+
   return (
     <AppFrame
-      railEdge={railEdge}
+      railEdge={paths.railDockEdge}
       style={frameStyle}
-      backCorner={<ShellBackButton label={t('common.back')} onClick={() => router.back()} />}
+      className={
+        editor
+          ? 'videon-app-frame--top-chrome videon-app-frame--editor'
+          : 'videon-app-frame--top-chrome'
+      }
+      shellCorners
+      shellCornerRadius={paths.brandCornerRadiusPx}
       brandCorner={<ShellBrandCorner />}
-      rail={
-        <NavRail
-          dockable
-          dockStorageKey={paths.railDockStorageKey}
-          defaultDockEdge={paths.railDockEdge}
-          onDockEdgeChange={setRailEdge}
-          logo={<MsqdxLogoMark size={26} title="MSQ DX" />}
-          logoLabel={t('nav.homeAria', { brand: paths.brandLabel })}
-          linkComponent={Link}
-          items={navItems}
-          footerItems={[
-            {
-              id: 'settings',
-              label: t('nav.settings'),
-              href: paths.routes.settings,
-              active: pathname.startsWith(paths.routes.settings),
-              ariaLabel: t('nav.settingsAria'),
-              icon: <Avatar name={displayName} size="sm" className="rail-avatar" />,
-            },
-          ]}
-        />
+      topbar={
+        <>
+          <div className="topbar-brand videon-topbar-lead">
+            <nav className="videon-top-nav" aria-label={t('nav.primaryAria')}>
+              {navItems.map((item) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={item.active ? 'videon-top-nav__link is-active' : 'videon-top-nav__link'}
+                  aria-current={item.active ? 'page' : undefined}
+                  aria-label={item.label}
+                  title={item.label}
+                >
+                  <span className="videon-top-nav__icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                </Link>
+              ))}
+              <Link
+                href={paths.routes.settings}
+                className={
+                  settingsActive
+                    ? 'videon-top-nav__link videon-top-nav__settings is-active'
+                    : 'videon-top-nav__link videon-top-nav__settings'
+                }
+                aria-current={settingsActive ? 'page' : undefined}
+                aria-label={t('nav.settingsAria')}
+                title={t('nav.settings')}
+              >
+                <span className="videon-top-nav__icon" aria-hidden="true">
+                  <Avatar name={displayName} size="sm" className="rail-avatar" />
+                </span>
+              </Link>
+            </nav>
+          </div>
+          <div className="topbar-right videon-topbar-trail" data-testid="videon-topbar-trail" />
+        </>
       }
     >
       <div className={`videon-stage${editor ? ' videon-stage--editor' : ' videon-stage--flush-top'}`}>

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { Button, Field, Input, Stack, Text } from '@msqdx/ui'
-import { Dialog, Select } from '@msqdx/ui-client'
+import { Dialog } from '@msqdx/ui-client'
 import type { MediaReframeAspect } from '@/lib/db/media-reframes'
+import { AspectPresetChips } from '@/components/aspect-preset-chips'
 import { useT } from '@/lib/user-prefs'
 
 export type ReframeOptions = {
@@ -94,11 +95,12 @@ export function ReframeOptionsDialog({ open, busy = false, onClose, onConfirm }:
           {t('reframe.lead')}
         </Text>
         <Field label={t('reframe.aspect')}>
-          <Select
+          <AspectPresetChips
+            ariaLabel={t('reframe.aspect')}
             value={aspectRatio}
             disabled={busy}
-            options={presets.map((preset) => ({ value: preset.value, label: preset.label }))}
-            onChange={(value: string) => setAspectRatio(value as MediaReframeAspect)}
+            options={presets}
+            onChange={setAspectRatio}
           />
         </Field>
         {aspectRatio === 'custom' ? (

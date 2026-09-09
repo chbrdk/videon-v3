@@ -118,3 +118,8 @@ export { TimelineClip } from '../../../../msqdx-ui/packages/ui/src/components/Ti
 export type { TimelineClipProps, TimelineClipTone } from '../../../../msqdx-ui/packages/ui/src/components/TimelineClip'
 export { Waveform } from '../../../../msqdx-ui/packages/ui/src/components/Waveform'
 export type { WaveformProps } from '../../../../msqdx-ui/packages/ui/src/components/Waveform'
+export {
+  AspectRatioGlyph,
+  aspectRatioGlyphId,
+} from '../../../../msqdx-ui/packages/ui/src/components/InspectLayoutGlyphsMore'
+export type { AspectRatioGlyphId } from '../../../../msqdx-ui/packages/ui/src/components/InspectLayoutGlyphsMore'

@@ -9,10 +9,10 @@ export const CUT_LEFT_OPEN_KEY = 'videon.cut.leftRailOpen.v2'
 export const CUT_RIGHT_OPEN_KEY = 'videon.cut.rightRailOpen.v2'
 
 export const CUT_RAIL_LIMITS = {
-  min: 220,
-  max: 480,
-  leftDefault: 280,
-  rightDefault: 300,
+  min: 200,
+  max: 440,
+  leftDefault: 256,
+  rightDefault: 272,
 } as const
 
 function clamp(px: number): number {

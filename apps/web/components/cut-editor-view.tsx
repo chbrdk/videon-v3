@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Field, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
 import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-client'
+import { AspectPresetChips } from '@/components/aspect-preset-chips'
 import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
 import { CutEditorRail } from '@/components/cut-editor-rail'
 import { CutClipInspector } from '@/components/cut-clip-inspector'
@@ -1054,9 +1055,8 @@ export function CutEditorView({
             ]}
           />
           <div className="videon-nle__tool-group">
-            <Select
-              aria-label={t('cutEditor.canvas')}
-              size="sm"
+            <AspectPresetChips
+              ariaLabel={t('cutEditor.canvas')}
               value={aspectPreset}
               disabled={busy || canvasBusy}
               options={[
@@ -1065,8 +1065,7 @@ export function CutEditorView({
                 { value: '1:1', label: '1:1' },
                 { value: 'custom', label: t('cutEditor.custom') },
               ]}
-              onChange={(value: string) => {
-                const next = value as CutAspectPreset
+              onChange={(next) => {
                 setAspectPreset(next)
                 if (next !== 'custom') {
                   const pixels = CUT_ASPECT_PRESET_PIXELS[next]

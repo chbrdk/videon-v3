@@ -17,10 +17,12 @@ export const paths = {
   i18nLibPath: 'apps/web/lib/i18n.ts',
   localesDir: 'apps/web/locales',
   i18nKnowledgePath: 'knowledge/i18n.md',
-  railInsetRem: 1,
-  railGapRem: 4,
-  railWidthRem: 4.25,
+  /** Legacy NavRail metrics — product chrome is horizontal top nav (CREATION P67); zeroed for shellFrameStyle. */
+  railInsetRem: 0,
+  railGapRem: 0,
+  railWidthRem: 0,
   mainGutterRem: 2.5,
+  /** AppFrame data-rail-edge; padding overridden by `.videon-app-frame--top-chrome`. */
   railDockEdge: 'left' as const,
   railDockStorageKey: 'videon.v3.railDock',
   hubIndexLayoutKey: 'videon.v3.hubIndexLayout',
