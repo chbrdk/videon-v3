@@ -5,6 +5,8 @@ import { scrollLeftAfterZoom } from '@/lib/timeline-snap'
 import { applyInertiaScrollLeft, nextInertiaVelocity } from '@/lib/timeline-pan-inertia'
 import { timelineMsPerPixel, type TimelineZoomLevel } from '@/lib/timeline-layout'
 
+export type TimelineZoomAnchor = 'cursor' | 'playhead'
+
 type TimelineViewportGesturesOptions = {
   viewportRef: RefObject<HTMLElement | null>
   zoomIndex: number
@@ -14,14 +16,11 @@ type TimelineViewportGesturesOptions = {
   enabled?: boolean
   frameMs?: number
   coarseMs?: number
+  zoomAnchor?: TimelineZoomAnchor
+  playheadMs?: number
+  msPerPixel?: number
 }
 
-/**
- * Cut timeline viewport wheel:
- * - pinch / ctrl|meta+wheel → stepped zoom toward cursor
- * - deltaX / shift+wheel / plain deltaY → horizontal pan (+ inertia)
- * - alt+wheel → jog seek (former useJogShuttle default)
- */
 export function useTimelineViewportGestures(options: TimelineViewportGesturesOptions): void {
   const {
     viewportRef,
@@ -32,12 +31,21 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
     enabled = true,
     frameMs = 40,
     coarseMs = 1000,
+    zoomAnchor = 'cursor',
+    playheadMs = 0,
+    msPerPixel = 24,
   } = options
 
   const zoomIndexRef = useRef(zoomIndex)
   zoomIndexRef.current = zoomIndex
   const onSeekDeltaRef = useRef(onSeekDelta)
   onSeekDeltaRef.current = onSeekDelta
+  const zoomAnchorRef = useRef(zoomAnchor)
+  zoomAnchorRef.current = zoomAnchor
+  const playheadMsRef = useRef(playheadMs)
+  playheadMsRef.current = playheadMs
+  const msPerPixelRef = useRef(msPerPixel)
+  msPerPixelRef.current = msPerPixel
 
   useEffect(() => {
     const element = viewportRef.current
@@ -110,7 +118,10 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
         const oldMpp = timelineMsPerPixel(oldLevel)
         const newMpp = timelineMsPerPixel(newLevel)
         const rect = element.getBoundingClientRect()
-        const pointerOffsetX = event.clientX - rect.left
+        const pointerOffsetX =
+          zoomAnchorRef.current === 'playhead'
+            ? playheadMsRef.current / Math.max(msPerPixelRef.current, 0.001) - element.scrollLeft
+            : event.clientX - rect.left
         element.scrollLeft = scrollLeftAfterZoom({
           scrollLeft: element.scrollLeft,
           pointerOffsetX,
@@ -139,7 +150,6 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
       const now = performance.now()
       const dt = Math.max(1, now - lastPanAt)
       lastPanAt = now
-      // Blend toward recent wheel delta as velocity (px/frame-ish).
       panVelocity = panVelocity * 0.35 + (dx * (16 / dt)) * 0.65
       scheduleInertia()
     }

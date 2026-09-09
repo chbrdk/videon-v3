@@ -52,6 +52,24 @@ Create a Cut.
 - `trim` MAY also send `timelineStartMs` when the start edge is resized (anchor right edge).
 - Returns `{ scenes }` with `timelineStartMs` on each scene.
 
+### New: `moveClips` (batch + optional ripple)
+
+```json
+{
+  "action": "moveClips",
+  "ripple": false,
+  "moves": [
+    { "lane": "v1", "id": "<sceneId>", "timelineStartMs": 12000 },
+    { "lane": "v2", "id": "<videoClipId>", "timelineStartMs": 8000 },
+    { "lane": "audio", "id": "<audioClipId>", "timelineStartMs": 4000 }
+  ]
+}
+```
+
+- Applies all moves in **one** DB transaction. `timelineStartMs` MUST be ≥ 0.
+- WHEN `ripple` is true THEN for each moved clip the server MUST also shift later same-lane clips by the same Δt as that clip (primary moves listed explicitly; client SHOULD expand ripple into the `moves` array for determinism — server MAY re-apply per-lane delta from each primary).
+- Returns `{ scenes, videoClips, audioClips }` (full lists for touched lanes).
+
 ### New: `addScenes`
 
 ```json

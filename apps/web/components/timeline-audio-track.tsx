@@ -6,6 +6,7 @@ import type { CutTimelineItem } from '@/lib/cut-timeline'
 import { timelineLeftPx, timelineWidthPx } from '@/lib/timeline-layout'
 import { prefetchWaveformPeaks } from '@/lib/use-waveform'
 import { useInViewOnce } from '@/lib/use-in-view'
+import { downsamplePeaks } from '@/lib/waveform-lod'
 
 type TimelineAudioTrackProps = {
   timeline: CutTimelineItem[]
@@ -21,23 +22,6 @@ type TimelineAudioTrackProps = {
   label?: string
   /** When true, decode stream peaks only after the lane is near the viewport. */
   lazyPeaks?: boolean
-}
-
-function samplePeaks(peaks: number[], targetBars: number): number[] {
-  if (peaks.length === 0) return [0.15]
-  const bars = Math.max(4, Math.min(targetBars, peaks.length))
-  if (peaks.length <= bars) return [...peaks]
-  const out: number[] = []
-  for (let i = 0; i < bars; i += 1) {
-    const start = Math.floor((i / bars) * peaks.length)
-    const end = Math.max(start + 1, Math.floor(((i + 1) / bars) * peaks.length))
-    let max = 0
-    for (let j = start; j < end; j += 1) {
-      max = Math.max(max, Math.abs(peaks[j] ?? 0))
-    }
-    out.push(max)
-  }
-  return out
 }
 
 export function TimelineAudioTrack({
@@ -130,7 +114,7 @@ export function TimelineAudioTrack({
         )
         const slice = peaks.slice(startIndex, endIndex)
         const targetBars = Math.max(4, Math.min(120, Math.round(widthPx / 2)))
-        const sampled = samplePeaks(slice, targetBars)
+        const sampled = downsamplePeaks(slice, targetBars)
 
         return (
           <TimelineClip

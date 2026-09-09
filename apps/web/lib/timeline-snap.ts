@@ -63,6 +63,15 @@ function edgeExcluded(edge: CutSnapEdge, excludes: CutSnapEdge[]): boolean {
   )
 }
 
+export type SnapFilter = 'all' | 'clips' | 'playhead' | 'marks'
+
+export const SNAP_FILTERS: SnapFilter[] = ['all', 'clips', 'playhead', 'marks']
+
+export function nextSnapFilter(current: SnapFilter): SnapFilter {
+  const index = SNAP_FILTERS.indexOf(current)
+  return SNAP_FILTERS[(index + 1) % SNAP_FILTERS.length] ?? 'all'
+}
+
 export function buildCutSnapPoints(input: {
   v1?: CutSnapEdge[]
   v2?: CutSnapEdge[]
@@ -73,7 +82,9 @@ export function buildCutSnapPoints(input: {
   /** Exclude these edges (active clip / multi-drag set). */
   exclude?: CutSnapEdge | null
   excludes?: CutSnapEdge[]
+  filter?: SnapFilter
 }): number[] {
+  const filter = input.filter ?? 'all'
   const points = new Set<number>([0])
   const excludes: CutSnapEdge[] = [
     ...(input.excludes ?? []),
@@ -86,20 +97,28 @@ export function buildCutSnapPoints(input: {
     points.add(Math.round(edge.cutEndMs))
   }
 
-  for (const item of input.v1 ?? []) addEdge(item)
-  for (const item of input.v2 ?? []) addEdge(item)
-  for (const item of input.audio ?? []) addEdge(item)
-  if (input.playheadMs != null && Number.isFinite(input.playheadMs)) {
+  const includeClips = filter === 'all' || filter === 'clips'
+  const includePlayhead = filter === 'all' || filter === 'playhead'
+  const includeMarks = filter === 'all' || filter === 'marks'
+
+  if (includeClips) {
+    for (const item of input.v1 ?? []) addEdge(item)
+    for (const item of input.v2 ?? []) addEdge(item)
+    for (const item of input.audio ?? []) addEdge(item)
+    if (input.sequenceEndMs != null && Number.isFinite(input.sequenceEndMs) && input.sequenceEndMs > 0) {
+      points.add(Math.round(input.sequenceEndMs))
+    }
+  }
+  if (includePlayhead && input.playheadMs != null && Number.isFinite(input.playheadMs)) {
     points.add(Math.round(input.playheadMs))
   }
-  if (input.sequenceEndMs != null && Number.isFinite(input.sequenceEndMs) && input.sequenceEndMs > 0) {
-    points.add(Math.round(input.sequenceEndMs))
-  }
-  if (input.marks?.inMs != null && Number.isFinite(input.marks.inMs)) {
-    points.add(Math.round(input.marks.inMs))
-  }
-  if (input.marks?.outMs != null && Number.isFinite(input.marks.outMs)) {
-    points.add(Math.round(input.marks.outMs))
+  if (includeMarks) {
+    if (input.marks?.inMs != null && Number.isFinite(input.marks.inMs)) {
+      points.add(Math.round(input.marks.inMs))
+    }
+    if (input.marks?.outMs != null && Number.isFinite(input.marks.outMs)) {
+      points.add(Math.round(input.marks.outMs))
+    }
   }
   return [...points].sort((a, b) => a - b)
 }

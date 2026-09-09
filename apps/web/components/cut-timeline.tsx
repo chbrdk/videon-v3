@@ -33,7 +33,12 @@ import {
 import { useTimelineViewportGestures } from '@/lib/use-timeline-viewport-gestures'
 import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 import { computeTrimPreview, TRIM_MODE_HELP, TRIM_MODE_LABELS, type TrimMode } from '@/lib/trim-modes'
-import { applyCutSnap, buildCutSnapPoints } from '@/lib/timeline-snap'
+import {
+  applyCutSnap,
+  buildCutSnapPoints,
+  nextSnapFilter,
+  type SnapFilter,
+} from '@/lib/timeline-snap'
 import {
   isCutSelected,
   rangeCutSelection,
@@ -43,6 +48,11 @@ import {
 import { resolveVideoLaneDrop, laneDropHighlight } from '@/lib/cut-lane-drop'
 import { armClickSuppress, bindPointerGesture } from '@/lib/cut-pointer-gesture'
 import type { CutTimelineContextMenuRequest } from '@/lib/cut-timeline-context-menu'
+import { CutTimelineMinimap } from '@/components/cut-timeline-minimap'
+import { expandGroupMoveWithRipple } from '@/lib/timeline-ripple'
+import { marqueeHitClipIds, normalizeMarqueeRect } from '@/lib/timeline-marquee'
+import { clipIntersectsView, viewportTimeRange } from '@/lib/timeline-viewport-cull'
+import type { TimelineZoomAnchor } from '@/lib/use-timeline-viewport-gestures'
 
 export type CutTimelineClip = {
   scene: {
@@ -86,6 +96,7 @@ export type CutTimelineViewportApi = {
   toggleSnap: () => void
   setSnapEnabled: (enabled: boolean) => void
   getSnapEnabled: () => boolean
+  getSelectionRange: () => { startMs: number; endMs: number } | null
 }
 
 type MediaDragPayload = {
@@ -154,6 +165,23 @@ type CutTimelineProps = {
   selection?: CutSelection[]
   onSelectionChange?: (selected: CutSelection[]) => void
   onViewportApi?: (api: CutTimelineViewportApi) => void
+  isPlaying?: boolean
+  timelineTool?: 'select' | 'trim'
+  rippleEdit?: boolean
+  snapFilter?: SnapFilter
+  onSnapFilterChange?: (filter: SnapFilter) => void
+  zoomAnchor?: TimelineZoomAnchor
+  lockedIds?: string[]
+  linkAudio?: boolean
+  onMoveClips?: (
+    moves: Array<{ lane: 'v1' | 'v2' | 'audio'; id: string; timelineStartMs: number }>,
+  ) => void
+  onTrimAudioClip?: (
+    clipId: string,
+    startMs: number,
+    endMs: number,
+    timelineStartMs?: number,
+  ) => void
 }
 
 
@@ -210,6 +238,16 @@ export function CutTimeline({
   selection: selectionProp,
   onSelectionChange,
   onViewportApi,
+  isPlaying = false,
+  timelineTool = 'select',
+  rippleEdit = false,
+  snapFilter: snapFilterProp,
+  onSnapFilterChange,
+  zoomAnchor = 'cursor',
+  lockedIds = [],
+  linkAudio = false,
+  onMoveClips,
+  onTrimAudioClip,
 }: CutTimelineProps) {
   const videoTrackRef = useRef<HTMLDivElement | null>(null)
   const videoOverlayTrackRef = useRef<HTMLDivElement | null>(null)
@@ -243,6 +281,21 @@ export function CutTimeline({
   const [groupDeltaMs, setGroupDeltaMs] = useState<number | null>(null)
   const [groupMoveLane, setGroupMoveLane] = useState<'v1' | 'v2' | null>(null)
   const selectionAnchorRef = useRef<CutSelection | null>(null)
+  const [snapFilterInternal, setSnapFilterInternal] = useState<SnapFilter>('all')
+  const snapFilter = snapFilterProp ?? snapFilterInternal
+  const setSnapFilter = (filter: SnapFilter) => {
+    if (snapFilterProp === undefined) setSnapFilterInternal(filter)
+    onSnapFilterChange?.(filter)
+  }
+  const lockedSet = useMemo(() => new Set(lockedIds), [lockedIds])
+  const [marquee, setMarquee] = useState<{
+    lane: 'v1' | 'v2' | 'audio'
+    x0: number
+    y0: number
+    x1: number
+    y1: number
+  } | null>(null)
+  const [viewportScroll, setViewportScroll] = useState({ left: 0, width: 640 })
   const [dropHintMs, setDropHintMs] = useState<number | null>(null)
   const [tracks, setTracks] = useState(DEFAULT_CUT_TRACK_STATE)
   const trimRef = useRef<{
@@ -388,8 +441,9 @@ export function CutTimeline({
       playheadMs: cutPlayheadMs,
       sequenceEndMs: totalDurationMs,
       marks: { inMs: markInMs, outMs: markOutMs },
+      filter: snapFilter,
     })
-  }, [timeline, videoClips, audioClips, cutPlayheadMs, totalDurationMs, markInMs, markOutMs])
+  }, [timeline, videoClips, audioClips, cutPlayheadMs, totalDurationMs, markInMs, markOutMs, snapFilter])
 
   const snapEdit = useCallback(
     (
@@ -429,12 +483,13 @@ export function CutTimeline({
           playheadMs: cutPlayheadMs,
           sequenceEndMs: totalDurationMs,
           marks: { inMs: markInMs, outMs: markOutMs },
+          filter: snapFilter,
         }),
         msPerPixel,
         snapEnabled,
       )
     },
-    [audioClips, cutPlayheadMs, markInMs, markOutMs, msPerPixel, snapEnabled, timeline, totalDurationMs, videoClips],
+    [audioClips, cutPlayheadMs, markInMs, markOutMs, msPerPixel, snapEnabled, snapFilter, timeline, totalDurationMs, videoClips],
   )
 
   const seekFromPointer = useCallback(
@@ -520,8 +575,9 @@ export function CutTimeline({
       toggleSnap: () => setSnapEnabled(!snapEnabled),
       setSnapEnabled,
       getSnapEnabled: () => snapEnabled,
+      getSelectionRange: () => selectionRangeMs,
     })
-  }, [fitAll, fitSelection, onViewportApi, snapEnabled])
+  }, [fitAll, fitSelection, onViewportApi, selectionRangeMs, snapEnabled])
 
   useTimelineViewportGestures({
     viewportRef,
@@ -530,7 +586,23 @@ export function CutTimeline({
     zoomLevels: TIMELINE_ZOOM_LEVELS,
     onSeekDelta: (deltaMs) => onSeek(Math.max(0, Math.min(cutPlayheadMs + deltaMs, totalDurationMs))),
     enabled: !disabled,
+    zoomAnchor,
+    playheadMs: cutPlayheadMs,
+    msPerPixel,
   })
+
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    const sync = () => setViewportScroll({ left: el.scrollLeft, width: el.clientWidth })
+    sync()
+    el.addEventListener('scroll', sync, { passive: true })
+    window.addEventListener('resize', sync)
+    return () => {
+      el.removeEventListener('scroll', sync)
+      window.removeEventListener('resize', sync)
+    }
+  }, [])
 
   const onTrackPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (disabled || (event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
@@ -653,7 +725,9 @@ export function CutTimeline({
   }
 
   const startClipMove = (event: ReactPointerEvent<HTMLDivElement>, item: CutTimelineItem) => {
-    if (disabled || (!onMoveClip && !onMoveClipLane)) return
+    if (disabled || (!onMoveClip && !onMoveClipLane && !onMoveClips)) return
+    if (timelineTool === 'trim') return
+    if (lockedSet.has(item.scene.id)) return
     if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
     event.stopPropagation()
     event.preventDefault()
@@ -751,18 +825,26 @@ export function CutTimeline({
         })
         return
       }
-      if (!onMoveClip) return
       if (deltaMs === 0) return
-      if (groupIds.length > 1) {
-        for (const sceneId of groupIds) {
-          const clip = clips.find((entry) => entry.scene.id === sceneId)
-          if (!clip) continue
-          const base = clip.scene.timelineStartMs ?? 0
-          onMoveClip(sceneId, Math.max(0, base + deltaMs))
-        }
+      const laneClips = timeline.map((entry) => ({
+        id: entry.scene.id,
+        timelineStartMs: entry.cutStartMs,
+        durationMs: entry.durationMs,
+      }))
+      const group = groupIds.map((sceneId) => {
+        const clip = clips.find((entry) => entry.scene.id === sceneId)
+        const origin = clip?.scene.timelineStartMs ?? 0
+        return { id: sceneId, originStartMs: origin, newStartMs: Math.max(0, origin + deltaMs) }
+      })
+      const expanded = rippleEdit
+        ? expandGroupMoveWithRipple(laneClips, group)
+        : group.map((item) => ({ id: item.id, timelineStartMs: item.newStartMs }))
+      if (onMoveClips && expanded.length > 0) {
+        onMoveClips(expanded.map((move) => ({ lane: 'v1' as const, id: move.id, timelineStartMs: move.timelineStartMs })))
         return
       }
-      onMoveClip(current.sceneId, current.previewStartMs)
+      if (!onMoveClip) return
+      for (const move of expanded) onMoveClip(move.id, move.timelineStartMs)
     }
     moveListenersRef.current = bindPointerGesture({ onMove, onUp: finish })
   }
@@ -858,6 +940,7 @@ export function CutTimeline({
     event.stopPropagation()
     event.preventDefault()
     if (disabled) return
+    if (lockedSet.has(item.scene.id)) return
     const clipElement = event.currentTarget.closest('.videon-cut-timeline__clip')
     if (!clipElement) return
     if (trimListenersRef.current) {
@@ -1097,7 +1180,9 @@ export function CutTimeline({
   }
 
   const startV2ClipMove = (event: ReactPointerEvent<HTMLDivElement>, clip: CutTimelineVideoClip) => {
-    if (disabled || (!onMoveVideoClip && !onMoveClipLane)) return
+    if (disabled || (!onMoveVideoClip && !onMoveClipLane && !onMoveClips)) return
+    if (timelineTool === 'trim') return
+    if (lockedSet.has(clip.id)) return
     if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
     event.stopPropagation()
     event.preventDefault()
@@ -1187,17 +1272,26 @@ export function CutTimeline({
         })
         return
       }
-      if (!onMoveVideoClip) return
       if (deltaMs === 0) return
-      if (groupIds.length > 1) {
-        for (const clipId of groupIds) {
-          const entry = videoClips.find((video) => video.id === clipId)
-          if (!entry) continue
-          onMoveVideoClip(clipId, Math.max(0, entry.timelineStartMs + deltaMs))
-        }
+      const laneClips = videoClips.map((entry) => ({
+        id: entry.id,
+        timelineStartMs: entry.timelineStartMs,
+        durationMs: Math.max(0, entry.endMs - entry.startMs),
+      }))
+      const group = groupIds.map((clipId) => {
+        const entry = videoClips.find((video) => video.id === clipId)
+        const origin = entry?.timelineStartMs ?? 0
+        return { id: clipId, originStartMs: origin, newStartMs: Math.max(0, origin + deltaMs) }
+      })
+      const expanded = rippleEdit
+        ? expandGroupMoveWithRipple(laneClips, group)
+        : group.map((item) => ({ id: item.id, timelineStartMs: item.newStartMs }))
+      if (onMoveClips && expanded.length > 0) {
+        onMoveClips(expanded.map((move) => ({ lane: 'v2' as const, id: move.id, timelineStartMs: move.timelineStartMs })))
         return
       }
-      onMoveVideoClip(current.clipId, current.previewStartMs)
+      if (!onMoveVideoClip) return
+      for (const move of expanded) onMoveVideoClip(move.id, move.timelineStartMs)
     }
     v2MoveUnbindRef.current = bindPointerGesture({ onMove, onUp: finish })
   }
@@ -1210,6 +1304,7 @@ export function CutTimeline({
     event.stopPropagation()
     event.preventDefault()
     if (disabled || !onTrimVideoClip) return
+    if (lockedSet.has(clip.id)) return
     const mediaDurationMs =
       sourceDurationMsByMediaId[clip.mediaAssetId] ?? Math.max(clip.endMs, MIN_CUT_CLIP_MS)
     const trimState = {
@@ -1294,7 +1389,7 @@ export function CutTimeline({
     window.addEventListener('pointerup', onUp)
   }
 
-  usePlayheadFollow(viewportRef, playheadLeftPx, !disabled)
+  usePlayheadFollow(viewportRef, playheadLeftPx, !disabled && isPlaying)
   const activeTxIndex = useMemo(
     () =>
       activeTranscriptIndex(
@@ -1310,6 +1405,16 @@ export function CutTimeline({
         v2TranscriptSegments.map((segment) => ({ startMs: segment.cutStartMs, endMs: segment.cutEndMs })),
       ),
     [cutPlayheadMs, v2TranscriptSegments],
+  )
+
+  const viewRange = useMemo(
+    () =>
+      viewportTimeRange({
+        scrollLeft: viewportScroll.left,
+        clientWidth: viewportScroll.width,
+        msPerPixel,
+      }),
+    [msPerPixel, viewportScroll.left, viewportScroll.width],
   )
 
   const applyClipSelection = (
@@ -1355,6 +1460,17 @@ export function CutTimeline({
           <ToolButton label="Fit Selection (Z)" onClick={fitSelection}>
             Fit
           </ToolButton>
+          <Text role="meta">
+            {timelineTool === 'trim' ? 'Trim' : 'Select'}
+            {rippleEdit ? ' · Ripple' : ''}
+            {linkAudio ? ' · LinkA' : ''}
+            {' · '}
+            {snapFilter}
+          </Text>
+          <ToolButton label="Snap-Filter (Shift+N)" onClick={() => setSnapFilter(nextSnapFilter(snapFilter))}>
+            {snapFilter}
+          </ToolButton>
+          <Text role="meta">{zoomAnchor === 'playhead' ? 'Zoom@PH' : 'Zoom@Cursor'}</Text>
           <ToolButton
             label="Zoom out"
             disabled={zoomIndex <= 0}
@@ -1521,7 +1637,50 @@ export function CutTimeline({
               <div
                 ref={videoTrackRef}
                 className={`videon-cut-timeline__track videon-cut-timeline__track--video${tracks.v1.hidden ? ' is-collapsed' : ''}${tracks.v1.muted ? ' is-muted' : ''}${laneDropTarget === 'v1' ? ' is-lane-drop-target' : ''}`}
-                onPointerDown={onTrackPointerDown}
+                onPointerDown={(event) => {
+                  if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip')) {
+                    onTrackPointerDown(event)
+                    return
+                  }
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  const origin = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+                  setMarquee({ lane: 'v1', x0: origin.x, y0: origin.y, x1: origin.x, y1: origin.y })
+                  const onMove = (moveEvent: PointerEvent) => {
+                    setMarquee((current) =>
+                      current
+                        ? { ...current, x1: moveEvent.clientX - rect.left, y1: moveEvent.clientY - rect.top }
+                        : current,
+                    )
+                  }
+                  const onUp = (upEvent: PointerEvent) => {
+                    window.removeEventListener('pointermove', onMove)
+                    window.removeEventListener('pointerup', onUp)
+                    const end = { x: upEvent.clientX - rect.left, y: upEvent.clientY - rect.top }
+                    const box = normalizeMarqueeRect(origin, end)
+                    if (Math.abs(box.right - box.left) < 4 && Math.abs(box.bottom - box.top) < 4) {
+                      setMarquee(null)
+                      onTrackPointerDown(event)
+                      return
+                    }
+                    const hits = marqueeHitClipIds(
+                      box,
+                      timeline.map((item) => {
+                        const left = timelineLeftPx(item.cutStartMs, msPerPixel)
+                        const width = timelineWidthPx(item.durationMs, msPerPixel)
+                        return { id: item.scene.id, left, right: left + width, top: 0, bottom: rect.height }
+                      }),
+                    )
+                    const next = hits.map((id) => ({ lane: 'v1' as const, id }))
+                    setSelection(
+                      event.shiftKey
+                        ? [...selection, ...next.filter((item) => !isCutSelected(selection, 'v1', item.id))]
+                        : next,
+                    )
+                    setMarquee(null)
+                  }
+                  window.addEventListener('pointermove', onMove)
+                  window.addEventListener('pointerup', onUp)
+                }}
                 onContextMenu={emitLaneContextMenu}
                 onDragOver={onTrackDragOver}
                 onDragLeave={() => setDropHintMs(null)}
@@ -1533,7 +1692,7 @@ export function CutTimeline({
                 aria-valuenow={cutPlayheadMs}
               >
                 {!tracks.v1.hidden
-                  ? timeline.map((item) => {
+                  ? timeline.filter((item) => clipIntersectsView({ cutStartMs: item.cutStartMs, cutEndMs: item.cutEndMs }, viewRange)).map((item) => {
                   const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
                   const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
                   const isActive = item.index === activeIndex
@@ -1550,7 +1709,7 @@ export function CutTimeline({
                       widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
                       active={isActive}
                       tone="accent"
-                      className={`videon-cut-timeline__clip${isMoving ? ' is-dragging' : ''}${isActive ? ' is-active-clip' : ''}${isCutSelected(selection, 'v1', item.scene.id) ? ' is-selected' : ''}${trimPreview?.sceneId === item.scene.id ? ' is-trimming' : ''}`}
+                      className={`videon-cut-timeline__clip${isMoving ? ' is-dragging' : ''}${isActive ? ' is-active-clip' : ''}${isCutSelected(selection, 'v1', item.scene.id) ? ' is-selected' : ''}${lockedSet.has(item.scene.id) ? ' is-locked' : ''}${linkAudio && isCutSelected(selection, 'v1', item.scene.id) ? ' is-link-highlight' : ''}${trimPreview?.sceneId === item.scene.id ? ' is-trimming' : ''}`}
                       draggable={false}
                       onDragStart={(event) => onClipDragStart(event, item.scene.id)}
                       onDragOver={(event) => event.preventDefault()}
@@ -1840,7 +1999,7 @@ export function CutTimeline({
                           widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
                           active={active}
                           tone="accent"
-                          className={`videon-cut-timeline__clip videon-cut-timeline__clip--bus${active ? ' is-active-clip' : ''}${isCutSelected(selection, 'audio', clip.id) ? ' is-selected' : ''}`}
+                          className={`videon-cut-timeline__clip videon-cut-timeline__clip--bus${active ? ' is-active-clip' : ''}${isCutSelected(selection, 'audio', clip.id) ? ' is-selected' : ''}${lockedSet.has(clip.id) ? ' is-locked' : ''}`}
                           draggable={!disabled && Boolean(onMoveAudioClip)}
                           onDragStart={(event) => {
                             event.dataTransfer.setData('text/plain', clip.id)
@@ -1885,7 +2044,68 @@ export function CutTimeline({
                             }
                           }}
                           title={clip.label ?? audioBusLabel}
-                        />
+                        >
+                          <span
+                            className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--start"
+                            title="Audio Startkante"
+                            onPointerDown={(event) => {
+                              event.stopPropagation()
+                              if (disabled || !onTrimAudioClip || lockedSet.has(clip.id)) return
+                              const origin = {
+                                startMs: clip.startMs,
+                                endMs: clip.endMs,
+                                timelineStartMs: clip.timelineStartMs,
+                                pointerX: event.clientX,
+                              }
+                              const onMove = (moveEvent: PointerEvent) => {
+                                const delta = Math.round((moveEvent.clientX - origin.pointerX) * msPerPixel)
+                                let timelineStartMs = Math.max(0, origin.timelineStartMs + delta)
+                                let startMs = origin.startMs + delta
+                                let endMs = origin.endMs
+                                const snapped = snapEdit(timelineStartMs, { lane: 'audio', id: clip.id })
+                                const adjust = snapped.ms - timelineStartMs
+                                timelineStartMs = snapped.ms
+                                startMs += adjust
+                                if (endMs - startMs < 40) return
+                                setSnapGuideMs(snapped.guideMs)
+                                onTrimAudioClip(clip.id, startMs, endMs, timelineStartMs)
+                              }
+                              const onUp = () => {
+                                window.removeEventListener('pointermove', onMove)
+                                window.removeEventListener('pointerup', onUp)
+                                setSnapGuideMs(null)
+                              }
+                              window.addEventListener('pointermove', onMove)
+                              window.addEventListener('pointerup', onUp)
+                            }}
+                          />
+                          <span
+                            className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--end"
+                            title="Audio Endkante"
+                            onPointerDown={(event) => {
+                              event.stopPropagation()
+                              if (disabled || !onTrimAudioClip || lockedSet.has(clip.id)) return
+                              const origin = { startMs: clip.startMs, endMs: clip.endMs, timelineStartMs: clip.timelineStartMs, pointerX: event.clientX }
+                              const onMove = (moveEvent: PointerEvent) => {
+                                const delta = Math.round((moveEvent.clientX - origin.pointerX) * msPerPixel)
+                                let endMs = origin.endMs + delta
+                                const timelineEnd = origin.timelineStartMs + (endMs - origin.startMs)
+                                const snapped = snapEdit(timelineEnd, { lane: 'audio', id: clip.id })
+                                endMs += snapped.ms - timelineEnd
+                                if (endMs - origin.startMs < 40) return
+                                setSnapGuideMs(snapped.guideMs)
+                                onTrimAudioClip(clip.id, origin.startMs, endMs)
+                              }
+                              const onUp = () => {
+                                window.removeEventListener('pointermove', onMove)
+                                window.removeEventListener('pointerup', onUp)
+                                setSnapGuideMs(null)
+                              }
+                              window.addEventListener('pointermove', onMove)
+                              window.addEventListener('pointerup', onUp)
+                            }}
+                          />
+                        </TimelineClip>
                       )
                     })
                   : null}
@@ -1908,10 +2128,37 @@ export function CutTimeline({
                   aria-hidden="true"
                 />
               ) : null}
+              {marquee ? (
+                <div
+                  className="videon-cut-timeline__marquee"
+                  style={{
+                    left: `${Math.min(marquee.x0, marquee.x1)}px`,
+                    top: `${Math.min(marquee.y0, marquee.y1)}px`,
+                    width: `${Math.abs(marquee.x1 - marquee.x0)}px`,
+                    height: `${Math.abs(marquee.y1 - marquee.y0)}px`,
+                  }}
+                  aria-hidden="true"
+                />
+              ) : null}
             </div>
           </div>
         </div>
       </div>
+
+      <CutTimelineMinimap
+        totalDurationMs={totalDurationMs}
+        cutPlayheadMs={cutPlayheadMs}
+        scrollLeft={viewportScroll.left}
+        viewportWidthPx={viewportScroll.width}
+        contentWidthPx={contentWidthPx}
+        selection={selectionRangeMs}
+        onSeek={onSeek}
+        onPanRatio={(left) => {
+          if (viewportRef.current) viewportRef.current.scrollLeft = left
+          setViewportScroll((current) => ({ ...current, left }))
+        }}
+      />
+
     </div>
   )
 }

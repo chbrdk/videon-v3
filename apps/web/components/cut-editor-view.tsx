@@ -9,7 +9,16 @@ import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-c
 import { AspectPresetChips } from '@/components/aspect-preset-chips'
 import { CutTimeline, type CutTimelineViewportApi } from '@/components/cut-timeline'
 import { type CutSelection } from '@/lib/cut-timeline-selection'
-import { applyCutSnap, buildCutSnapPoints, nudgeTimelineStartMs } from '@/lib/timeline-snap'
+import {
+  applyCutSnap,
+  buildCutSnapPoints,
+  nextSnapFilter,
+  nudgeTimelineStartMs,
+  type SnapFilter,
+} from '@/lib/timeline-snap'
+import { expandGroupMoveWithRipple, rippleCloseGapAfterDelete } from '@/lib/timeline-ripple'
+import { useJklShuttle } from '@/lib/use-jkl-shuttle'
+import type { TimelineZoomAnchor } from '@/lib/use-timeline-viewport-gestures'
 import { CutEditorRail } from '@/components/cut-editor-rail'
 import { CutBinPanel } from '@/components/cut-bin-panel'
 import { CutClipInspector } from '@/components/cut-clip-inspector'
@@ -227,6 +236,12 @@ export function CutEditorView({
   const [markOutMs, setMarkOutMs] = useState<number | null>(null)
   const [timelineSelection, setTimelineSelection] = useState<CutSelection[]>([])
   const timelineViewportApiRef = useRef<CutTimelineViewportApi | null>(null)
+  const [timelineTool, setTimelineTool] = useState<'select' | 'trim'>('select')
+  const [rippleEdit, setRippleEdit] = useState(false)
+  const [snapFilter, setSnapFilter] = useState<SnapFilter>('all')
+  const [zoomAnchor, setZoomAnchor] = useState<TimelineZoomAnchor>('cursor')
+  const [lockedIds, setLockedIds] = useState<string[]>([])
+  const [linkAudio, setLinkAudio] = useState(false)
 
   const timeline = useMemo(
     () =>
@@ -476,8 +491,11 @@ export function CutEditorView({
     [platformProjectId],
   )
 
-  const patchTimeline = async (payload: Record<string, unknown>) => {
-    rememberSnapshot()
+  const patchTimeline = async (
+    payload: Record<string, unknown>,
+    options?: { skipSnapshot?: boolean },
+  ) => {
+    if (!options?.skipSnapshot) rememberSnapshot()
     setBusy(true)
     setError(null)
     try {
@@ -906,6 +924,15 @@ export function CutEditorView({
     nudgePlayhead(direction * frameDurationMs(cut?.frameRate))
   }
 
+  const shuttle = useJklShuttle((deltaMs) => nudgePlayhead(deltaMs), {
+    enabled: Boolean(cut) && !busy,
+    frameMs: frameDurationMs(cut?.frameRate),
+  })
+
+  const cycleTrimMode = () => {
+    setTrimMode((current) => (current === 'trim' ? 'ripple' : current === 'ripple' ? 'roll' : 'trim'))
+  }
+
   const nudgeSelectedClips = (direction: -1 | 1, coarse: boolean) => {
     const deltaMs = direction * (coarse ? SEEK_STEP_MS : frameDurationMs(cut?.frameRate))
     const selected =
@@ -918,50 +945,61 @@ export function CutEditorView({
             : activeClip
               ? ([{ lane: 'v1', id: activeClip.scene.id }] as CutSelection[])
               : []
-    if (selected.length === 0) return
+    const unlocked = selected.filter((entry) => !lockedIds.includes(entry.id))
+    if (unlocked.length === 0) return
 
-    const v1Edges = timeline.map((item) => ({ cutStartMs: item.cutStartMs, cutEndMs: item.cutEndMs }))
-    const v2Edges = videoClips.map((clip) => ({
-      cutStartMs: clip.timelineStartMs,
-      cutEndMs: clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs),
-    }))
-    const audioEdges = audioClips.map((clip) => ({
-      cutStartMs: clip.timelineStartMs,
-      cutEndMs: clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs),
-    }))
-    const points = buildCutSnapPoints({
-      v1: v1Edges,
-      v2: v2Edges,
-      audio: audioEdges,
-      playheadMs: cutPlayheadMs,
-      sequenceEndMs: totalDurationMs,
-      marks: { inMs: markInMs, outMs: markOutMs },
-    })
-    // Nudge uses ~10px at 1x zoom as a stable default for keyboard.
-    const msPerPixel = 24
-    const snapOn = timelineViewportApiRef.current?.getSnapEnabled() ?? true
+    const lane = unlocked[0]!.lane
+    if (!unlocked.every((entry) => entry.lane === lane)) {
+      // Mixed lanes: fall back to per-clip moves without ripple expand across lanes.
+    }
 
-    for (const entry of selected) {
-      if (entry.lane === 'v1') {
+    const moves: Array<{ lane: 'v1' | 'v2' | 'audio'; id: string; timelineStartMs: number }> = []
+    if (lane === 'v1' && unlocked.every((entry) => entry.lane === 'v1')) {
+      const laneClips = timeline.map((item) => ({
+        id: item.scene.id,
+        timelineStartMs: item.cutStartMs,
+        durationMs: item.durationMs,
+      }))
+      const group = unlocked.map((entry) => {
         const clip = clips.find((item) => item.scene.id === entry.id)
-        if (!clip) continue
-        const raw = nudgeTimelineStartMs(clip.scene.timelineStartMs ?? 0, deltaMs)
-        const next = applyCutSnap(raw, points, msPerPixel, snapOn).ms
-        void patchTimeline({ action: 'moveScene', sceneId: entry.id, timelineStartMs: next })
-      } else if (entry.lane === 'v2') {
+        const origin = clip?.scene.timelineStartMs ?? 0
+        return { id: entry.id, originStartMs: origin, newStartMs: nudgeTimelineStartMs(origin, deltaMs) }
+      })
+      const expanded = rippleEdit
+        ? expandGroupMoveWithRipple(laneClips, group)
+        : group.map((item) => ({ id: item.id, timelineStartMs: item.newStartMs }))
+      for (const move of expanded) moves.push({ lane: 'v1', id: move.id, timelineStartMs: move.timelineStartMs })
+    } else if (lane === 'v2' && unlocked.every((entry) => entry.lane === 'v2')) {
+      const laneClips = videoClips.map((clip) => ({
+        id: clip.id,
+        timelineStartMs: clip.timelineStartMs,
+        durationMs: Math.max(0, clip.endMs - clip.startMs),
+      }))
+      const group = unlocked.map((entry) => {
         const clip = videoClips.find((item) => item.id === entry.id)
-        if (!clip) continue
-        const raw = nudgeTimelineStartMs(clip.timelineStartMs, deltaMs)
-        const next = applyCutSnap(raw, points, msPerPixel, snapOn).ms
-        void patchTimeline({ action: 'moveVideoClip', videoClipId: entry.id, timelineStartMs: next })
-      } else {
-        const clip = audioClips.find((item) => item.id === entry.id)
-        if (!clip) continue
-        const raw = nudgeTimelineStartMs(clip.timelineStartMs, deltaMs)
-        const next = applyCutSnap(raw, points, msPerPixel, snapOn).ms
-        void patchTimeline({ action: 'moveAudioClip', audioClipId: entry.id, timelineStartMs: next })
+        const origin = clip?.timelineStartMs ?? 0
+        return { id: entry.id, originStartMs: origin, newStartMs: nudgeTimelineStartMs(origin, deltaMs) }
+      })
+      const expanded = rippleEdit
+        ? expandGroupMoveWithRipple(laneClips, group)
+        : group.map((item) => ({ id: item.id, timelineStartMs: item.newStartMs }))
+      for (const move of expanded) moves.push({ lane: 'v2', id: move.id, timelineStartMs: move.timelineStartMs })
+    } else {
+      for (const entry of unlocked) {
+        if (entry.lane === 'audio') {
+          const clip = audioClips.find((item) => item.id === entry.id)
+          if (!clip) continue
+          moves.push({
+            lane: 'audio',
+            id: entry.id,
+            timelineStartMs: nudgeTimelineStartMs(clip.timelineStartMs, deltaMs),
+          })
+        }
       }
     }
+
+    if (moves.length === 0) return
+    void patchTimeline({ action: 'moveClips', moves, ripple: rippleEdit })
   }
 
   const deleteCut = async () => {
@@ -1244,16 +1282,94 @@ export function CutEditorView({
     onMarkIn: () => setMarkInMs(cutPlayheadRef.current),
     onMarkOut: () => setMarkOutMs(cutPlayheadRef.current),
     onToggleSnap: () => timelineViewportApiRef.current?.toggleSnap(),
+    onCycleSnapFilter: () => setSnapFilter((current) => nextSnapFilter(current)),
     onFitSelection: () => timelineViewportApiRef.current?.fitSelection(),
     onFitAll: () => timelineViewportApiRef.current?.fitAll(),
     onNudgeLeft: (coarse) => nudgeSelectedClips(-1, coarse),
     onNudgeRight: (coarse) => nudgeSelectedClips(1, coarse),
+    onToolSelect: () => setTimelineTool('select'),
+    onToolTrim: () => setTimelineTool('trim'),
+    onCycleTrimMode: cycleTrimMode,
+    onToggleRipple: () => setRippleEdit((current) => !current),
+    onSeekSelectionStart: () => {
+      const range = timelineViewportApiRef.current?.getSelectionRange()
+      if (range) seekToCutMs(range.startMs)
+      else if (activeClip) seekToCutMs(activeClip.scene.timelineStartMs ?? 0)
+    },
+    onMoveSelectionToPlayhead: () => {
+      const primary =
+        timelineSelection[timelineSelection.length - 1] ??
+        (selectedAudioClipId
+          ? { lane: 'audio' as const, id: selectedAudioClipId }
+          : selectedVideoClipId
+            ? { lane: 'v2' as const, id: selectedVideoClipId }
+            : activeClip
+              ? { lane: 'v1' as const, id: activeClip.scene.id }
+              : null)
+      if (!primary || lockedIds.includes(primary.id)) return
+      void patchTimeline({
+        action: 'moveClips',
+        moves: [{ lane: primary.lane, id: primary.id, timelineStartMs: cutPlayheadRef.current }],
+      })
+    },
+    onToggleZoomAnchor: () =>
+      setZoomAnchor((current) => (current === 'cursor' ? 'playhead' : 'cursor')),
+    onToggleClipLock: () => {
+      const ids =
+        timelineSelection.length > 0
+          ? timelineSelection.map((entry) => entry.id)
+          : selectedAudioClipId
+            ? [selectedAudioClipId]
+            : selectedVideoClipId
+              ? [selectedVideoClipId]
+              : activeClip
+                ? [activeClip.scene.id]
+                : []
+      if (ids.length === 0) return
+      setLockedIds((current) => {
+        const set = new Set(current)
+        const allLocked = ids.every((id) => set.has(id))
+        for (const id of ids) {
+          if (allLocked) set.delete(id)
+          else set.add(id)
+        }
+        return [...set]
+      })
+    },
+    onToggleLinkAudio: () => setLinkAudio((current) => !current),
+    onShuttleHold: (direction, holding) => shuttle.hold(direction, holding),
     onSplit: () => {
       if (!splitTarget) return
       void patchTimeline({ action: 'split', sceneId: splitTarget.sceneId, atMs: splitTarget.atMs })
     },
     onDelete: () => {
       if (!activeClip || clips.length <= 1) return
+      if (lockedIds.includes(activeClip.scene.id)) return
+      if (rippleEdit) {
+        const removed = {
+          id: activeClip.scene.id,
+          timelineStartMs: activeClip.scene.timelineStartMs ?? 0,
+          durationMs: Math.max(0, activeClip.scene.endMs - activeClip.scene.startMs),
+        }
+        const laneClips = timeline.map((item) => ({
+          id: item.scene.id,
+          timelineStartMs: item.cutStartMs,
+          durationMs: item.durationMs,
+        }))
+        const moves = rippleCloseGapAfterDelete(laneClips, removed).map((move) => ({
+          lane: 'v1' as const,
+          id: move.id,
+          timelineStartMs: move.timelineStartMs,
+        }))
+        void (async () => {
+          rememberSnapshot()
+          await patchTimeline({ action: 'delete', sceneId: activeClip.scene.id }, { skipSnapshot: true })
+          if (moves.length > 0) {
+            await patchTimeline({ action: 'moveClips', moves }, { skipSnapshot: true })
+          }
+        })()
+        return
+      }
       void patchTimeline({ action: 'delete', sceneId: activeClip.scene.id })
     },
     onUndo: undo,
@@ -1589,6 +1705,13 @@ export function CutEditorView({
             frameMs={frameDurationMs(cut.frameRate)}
             disabled={!playbackUrl || busy}
             onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
+            hud={
+              shuttle.rate !== 0 ? (
+                <div className="videon-editor-monitor__shuttle" aria-live="polite">
+                  {shuttle.rate > 0 ? `+${shuttle.rate}x` : `${shuttle.rate}x`}
+                </div>
+              ) : null
+            }
           >
             {playbackUrl ? (
               <div className={`videon-nle__video-stack${inTimelineGap ? ' is-gap' : ''}`}>
@@ -1697,9 +1820,27 @@ export function CutEditorView({
           markOutMs={markOutMs}
           selection={timelineSelection}
           onSelectionChange={setTimelineSelection}
+          isPlaying={isPlaying}
+          timelineTool={timelineTool}
+          rippleEdit={rippleEdit}
+          snapFilter={snapFilter}
+          onSnapFilterChange={setSnapFilter}
+          zoomAnchor={zoomAnchor}
+          lockedIds={lockedIds}
+          linkAudio={linkAudio}
           onViewportApi={(api) => {
             timelineViewportApiRef.current = api
           }}
+          onMoveClips={(moves) => void patchTimeline({ action: 'moveClips', moves, ripple: rippleEdit })}
+          onTrimAudioClip={(clipId, startMs, endMs, timelineStartMs) =>
+            void patchTimeline({
+              action: 'trimAudioClip',
+              audioClipId: clipId,
+              startMs,
+              endMs,
+              ...(typeof timelineStartMs === 'number' ? { timelineStartMs } : {}),
+            })
+          }
           onSelectClip={(index) => {
             setSelectedAudioClipId(null)
             setSelectedVideoClipId(null)

@@ -34,6 +34,7 @@ import {
   trimCutVideoClip,
 } from '@/lib/db/cut-video'
 import { moveSceneToVideoOverlay, moveVideoOverlayToScene } from '@/lib/db/cut-lane-move'
+import { moveCutClipsBatch } from '@/lib/db/cut-batch-move'
 import { findMediaAsset } from '@/lib/db/media'
 import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { CUT_CANVAS_DEFAULT_FPS, resolveCutCanvas } from '@/lib/cut-canvas'
@@ -343,6 +344,31 @@ async function applyCutPatch(input: {
     })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
     return apiJson(request, { scenes })
+  }
+
+  if (action === 'moveClips') {
+    const rawMoves = Array.isArray(record.moves) ? record.moves : []
+    const moves: Array<{ lane: 'v1' | 'v2' | 'audio'; id: string; timelineStartMs: number }> = []
+    for (const entry of rawMoves) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const row = entry as Record<string, unknown>
+      const lane = row.lane === 'v1' || row.lane === 'v2' || row.lane === 'audio' ? row.lane : null
+      const id = typeof row.id === 'string' ? row.id.trim() : ''
+      const timelineStartMs =
+        typeof row.timelineStartMs === 'number' && Number.isFinite(row.timelineStartMs)
+          ? Math.max(0, Math.floor(row.timelineStartMs))
+          : null
+      if (!lane || !id || timelineStartMs === null) {
+        return apiError(request, 400, 'invalid_payload', 'moveClips moves require lane, id, timelineStartMs')
+      }
+      moves.push({ lane, id, timelineStartMs })
+    }
+    if (moves.length === 0) {
+      return apiError(request, 400, 'invalid_payload', 'moves is required for moveClips')
+    }
+    const result = await moveCutClipsBatch({ cutId: cut.id, moves })
+    if (!result) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
+    return apiJson(request, result)
   }
 
   if (action === 'restore') {

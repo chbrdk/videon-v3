@@ -123,6 +123,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
     - two-finger horizontal pan / Shift+wheel / plain vertical wheel MUST scroll the timeline horizontally;
     - Alt+wheel MUST jog the playhead (frame/coarse seek). Plain wheel MUST NOT steal pan for jog.
 12. Extended Cut timeline edit UX (audio-bus snap, snap toggle `N`, marks, fit, inertia, nudge, multi-select, trim precue) MUST follow `cut-timeline-edit-ux.md`.
+13. Wave 2 Cut timeline edit UX (ripple, tools, snap filter, minimap, shuttle, marquee, lock, link, `moveClips`, cull) MUST follow `cut-timeline-edit-ux-wave2.md`.
 
 ## Acceptance
 
@@ -133,4 +134,4 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 - Scenes inspect: truncated navigator + `InspectSection` / `ChatCollapsible` detail (Wave D).
 - Toolbar overflow uses Flyout pattern; editor selects use `Select`.
 - Timeline right-click uses `ContextMenu` (`timeline-context-menu.md`).
-- Cut timeline: edge snap + trackpad zoom/pan (Alt = jog) + `cut-timeline-edit-ux.md`.
+- Cut timeline: `cut-timeline-edit-ux.md` + `cut-timeline-edit-ux-wave2.md`.
