@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Button, Field, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
+import { Button, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
 import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AspectPresetChips } from '@/components/aspect-preset-chips'
-import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
+import { CutTimeline } from '@/components/cut-timeline'
 import { CutEditorRail } from '@/components/cut-editor-rail'
+import { CutBinPanel } from '@/components/cut-bin-panel'
 import { CutClipInspector } from '@/components/cut-clip-inspector'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorStatusStrip, exportStatusLevel } from '@/components/editor-status-strip'
@@ -83,6 +84,7 @@ type LibraryMedia = {
   originalFilename: string
   lifecycleState: string
   durationMs?: number | null
+  sceneCount?: number
 }
 
 type CutTrack = {
@@ -163,12 +165,6 @@ export function CutEditorView({
   const [exportFormat, setExportFormat] = useState<CutExportFormat>('mp4')
   const [transcriptsByMediaId, setTranscriptsByMediaId] = useState<Record<string, TranscriptSegment[]>>({})
   const [libraryMedia, setLibraryMedia] = useState<LibraryMedia[]>([])
-  const [selectedMediaId, setSelectedMediaId] = useState('')
-  const [binScenes, setBinScenes] = useState<
-    Array<{ sceneKey: string; startMs: number; endMs: number }>
-  >([])
-  const [selectedBinSceneKeys, setSelectedBinSceneKeys] = useState<string[]>([])
-  const [binScenesLoading, setBinScenesLoading] = useState(false)
   const [undoStack, setUndoStack] = useState<CutEditorSnapshot[]>([])
   const [redoStack, setRedoStack] = useState<CutEditorSnapshot[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
@@ -780,13 +776,14 @@ export function CutEditorView({
     [audioClips, audioBusTrack?.name, libraryMedia],
   )
 
-  const addSelectedMedia = async () => {
-    if (!selectedMediaId) return
-    const media = libraryMedia.find((item) => item.id === selectedMediaId)
+  const addWholeVideoFromBin = async (mediaId: string) => {
+    const media = libraryMedia.find((item) => item.id === mediaId)
     if (!media) return
     let endMs = media.durationMs ?? 0
     if (!endMs) {
-      const response = await fetch(paths.routes.apiMediaDetail(media.id, platformProjectId), { cache: 'no-store' })
+      const response = await fetch(paths.routes.apiMediaDetail(media.id, platformProjectId), {
+        cache: 'no-store',
+      })
       const body = (await response.json()) as { media?: { durationMs?: number | null } }
       endMs = body.media?.durationMs ?? 60_000
     }
@@ -797,74 +794,36 @@ export function CutEditorView({
       endMs: Math.max(endMs, 1000),
       afterSceneId: activeClip?.scene.id ?? null,
     })
-    setSelectedMediaId('')
-    setSelectedBinSceneKeys([])
   }
 
-  const addSelectedBinScenes = async () => {
-    if (!selectedMediaId || selectedBinSceneKeys.length === 0) return
-    const scenes = binScenes
-      .filter((scene) => selectedBinSceneKeys.includes(scene.sceneKey))
-      .map((scene) => ({
-        mediaAssetId: selectedMediaId,
-        startMs: scene.startMs,
-        endMs: scene.endMs,
-        sceneKey: scene.sceneKey,
-      }))
+  const addVoiceOverFromBin = (mediaId: string) => {
+    const media = libraryMedia.find((item) => item.id === mediaId)
+    if (!media) return
+    void patchTimeline({
+      action: 'addAudioClip',
+      mediaAssetId: media.id,
+      startMs: 0,
+      endMs: Math.max(media.durationMs ?? 60_000, 1000),
+      timelineStartMs: cutPlayheadMs,
+    })
+  }
+
+  const addScenesFromBin = async (
+    mediaId: string,
+    scenes: Array<{ sceneKey: string; startMs: number; endMs: number }>,
+  ) => {
     if (!scenes.length) return
     await patchTimeline({
       action: 'addScenes',
       afterSceneId: activeClip?.scene.id ?? null,
-      scenes,
+      scenes: scenes.map((scene) => ({
+        mediaAssetId: mediaId,
+        startMs: scene.startMs,
+        endMs: scene.endMs,
+        sceneKey: scene.sceneKey,
+      })),
     })
-    setSelectedBinSceneKeys([])
   }
-
-  useEffect(() => {
-    if (!selectedMediaId) {
-      setBinScenes([])
-      setSelectedBinSceneKeys([])
-      return
-    }
-    let cancelled = false
-    setBinScenesLoading(true)
-    void (async () => {
-      try {
-        const response = await fetch(paths.routes.apiMediaDetail(selectedMediaId, platformProjectId), {
-          cache: 'no-store',
-        })
-        const body = (await response.json()) as {
-          scenes?: Array<{ sceneKey?: string; startMs?: number; endMs?: number }>
-        }
-        if (cancelled) return
-        const next = (body.scenes ?? [])
-          .filter(
-            (scene) =>
-              typeof scene.sceneKey === 'string' &&
-              typeof scene.startMs === 'number' &&
-              typeof scene.endMs === 'number' &&
-              scene.endMs > scene.startMs,
-          )
-          .map((scene) => ({
-            sceneKey: scene.sceneKey as string,
-            startMs: scene.startMs as number,
-            endMs: scene.endMs as number,
-          }))
-        setBinScenes(next)
-        setSelectedBinSceneKeys([])
-      } catch {
-        if (!cancelled) {
-          setBinScenes([])
-          setSelectedBinSceneKeys([])
-        }
-      } finally {
-        if (!cancelled) setBinScenesLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedMediaId, platformProjectId])
 
   const applyCanvas = async () => {
     setCanvasBusy(true)
@@ -1282,157 +1241,18 @@ export function CutEditorView({
       <div className="videon-nle__workspace">
         <CutEditorRail
           side="left"
-          title={`Bin (${clips.length})`}
+          title={`Mediathek (${libraryMedia.length})`}
           open={leftRailOpen}
           onClose={() => setLeftOpen(false)}
         >
-          <div className="videon-nle__field-row">
-            <Field label="Clip / Szenen einfügen" size="sm">
-              <Select
-                aria-label="Video für Clip"
-                size="sm"
-                value={selectedMediaId}
-                disabled={busy}
-                placeholder="Video wählen …"
-                onChange={setSelectedMediaId}
-                options={libraryMedia.map((media) => ({
-                  value: media.id,
-                  label: media.originalFilename,
-                }))}
-              />
-            </Field>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy || !selectedMediaId || selectedBinSceneKeys.length === 0}
-              onClick={() => void addSelectedBinScenes()}
-            >
-              Szenen einfügen ({selectedBinSceneKeys.length})
-            </Button>
-            <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
-              Ganzes Video
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy || !selectedMediaId}
-              onClick={() => {
-                const media = libraryMedia.find((item) => item.id === selectedMediaId)
-                if (!media) return
-                void patchTimeline({
-                  action: 'addAudioClip',
-                  mediaAssetId: media.id,
-                  startMs: 0,
-                  endMs: Math.max(media.durationMs ?? 60_000, 1000),
-                  timelineStartMs: cutPlayheadMs,
-                })
-              }}
-            >
-              Auf Voice-Over
-            </Button>
-          </div>
-
-          {selectedMediaId ? (
-            <div className="videon-nle__bin-scenes">
-              <Text role="meta" as="span">
-                {binScenesLoading
-                  ? 'Szenen laden …'
-                  : binScenes.length
-                    ? 'Analyse-Szenen (Mehrfachauswahl)'
-                    : 'Keine Analyse-Szenen — Ganzes Video nutzen'}
-              </Text>
-              {binScenes.length > 0 ? (
-                <ul className="videon-editor__scene-list" aria-label="Analyse-Szenen">
-                  {binScenes.map((scene) => {
-                    const checked = selectedBinSceneKeys.includes(scene.sceneKey)
-                    return (
-                      <li key={scene.sceneKey}>
-                        <label className="videon-nle__bin-item">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={busy}
-                            onChange={() => {
-                              setSelectedBinSceneKeys((prev) =>
-                                checked
-                                  ? prev.filter((key) => key !== scene.sceneKey)
-                                  : [...prev, scene.sceneKey],
-                              )
-                            }}
-                          />
-                          <span className="videon-nle__bin-item-title">{scene.sceneKey}</span>
-                          <span className="videon-nle__bin-item-meta">
-                            {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
-                          </span>
-                        </label>
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-
-          <Text role="meta" as="span">
-            Mediathek · in Timeline / Voice-Over ziehen
-          </Text>
-          <ul className="videon-editor__scene-list">
-            {libraryMedia.map((media) => (
-              <li key={media.id}>
-                <button
-                  type="button"
-                  className="videon-nle__bin-item videon-nle__bin-item--draggable"
-                  draggable={!busy}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData(
-                      MEDIA_DRAG_TYPE,
-                      JSON.stringify({
-                        mediaAssetId: media.id,
-                        startMs: 0,
-                        endMs: media.durationMs ?? 60_000,
-                      }),
-                    )
-                    event.dataTransfer.effectAllowed = 'copy'
-                  }}
-                  onClick={() => setSelectedMediaId(media.id)}
-                >
-                  <span className="videon-nle__bin-item-title">{media.originalFilename}</span>
-                  <span className="videon-nle__bin-item-meta">Ziehen oder klicken zum Auswählen</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <ul className="videon-editor__scene-list">
-            {clips.map((clip, index) => (
-              <li key={clip.scene.id}>
-                <button
-                  type="button"
-                  className={`videon-nle__bin-item${index === activeIndex ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setSelectedAudioClipId(null)
-                    setActiveIndex(index)
-                    const item = timeline[index]
-                    if (item) seekToCutMs(item.cutStartMs)
-                  }}
-                >
-                  <span className="videon-nle__bin-item-title">V1 · {clip.media?.originalFilename ?? 'Unbekannt'}</span>
-                  <span className="videon-nle__bin-item-meta">
-                    {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
-                    {formatClock(timeline[index]?.cutStartMs ?? 0)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {activeClip?.media ? (
-            <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
-              <Button variant="ghost">Quellvideo öffnen</Button>
-            </Link>
-          ) : null}
+          <CutBinPanel
+            platformProjectId={platformProjectId}
+            libraryMedia={libraryMedia}
+            busy={busy}
+            onAddWholeVideo={(mediaId) => void addWholeVideoFromBin(mediaId)}
+            onAddVoiceOver={addVoiceOverFromBin}
+            onAddScenes={(mediaId, scenes) => void addScenesFromBin(mediaId, scenes)}
+          />
         </CutEditorRail>
 
         <section className="videon-nle__program">

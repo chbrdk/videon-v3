@@ -33,7 +33,7 @@ Assemble and edit a **Cut** from analysis scenes (and whole clips) drawn from **
 
 | Surface | Behavior |
 |---------|----------|
-| Cut editor Bin (left rail) | List library media → load analysis scenes → multi-select insert; whole-video fallback |
+| Cut editor Bin (left rail) | Mediathek-Karten (2-Spalten-Grid + Suche): zuerst volle Videos mit `sceneCount`; Klick öffnet Szenen-Karten; Insert per Klick/DnD; Ganzes Video / Voice-Over im Szenen-Header |
 | Cut Clip properties (right rail) | Selected clip In/Out / Dauer / Media via `PropertyInspector` — `videon-ui-surfaces.md` |
 | Cut timeline | DnD reorder, edge trim (TRIM/RIPPLE/ROLL), ContextMenu Phase 2 — `timeline-context-menu.md` |
 | Chat Hit-Strip / Media search | „Zum Cut“ / „Alle zum Cut“ via active Cut (`videon.v3.activeCut`) |

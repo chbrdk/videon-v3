@@ -1391,6 +1391,128 @@ main {
   min-height: 0;
 }
 
+.videon-cut-bin {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  min-height: 0;
+}
+
+.videon-cut-bin__search {
+  margin: 0;
+}
+
+.videon-cut-bin__search .ds-input,
+.videon-cut-bin__search input {
+  width: 100%;
+}
+
+.videon-cut-bin__chrome {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.videon-cut-bin__crumb {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.videon-cut-bin__crumb-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videon-cut-bin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.videon-cut-bin__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.videon-cut-bin__card {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 0.2rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--nle-border, var(--line));
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ink) 3%, var(--nle-panel, var(--bg1, #fff)));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.videon-cut-bin__card:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, var(--nle-panel, var(--bg1, #fff)));
+}
+
+.videon-cut-bin__card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.videon-cut-bin__thumb-wrap {
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 8%, var(--bg0, #f8f6f0));
+}
+
+.videon-cut-bin__thumb {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: color-mix(in srgb, var(--ink) 8%, var(--bg0, #f8f6f0)) center / cover no-repeat;
+}
+
+.videon-cut-bin__thumb--empty {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--line) 35%, transparent),
+    transparent 60%
+  );
+}
+
+.videon-cut-bin__card-title,
+.videon-cut-bin__card-meta {
+  display: block;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videon-cut-bin__card-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.videon-cut-bin__card-meta {
+  padding-bottom: 0.35rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.videon-cut-rail__body:has(.videon-cut-bin) {
+  padding: 0.35rem 0.4rem 0.55rem;
+}
+
 .videon-cut-rail__resize {
   position: absolute;
   top: 0;

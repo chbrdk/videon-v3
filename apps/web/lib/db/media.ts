@@ -37,6 +37,8 @@ export type MediaAssetDetail = MediaAsset & {
 export type MediaBrowseItem = MediaAsset & {
   durationMs: number | null
   latestAnalysisStatus: string | null
+  /** Distinct scene_keys on the latest succeeded analysis run (0 if none). */
+  sceneCount: number
 }
 
 /** Cross-project Mediathek row — always carries platformProjectId for deep links. */
@@ -61,6 +63,7 @@ type MediaRow = {
   created_at: Date | string
   updated_at: Date | string
   latest_analysis_status?: string | null
+  scene_count?: string | number | null
   platform_project_id?: string
 }
 
@@ -94,6 +97,43 @@ const MEDIA_SELECT_COLUMNS = `id, workspace_id, created_by_plexon_user_id, stora
             bytes, checksum_sha256, lifecycle_state, duration_ms, width, height, frame_rate,
             created_at, updated_at`
 
+const LATEST_SCENE_COUNT_SQL = `(
+              select count(distinct si.scene_key)::int
+                from scene_insights si
+               where si.analysis_run_id = (
+                       select ar.id
+                         from analysis_runs ar
+                        where ar.media_asset_id = media_assets.id
+                          and ar.status in ('succeeded', 'completed')
+                        order by ar.created_at desc
+                        limit 1
+                     )
+            )`
+
+const LATEST_SCENE_COUNT_SQL_ALIASED = `(
+              select count(distinct si.scene_key)::int
+                from scene_insights si
+               where si.analysis_run_id = (
+                       select ar.id
+                         from analysis_runs ar
+                        where ar.media_asset_id = m.id
+                          and ar.status in ('succeeded', 'completed')
+                        order by ar.created_at desc
+                        limit 1
+                     )
+            )`
+
+function mapBrowseExtras(row: MediaRow): Pick<MediaBrowseItem, 'durationMs' | 'latestAnalysisStatus' | 'sceneCount'> {
+  const rawCount = row.scene_count
+  const sceneCount =
+    typeof rawCount === 'string' ? Number(rawCount) : typeof rawCount === 'number' ? rawCount : 0
+  return {
+    durationMs: row.duration_ms,
+    latestAnalysisStatus: row.latest_analysis_status ?? null,
+    sceneCount: Number.isFinite(sceneCount) ? Math.max(0, sceneCount) : 0,
+  }
+}
+
 export async function listMediaForWorkspace(workspaceId: string): Promise<MediaBrowseItem[]> {
   const result = await databasePool().query<MediaRow>(
     `select ${MEDIA_SELECT_COLUMNS},
@@ -103,7 +143,8 @@ export async function listMediaForWorkspace(workspaceId: string): Promise<MediaB
                where ar.media_asset_id = media_assets.id
                order by ar.created_at desc
                limit 1
-            ) as latest_analysis_status
+            ) as latest_analysis_status,
+            ${LATEST_SCENE_COUNT_SQL} as scene_count
        from media_assets
       where workspace_id = $1
         and lifecycle_state <> 'archived'
@@ -113,8 +154,7 @@ export async function listMediaForWorkspace(workspaceId: string): Promise<MediaB
   )
   return result.rows.map((row) => ({
     ...mapMedia(row),
-    durationMs: row.duration_ms,
-    latestAnalysisStatus: row.latest_analysis_status ?? null,
+    ...mapBrowseExtras(row),
   }))
 }
 
@@ -151,7 +191,8 @@ export async function listMediaForAccessibleProjects(input: {
                where ar.media_asset_id = m.id
                order by ar.created_at desc
                limit 1
-            ) as latest_analysis_status
+            ) as latest_analysis_status,
+            ${LATEST_SCENE_COUNT_SQL_ALIASED} as scene_count
        from media_assets m
        join videon_workspaces w on w.id = m.workspace_id
       where w.platform_project_id = any($1::uuid[])
@@ -169,8 +210,7 @@ export async function listMediaForAccessibleProjects(input: {
   )
   return result.rows.map((row) => ({
     ...mapMedia(row),
-    durationMs: row.duration_ms,
-    latestAnalysisStatus: row.latest_analysis_status ?? null,
+    ...mapBrowseExtras(row),
     platformProjectId: row.platform_project_id ?? '',
   }))
 }

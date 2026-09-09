@@ -53,7 +53,8 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 ## Editor IA (Wave B — NLE Cut chrome)
 
-1. WHEN the **Cut** editor (`/cuts/:id`) renders THEN it MUST use an immersive workspace: **left rail** (Bin / Library), **center** (monitor + transport), **right rail** (Clip properties), **bottom dock** (timeline) — CREATION-style dual rails, NOT a single modal drawer as the primary inspect surface.
+1. WHEN the **Cut** editor (`/cuts/:id`) renders THEN it MUST use an immersive workspace: **left rail** (Bin / Library as Mediathek cards), **center** (monitor + transport), **right rail** (Clip properties), **bottom dock** (timeline) — CREATION-style dual rails, NOT a single modal drawer as the primary inspect surface.
+1a. WHEN the Cut Bin rail renders THEN it MUST show a **search field** and a **two-column thumbnail card grid** of Collection media (full videos + `sceneCount` / Dauer). WHEN the operator opens a video THEN the rail MUST drill into that media’s analysis scenes as the same card chrome (back control + Ganzes Video / Voice-Over). Select/list chrome (native `<select>` scene checklists) MUST NOT be the primary Bin surface.
 2. WHEN Cut rails render THEN they MUST be user-resizable overlays on the **program workspace** (left/right edges); they MUST NOT shrink the program column. Widths SHOULD persist in `sessionStorage` (`videon.cut.leftRailPx` / `videon.cut.rightRailPx`). Open state SHOULD persist (`videon.cut.leftRailOpen.v2` / `videon.cut.rightRailOpen.v2`). Escape MAY hide rails for the session without writing closed as the lasting preference when only dismissing menus.
 3. WHEN the Cut editor stage renders THEN it MUST fill the viewport under the product top chrome (no side NavRail gutters) so the program monitor stays large with both Cut rails open.
 4. WHEN the Cut program monitor renders THEN it MUST NOT show a redundant “PROGRAMM” chrome label; fullscreen MAY float on the surface.

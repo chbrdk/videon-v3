@@ -15,10 +15,10 @@ import {
   RankedRow,
   Text,
 } from '@msqdx/ui'
+import { MediaCardThumb } from '@/components/media-card-thumb'
 import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { MediaSearch } from '@/components/media-search'
 import { formatClock } from '@/lib/editor-time'
-import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import {
   analysisStatusLabel,
   analysisStatusTone,
@@ -26,7 +26,6 @@ import {
   mediaLifecycleTone,
 } from '@/lib/pipeline/pipeline-status'
 import { paths } from '@/lib/paths'
-import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
 import { useT } from '@/lib/user-prefs'
 
 type MediaItem = {
@@ -38,6 +37,7 @@ type MediaItem = {
   createdAt: string
   durationMs?: number | null
   latestAnalysisStatus?: string | null
+  sceneCount?: number
   platformProjectId?: string
   projectName?: string | null
 }
@@ -66,32 +66,6 @@ function matchesAnalysis(item: MediaItem, filter: AnalysisFilter): boolean {
   if (filter === 'succeeded') return status === 'succeeded' || status === 'completed'
   if (filter === 'failed') return status === 'failed'
   return true
-}
-
-function MediaCardThumb({
-  mediaAssetId,
-  platformProjectId,
-  durationMs,
-  ready,
-}: {
-  mediaAssetId: string
-  platformProjectId: string
-  durationMs: number | null | undefined
-  ready: boolean
-}) {
-  const playbackUrl = ready ? mediaStreamPlaybackUrl(mediaAssetId, platformProjectId) : null
-  const atMs = Math.max(0, Math.floor((durationMs ?? 2000) / 2))
-  const thumbnail = useClipThumbnail(playbackUrl, atMs)
-  if (!thumbnail) {
-    return <div className="videon-media-card__thumb videon-media-card__thumb--empty" aria-hidden />
-  }
-  return (
-    <div
-      className="videon-media-card__thumb"
-      style={{ backgroundImage: `url(${thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-      aria-hidden
-    />
-  )
 }
 
 export function MediaLibrary({ platformProjectId }: { platformProjectId?: string }) {

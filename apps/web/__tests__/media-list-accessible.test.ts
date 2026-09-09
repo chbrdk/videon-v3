@@ -16,5 +16,7 @@ describe('media list API', () => {
     expect(source).toMatch(/listMediaForAccessibleProjects/)
     expect(source).toMatch(/platform_project_id = any\(\$1::uuid\[\]\)/)
     expect(source).toMatch(/videon_workspace_members/)
+    expect(source).toMatch(/sceneCount/)
+    expect(source).toMatch(/scene_count/)
   })
 })
