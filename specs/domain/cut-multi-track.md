@@ -129,6 +129,7 @@ MP4 export / Premiere MAY continue to treat V2 as video-only for mux (stems stay
 8. WHEN the operator drops a V2 clip onto the V1 lane THEN the editor MUST call `moveClipLane` onto `cut_scenes`.
 9. WHEN the Cut timeline renders THEN lane order MUST be V1 → A1/A2/TX → V2 → V2-A1/V2-A2/V2-TX → VO.
 10. WHEN unmuted V2 covers the playhead AND stems exist for that media THEN the monitor MUST play those stems gated by V2-A1/V2-A2 mute (not V1 A1/A2).
+11. WHEN the operator free-moves a clip vertically THEN the drop lane MUST use the group split between V1 and V2 (midpoint between V1 track bottom and V2 track top): releasing in the V1 companion band stays V1; releasing at/below the split (V2 or V2 companions) MUST target V2 — and the reverse for V2→V1.
 
 ## Acceptance
 

@@ -17,7 +17,7 @@ describe('cut V1↔V2 lane move', () => {
     expect(laneMove).toMatch(/export async function moveVideoOverlayToScene/)
     expect(laneMove).toMatch(/scenes\.length <= 1/)
     expect(timeline).toMatch(/onMoveClipLane/)
-    expect(timeline).toMatch(/videoLaneAtClientY/)
+    expect(timeline).toMatch(/resolveVideoLaneDrop/)
     expect(timeline).toMatch(/videoOverlayTrackRef/)
     expect(view).toMatch(/action: 'moveClipLane'/)
     expect(apiSpec).toMatch(/moveClipLane/)

@@ -2896,6 +2896,11 @@ a.videon-cut-timeline__track-btn--link {
   opacity: 0.78;
 }
 
+.videon-cut-timeline__track.is-lane-drop-target {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent, #7dd3fc) 70%, transparent);
+  background: color-mix(in srgb, var(--accent, #7dd3fc) 12%, transparent);
+}
+
 .videon-cut-timeline__clip--scene {
   cursor: pointer;
   border-color: color-mix(in srgb, var(--accent, #7dd3fc) 55%, var(--nle-border, var(--line)));
