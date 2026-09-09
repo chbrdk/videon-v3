@@ -5,7 +5,7 @@
 
 | Surface | Decision | Notes |
 |---------|----------|-------|
-| AppShell + Product-Switcher | **Keep** | Compose `AppFrame` / `NavRail` / `BrandCornerProductMenu` |
+| AppShell + Product-Switcher | **Keep** | Compose `AppFrame` + CREATION-style top-nav pill + `BrandCornerProductMenu` (no product `NavRail`) |
 | Home magazine spine | **Reshape** | Layout app-local; tiles → `HubIndexCard`; titles → `Text` |
 | Collection / media / cuts lists | **Reshape** | Media browse → native `Card` + toned `Badge` status; hubs → `HubIndexCard`; dense rows → `RankedList` |
 | `EntityCard` in Mediathek | **Drop** | Brandion catalog chrome — wrong for media browse |

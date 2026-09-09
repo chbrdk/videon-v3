@@ -10,7 +10,7 @@ Operator chat hub to **search scenes** across accessible projects (Access Model 
 
 ## Guarantees
 
-1. WHEN the NavRail renders THEN PRIMARY MUST include **Chat** (Audion-style bubble icon) and MUST NOT list Upload or Cuts as primary peers (routes remain for deep links / editor).
+1. WHEN product top-nav renders THEN PRIMARY MUST include **Chat** (Audion-style bubble icon) and MUST NOT list Upload or Cuts as primary peers (routes remain for deep links / editor).
 2. WHEN the Projekte rail item renders THEN it MUST use the shared **folder** projects icon (`NavIconProjects`) — same glyph as Checkion/Audion/Brandion — NOT a product-local box/collection glyph.
 3. WHEN `/chat` opens THEN it MUST use `@msqdx/ui` chat chrome (`.chat-panel` / `.chat-turns` / `.chat-form` / composer) — NOT invent a second chat shell.
 4. WHEN the open chat surface lays out THEN the panel/turns MUST use the stage width (Audion/Plexon pattern: override DS `chat-panel-open` 56/52/36rem caps) with a soft ultra-wide max (~112rem); user turns stay readable; assistant hit grids stretch full row.

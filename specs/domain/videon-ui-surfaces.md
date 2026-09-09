@@ -19,9 +19,9 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 1. WHEN the operator works in VIDEON THEN each **Projekt** is one PLEXON Collection (`platformProjectId`) — NOT a nested “Projects contain Collections” model.
 2. WHEN user-facing copy names that entity THEN it MUST say **Projekt** / **Project** (DE/EN). Internal code, federation, and APIs MAY still say Collection / `platformProjectId`.
-3. WHEN the NavRail renders THEN PRIMARY MUST be **Chat · Übersicht · Projekte · Mediathek · Analysen** (Audion/Checkion-aligned). Upload and Cuts MUST NOT be primary rail peers (deep links / editor remain). See `scene-chat.md`.
+3. WHEN product chrome renders THEN PRIMARY MUST be a **horizontal icon pill in `AppFrame.topbar`** (CREATION-style; no vertical `NavRail` / `snap-dock`): **Chat · Übersicht · Projekte · Mediathek · Analysen**. Upload and Cuts MUST NOT be primary peers (deep links / editor remain). See `scene-chat.md`. Shell rail metrics MUST stay zeroed (`paths.railInsetRem` / `railGapRem` / `railWidthRem`).
 3a. WHEN an authenticated `AppShell` renders THEN it MUST mount `PlatformAssistantHost` (bottom-end FAB + `ChatOverlay` → Plexon `/assistant/embed?product=videon`) — see `platform-assistant-host.md`. In-app `/chat` remains the scene-retrieval hub; the FAB is the central agent.
-4. WHEN the Projekte rail item renders THEN it MUST use the shared folder **Projects** icon (`NavIconProjects`).
+4. WHEN the Projekte top-nav item renders THEN it MUST use the shared folder **Projects** icon (`NavIconProjects`).
 5. WHEN the **Projekte** hub renders THEN it MUST list Access Model B accessible projects and set active project context on select.
 6. WHEN the **Mediathek** hub renders THEN it MUST list media across **all** accessible projects by default. Optional `?platformProjectId=` MAY filter to one project.
 7. WHEN Analysen / Upload / Cuts / media detail / cut editor need a write or editor context THEN they MUST remain **project-gated**.
@@ -55,9 +55,9 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 
 1. WHEN the **Cut** editor (`/cuts/:id`) renders THEN it MUST use an immersive workspace: **left rail** (Bin / Library), **center** (monitor + transport), **right rail** (Clip properties), **bottom dock** (timeline) — CREATION-style dual rails, NOT a single modal drawer as the primary inspect surface.
 2. WHEN Cut rails render THEN they MUST be user-resizable overlays on the **program workspace** (left/right edges); they MUST NOT shrink the program column. Widths SHOULD persist in `sessionStorage` (`videon.cut.leftRailPx` / `videon.cut.rightRailPx`). Open state SHOULD persist (`videon.cut.leftRailOpen.v2` / `videon.cut.rightRailOpen.v2`). Escape MAY hide rails for the session without writing closed as the lasting preference when only dismissing menus.
-3. WHEN the Cut editor stage renders THEN it MUST use the available viewport width next to the NavRail (tight stage gutters) so the program monitor stays large with both rails open.
+3. WHEN the Cut editor stage renders THEN it MUST fill the viewport under the product top chrome (no side NavRail gutters) so the program monitor stays large with both Cut rails open.
 4. WHEN the Cut program monitor renders THEN it MUST NOT show a redundant “PROGRAMM” chrome label; fullscreen MAY float on the surface.
-5. WHEN the Cut toolbar renders THEN it MUST stay a single compact row (title + primary edit/export/panel toggles); secondary actions (merge/delete/archive) MUST live under overflow.
+5. WHEN the Cut toolbar renders THEN it MUST stay a single compact row matching CREATION density (~2.6rem chrome, ~1.85rem icon tools; title + primary edit/export/panel toggles); secondary actions (merge/delete/archive) MUST live under overflow.
 6. WHEN a clip is selected THEN the right rail MUST show clip properties via `@msqdx/ui` `PropertyInspector` / `InspectSection` (In/Out, Dauer, Media name, Trim apply) — NOT only toolbar buttons.
 7. WHEN the Media editor (`/media/:id`) side drawer is open THEN it MUST use `InspectTabs` for panel switching (scenes / transcript / search / pipeline / bin) — Media drawer IA unchanged.
 8. WHEN the Media side drawer is open THEN its width MUST be user-resizable (drag handle on the leading edge) and SHOULD persist in `sessionStorage` (`videon.editor.drawerWidthPx`).

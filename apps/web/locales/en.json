@@ -22,6 +22,7 @@
     "cuts": "Cuts",
     "settings": "Settings",
     "settingsAria": "Settings",
+    "primaryAria": "Primary navigation",
     "homeAria": "{brand} overview"
   },
   "chat": {
