@@ -292,7 +292,21 @@ export function CutEditorView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const body = (await response.json()) as { error?: { message?: string } }
+      const text = await response.text()
+      let body: { error?: { message?: string } } = {}
+      if (text) {
+        try {
+          body = JSON.parse(text) as { error?: { message?: string } }
+        } catch {
+          throw new Error(
+            response.ok
+              ? 'Ungültige Server-Antwort'
+              : `Timeline-Änderung fehlgeschlagen (${response.status})`,
+          )
+        }
+      } else if (!response.ok) {
+        throw new Error(`Timeline-Änderung fehlgeschlagen (${response.status})`)
+      }
       if (!response.ok) throw new Error(body.error?.message || 'Timeline-Änderung fehlgeschlagen')
       await load()
     } catch (err) {

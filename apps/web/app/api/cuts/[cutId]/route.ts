@@ -196,9 +196,71 @@ export async function PATCH(request: Request, context: RouteContext) {
     return apiError(request, 404, 'not_found', 'Cut not found')
   }
 
+  try {
+    return await applyCutPatch({
+      request,
+      cut,
+      workspaceId: workspace.workspace.id,
+      action,
+      sceneId,
+      atMs,
+      startMs,
+      endMs,
+      name,
+      sceneIds,
+      rawRestoreScenes,
+      mediaAssetId,
+      afterSceneId,
+      leftSceneId,
+      boundaryMs,
+      record,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Cut update failed'
+    return apiError(request, 500, 'invalid_payload', message)
+  }
+}
+
+async function applyCutPatch(input: {
+  request: Request
+  cut: NonNullable<Awaited<ReturnType<typeof findCut>>>
+  workspaceId: string
+  action: string
+  sceneId: string
+  atMs: number | null
+  startMs: number | null
+  endMs: number | null
+  name: string
+  sceneIds: string[]
+  rawRestoreScenes: unknown[] | null
+  mediaAssetId: string
+  afterSceneId: string | null
+  leftSceneId: string
+  boundaryMs: number | null
+  record: Record<string, unknown>
+}): Promise<Response> {
+  const {
+    request,
+    cut,
+    workspaceId,
+    action,
+    sceneId,
+    atMs,
+    startMs,
+    endMs,
+    name,
+    sceneIds,
+    rawRestoreScenes,
+    mediaAssetId,
+    afterSceneId,
+    leftSceneId,
+    boundaryMs,
+    record,
+  } = input
+
   if (action === 'rename') {
     if (!name) return apiError(request, 400, 'invalid_payload', 'name is required for rename')
-    const updated = await renameCut({ cutId: cut.id, workspaceId: workspace.workspace.id, name })
+    const updated = await renameCut({ cutId: cut.id, workspaceId, name })
     if (!updated) return apiError(request, 409, 'invalid_payload', 'Cut could not be renamed')
     return apiJson(request, { cut: updated })
   }
@@ -213,7 +275,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!resolved.ok) return apiError(request, 400, 'invalid_payload', resolved.message)
     const updated = await updateCutCanvas({
       cutId: cut.id,
-      workspaceId: workspace.workspace.id,
+      workspaceId,
       width: resolved.width,
       height: resolved.height,
       defaultFrameRate: CUT_CANVAS_DEFAULT_FPS,
@@ -255,7 +317,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         typeof scene.sceneKey === 'string' && scene.sceneKey.trim() ? scene.sceneKey.trim() : null
       if (!id || !mediaId || sceneStart === null || sceneEnd === null) continue
       const media = await findMediaAsset(mediaId)
-      if (!media || media.workspaceId !== workspace.workspace.id) {
+      if (!media || media.workspaceId !== workspaceId) {
         return apiError(request, 404, 'not_found', 'Media asset not found')
       }
       restoreScenes.push({
@@ -282,7 +344,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     for (const scene of resolved.scenes) {
       const media = await findMediaAsset(scene.mediaAssetId)
-      if (!media || media.workspaceId !== workspace.workspace.id) {
+      if (!media || media.workspaceId !== workspaceId) {
         return apiError(request, 404, 'not_found', 'Media asset not found')
       }
     }
@@ -301,7 +363,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       return apiError(request, 400, 'invalid_payload', 'startMs and endMs are required for addScene')
     }
     const media = await findMediaAsset(mediaAssetId)
-    if (!media || media.workspaceId !== workspace.workspace.id) {
+    if (!media || media.workspaceId !== workspaceId) {
       return apiError(request, 404, 'not_found', 'Media asset not found')
     }
     const sceneKey =

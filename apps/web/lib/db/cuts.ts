@@ -190,9 +190,46 @@ const MIN_CLIP_MS = 500
 
 export { MIN_CLIP_MS as MIN_CUT_CLIP_MS }
 
+/**
+ * Collision-free upward shift for `cut_scenes.position` under UNIQUE (cut_id, position).
+ * Direct `position = position + n` fails mid-update when intermediate values collide.
+ */
+export function tempPositionForShiftUp(position: number, delta: number): number {
+  return -(position + delta) - 1
+}
+
+export function finalizeTempPosition(tempPosition: number): number {
+  return -tempPosition - 1
+}
+
+async function shiftCutScenePositionsUp(
+  client: PoolClient,
+  cutId: string,
+  fromPosition: number,
+  delta: number,
+): Promise<void> {
+  if (delta <= 0) return
+  await client.query(
+    `update cut_scenes
+        set position = -(position + $2) - 1
+      where cut_id = $1
+        and position >= $3`,
+    [cutId, delta, fromPosition],
+  )
+  await client.query(
+    `update cut_scenes
+        set position = -position - 1
+      where cut_id = $1
+        and position < 0`,
+    [cutId],
+  )
+}
+
 async function renumberCutScenes(client: PoolClient, cutId: string): Promise<void> {
+  await client.query(`update cut_scenes set position = -position - 1 where cut_id = $1`, [cutId])
   const scenes = await client.query<{ id: string }>(
-    `select id from cut_scenes where cut_id = $1 order by position asc`,
+    // After negation, original order is position DESC (-1, -2, -3, …).
+    `select id from cut_scenes where cut_id = $1 order by position desc`,
     [cutId],
   )
   for (const [position, row] of scenes.rows.entries()) {
@@ -229,6 +266,7 @@ export async function splitCutScene(input: {
         where id = $1`,
       [scene.id, splitAt],
     )
+    await shiftCutScenePositionsUp(client, scene.cutId, scene.position + 1, 1)
     await client.query(
       `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
        values ($1, $2, $3, $4, $5, $6, $7)`,
@@ -242,7 +280,7 @@ export async function splitCutScene(input: {
         scene.sceneKey,
       ],
     )
-    await renumberCutScenes(client, scene.cutId)
+    await client.query(`update cuts set updated_at = now() where id = $1`, [scene.cutId])
     await client.query('commit')
     return listScenesForCut(scene.cutId)
   } catch (error) {
@@ -375,6 +413,7 @@ export async function reorderCutScenes(input: {
   const client = await databasePool().connect()
   try {
     await client.query('begin')
+    await client.query(`update cut_scenes set position = -position - 1 where cut_id = $1`, [input.cutId])
     for (const [position, sceneId] of input.sceneIds.entries()) {
       await client.query(`update cut_scenes set position = $2 where id = $1 and cut_id = $3`, [
         sceneId,
@@ -483,23 +522,20 @@ export async function addScenesToCut(input: {
     })
   }
 
-  const scenes = await listScenesForCut(input.cutId)
-  let position = scenes.length
-  if (input.afterSceneId) {
-    const index = scenes.findIndex((scene) => scene.id === input.afterSceneId)
-    if (index >= 0) position = index + 1
-  }
-
   const client = await databasePool().connect()
   try {
     await client.query('begin')
-    await client.query(
-      `update cut_scenes
-          set position = position + $2
-        where cut_id = $1
-          and position >= $3`,
-      [input.cutId, normalized.length, position],
+    const locked = await client.query<{ id: string; position: number }>(
+      `select id, position from cut_scenes where cut_id = $1 order by position asc for update`,
+      [input.cutId],
     )
+    let position = locked.rows.length
+    if (input.afterSceneId) {
+      const index = locked.rows.findIndex((scene) => scene.id === input.afterSceneId)
+      if (index >= 0) position = index + 1
+    }
+
+    await shiftCutScenePositionsUp(client, input.cutId, position, normalized.length)
     for (const [offset, scene] of normalized.entries()) {
       await client.query(
         `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
