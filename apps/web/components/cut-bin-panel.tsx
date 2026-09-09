@@ -156,15 +156,14 @@ export function CutBinPanel({
                   draggable={!busy}
                   title={`${scene.sceneKey} · ${formatClock(scene.startMs)} – ${formatClock(scene.endMs)}`}
                   onDragStart={(event) => {
-                    event.dataTransfer.setData(
-                      MEDIA_DRAG_TYPE,
-                      JSON.stringify({
-                        mediaAssetId: focusedMedia.id,
-                        startMs: scene.startMs,
-                        endMs: scene.endMs,
-                        sceneKey: scene.sceneKey,
-                      }),
-                    )
+                    const payload = JSON.stringify({
+                      mediaAssetId: focusedMedia.id,
+                      startMs: scene.startMs,
+                      endMs: scene.endMs,
+                      sceneKey: scene.sceneKey,
+                    })
+                    event.dataTransfer.setData(MEDIA_DRAG_TYPE, payload)
+                    event.dataTransfer.setData('text/plain', payload)
                     event.dataTransfer.effectAllowed = 'copy'
                   }}
                   onClick={() => onAddScenes(focusedMedia.id, [scene])}
@@ -228,14 +227,13 @@ export function CutBinPanel({
                   draggable={!busy}
                   title={media.originalFilename}
                   onDragStart={(event) => {
-                    event.dataTransfer.setData(
-                      MEDIA_DRAG_TYPE,
-                      JSON.stringify({
-                        mediaAssetId: media.id,
-                        startMs: 0,
-                        endMs: media.durationMs ?? 60_000,
-                      }),
-                    )
+                    const payload = JSON.stringify({
+                      mediaAssetId: media.id,
+                      startMs: 0,
+                      endMs: media.durationMs ?? 60_000,
+                    })
+                    event.dataTransfer.setData(MEDIA_DRAG_TYPE, payload)
+                    event.dataTransfer.setData('text/plain', payload)
                     event.dataTransfer.effectAllowed = 'copy'
                   }}
                   onClick={() => setFocusedMediaId(media.id)}

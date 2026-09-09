@@ -2940,17 +2940,30 @@ a.videon-cut-timeline__track-btn--link {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 0.7rem;
+  width: 0.85rem;
   cursor: ew-resize;
-  z-index: 3;
-  opacity: 0;
+  z-index: 4;
+  opacity: 0.55;
   transition: opacity 0.12s ease;
+  pointer-events: auto;
+  touch-action: none;
 }
 
 .videon-cut-timeline__clip:hover .videon-cut-timeline__clip-handle,
 .videon-cut-timeline__clip.is-active .videon-cut-timeline__clip-handle,
+.videon-cut-timeline__clip.is-active-clip .videon-cut-timeline__clip-handle,
 .videon-cut-timeline__clip.is-trimming .videon-cut-timeline__clip-handle {
-  opacity: 0.95;
+  opacity: 1;
+}
+
+.ds-timeline-clip__label,
+.videon-cut-timeline__clip-duration {
+  pointer-events: none;
+}
+
+.videon-cut-timeline__clip.ds-timeline-clip {
+  touch-action: none;
+  user-select: none;
 }
 
 .videon-cut-timeline__clip-handle--start {
