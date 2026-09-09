@@ -1,13 +1,13 @@
 'use client'
 
-export type TimelineTrackId = 'v1' | 'si' | 'a1' | 'a2' | 'tx'
+export type TimelineTrackId = 'v1' | 'si' | 'a1' | 'a2' | 'ab' | 'tx'
 
 export type TimelineTrackState = {
   hidden: boolean
   muted: boolean
 }
 
-export const DEFAULT_SOURCE_TRACK_STATE: Record<TimelineTrackId, TimelineTrackState> = {
+export const DEFAULT_SOURCE_TRACK_STATE: Record<Exclude<TimelineTrackId, 'ab'>, TimelineTrackState> = {
   v1: { hidden: false, muted: false },
   si: { hidden: false, muted: false },
   a1: { hidden: false, muted: false },
@@ -19,6 +19,7 @@ export const DEFAULT_CUT_TRACK_STATE: Record<Exclude<TimelineTrackId, 'si'>, Tim
   v1: { hidden: false, muted: false },
   a1: { hidden: false, muted: false },
   a2: { hidden: false, muted: false },
+  ab: { hidden: false, muted: false },
   tx: { hidden: false, muted: false },
 }
 

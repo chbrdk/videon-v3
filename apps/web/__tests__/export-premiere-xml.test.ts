@@ -74,6 +74,36 @@ describe('buildPremiereXmeml', () => {
     expect(inMatches).toEqual(['387', '387', '387'])
     expect(outMatches).toEqual(['412', '412', '412'])
   })
+
+  it('maps unmuted bus clips onto extra audio tracks', () => {
+    const xml = buildPremiereXmeml({
+      cut: { id: 'c', name: 'VO Cut', width: 1920, height: 1080, frameRate: 25 },
+      scenes: [
+        {
+          id: 's1',
+          mediaAssetId: 'm1',
+          startMs: 0,
+          endMs: 2000,
+          originalFilename: 'v.mp4',
+          zipMediaName: 'v.mp4',
+        },
+      ],
+      busClips: [
+        {
+          id: 'b1',
+          mediaAssetId: 'a1',
+          timelineStartMs: 500,
+          startMs: 0,
+          endMs: 1000,
+          originalFilename: 'vo.wav',
+          zipMediaName: 'vo.wav',
+        },
+      ],
+    })
+    expect(xml).toContain('file://media/vo.wav')
+    expect(xml).toContain('<start>13</start>')
+    expect(xml).toContain('<end>38</end>')
+  })
 })
 
 describe('assignPremiereZipMediaNames', () => {

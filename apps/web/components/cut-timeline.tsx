@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react'
+import type { DragEvent, PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { Text, TimelineClip, TimelineRuler, ToolButton } from '@msqdx/ui'
 import { TimelineAudioTrack } from '@/components/timeline-audio-track'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
@@ -31,6 +31,8 @@ import {
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 import { activeTranscriptIndex, usePlayheadFollow } from '@/lib/use-playhead-follow'
 import { computeTrimPreview, TRIM_MODE_HELP, TRIM_MODE_LABELS, type TrimMode } from '@/lib/trim-modes'
+import { cutEdgeSnapPoints, snapCutMs } from '@/lib/timeline-snap'
+import type { CutTimelineContextMenuRequest } from '@/lib/cut-timeline-context-menu'
 
 export type CutTimelineClip = {
   scene: {
@@ -43,7 +45,18 @@ export type CutTimelineClip = {
   media: { id: string; originalFilename: string } | null
 }
 
+export type CutTimelineAudioClip = {
+  id: string
+  trackId: string
+  mediaAssetId: string
+  timelineStartMs: number
+  startMs: number
+  endMs: number
+  label?: string
+}
+
 export const MEDIA_DRAG_TYPE = 'application/vnd.videon.media+json'
+export const AUDIO_BUS_DRAG_TYPE = 'application/vnd.videon.audio-bus+json'
 
 type MediaDragPayload = {
   mediaAssetId: string
@@ -64,12 +77,22 @@ type CutTimelineProps = {
   voicePeaksByMediaId?: Record<string, number[]>
   musicPeaksByMediaId?: Record<string, number[]>
   sourceDurationMsByMediaId?: Record<string, number>
+  audioClips?: CutTimelineAudioClip[]
+  audioBusLabel?: string
+  audioBusMuted?: boolean
+  selectedAudioClipId?: string | null
   onSelectClip: (index: number) => void
   onSeek: (cutMs: number) => void
   onReorder: (sceneIds: string[]) => void
   onTrim: (sceneId: string, startMs: number, endMs: number) => void
   onRollTrim?: (leftSceneId: string, boundaryMs: number) => void
   onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null }) => void
+  onDropAudioBus?: (payload: MediaDragPayload & { timelineStartMs: number }) => void
+  onSelectAudioClip?: (clipId: string | null) => void
+  onMoveAudioClip?: (clipId: string, timelineStartMs: number) => void
+  onDeleteAudioClip?: (clipId: string) => void
+  onToggleAudioBusMuted?: () => void
+  onContextMenuRequest?: (request: CutTimelineContextMenuRequest) => void
   /** Per-track mute for the program audio mixer. */
   onTrackMutesChange?: (mutes: ProgramTrackMutes) => void
   hasStemAudio?: boolean
@@ -89,12 +112,22 @@ export function CutTimeline({
   voicePeaksByMediaId = {},
   musicPeaksByMediaId = {},
   sourceDurationMsByMediaId = {},
+  audioClips = [],
+  audioBusLabel = 'Voice-Over',
+  audioBusMuted = false,
+  selectedAudioClipId = null,
   onSelectClip,
   onSeek,
   onReorder,
   onTrim,
   onRollTrim,
   onDropMedia,
+  onDropAudioBus,
+  onSelectAudioClip,
+  onMoveAudioClip,
+  onDeleteAudioClip,
+  onToggleAudioBusMuted,
+  onContextMenuRequest,
   onTrackMutesChange,
   hasStemAudio = false,
 }: CutTimelineProps) {
@@ -143,12 +176,19 @@ export function CutTimeline({
   }, [hasStemAudio])
 
   useEffect(() => {
+    setTracks((current) =>
+      current.ab.muted === audioBusMuted ? current : { ...current, ab: { ...current.ab, muted: audioBusMuted } },
+    )
+  }, [audioBusMuted])
+
+  useEffect(() => {
     onTrackMutesChange?.({
       v1: tracks.v1.muted,
       a1: tracks.a1.muted,
       a2: tracks.a2.muted,
+      ab: tracks.ab.muted,
     })
-  }, [tracks.v1.muted, tracks.a1.muted, tracks.a2.muted, onTrackMutesChange])
+  }, [tracks.v1.muted, tracks.a1.muted, tracks.a2.muted, tracks.ab.muted, onTrackMutesChange])
 
   const timeline = useMemo(() => {
     const scenes = clips.map((clip) => ({
@@ -161,14 +201,20 @@ export function CutTimeline({
     return buildCutTimeline(scenes)
   }, [clips, trimPreview])
 
+  const snapPoints = useMemo(
+    () => cutEdgeSnapPoints(timeline, cutPlayheadMs),
+    [timeline, cutPlayheadMs],
+  )
+
   const seekFromPointer = useCallback(
     (clientX: number, track: HTMLDivElement | null = lanesRef.current) => {
       if (!track || totalDurationMs <= 0) return
       const rect = track.getBoundingClientRect()
       const x = Math.min(Math.max(clientX - rect.left, 0), contentWidthPx)
-      onSeek(Math.floor(x * msPerPixel))
+      const raw = Math.floor(x * msPerPixel)
+      onSeek(snapCutMs(raw, snapPoints))
     },
-    [contentWidthPx, msPerPixel, onSeek, totalDurationMs],
+    [contentWidthPx, msPerPixel, onSeek, snapPoints, totalDurationMs],
   )
 
   useJogShuttle(viewportRef, (deltaMs) => onSeek(cutPlayheadMs + deltaMs), { enabled: !disabled })
@@ -190,6 +236,59 @@ export function CutTimeline({
     window.addEventListener('pointerup', onUp)
     seekFromPointer(event.clientX)
   }
+
+  const emitLaneContextMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      if (disabled || !onContextMenuRequest) return
+      event.preventDefault()
+      const rect = lanesRef.current?.getBoundingClientRect()
+      const raw =
+        rect && totalDurationMs > 0
+          ? Math.floor(Math.min(Math.max(event.clientX - rect.left, 0), contentWidthPx) * msPerPixel)
+          : cutPlayheadMs
+      onContextMenuRequest({
+        kind: 'cut-lane',
+        atMs: snapCutMs(raw, snapPoints),
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [
+      contentWidthPx,
+      cutPlayheadMs,
+      disabled,
+      msPerPixel,
+      onContextMenuRequest,
+      snapPoints,
+      totalDurationMs,
+    ],
+  )
+
+  const emitClipContextMenu = useCallback(
+    (event: ReactMouseEvent, item: CutTimelineItem) => {
+      if (disabled || !onContextMenuRequest) return
+      event.preventDefault()
+      event.stopPropagation()
+      const duration = item.cutEndMs - item.cutStartMs
+      const canSplit =
+        cutPlayheadMs > item.cutStartMs + MIN_CUT_CLIP_MS &&
+        cutPlayheadMs < item.cutEndMs - MIN_CUT_CLIP_MS &&
+        duration > MIN_CUT_CLIP_MS * 2
+      onContextMenuRequest({
+        kind: 'cut-clip',
+        sceneId: item.scene.id,
+        index: item.index,
+        cutStartMs: item.cutStartMs,
+        cutEndMs: item.cutEndMs,
+        canMerge: item.index < clips.length - 1,
+        canDelete: clips.length > 1,
+        canSplit,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [clips.length, cutPlayheadMs, disabled, onContextMenuRequest],
+  )
 
   const onClipDragStart = (event: DragEvent<HTMLDivElement>, sceneId: string) => {
     if (disabled) return
@@ -225,7 +324,7 @@ export function CutTimeline({
     if (lanesRef.current && totalDurationMs > 0) {
       const rect = lanesRef.current.getBoundingClientRect()
       const x = Math.min(Math.max(event.clientX - rect.left, 0), contentWidthPx)
-      setDropHintMs(Math.floor(x * msPerPixel))
+      setDropHintMs(snapCutMs(Math.floor(x * msPerPixel), snapPoints))
     }
   }
 
@@ -240,9 +339,12 @@ export function CutTimeline({
       if (!payload.mediaAssetId) return
       const cutMs =
         lanesRef.current && totalDurationMs > 0
-          ? Math.floor(
-              Math.min(Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0), contentWidthPx) *
-                msPerPixel,
+          ? snapCutMs(
+              Math.floor(
+                Math.min(Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0), contentWidthPx) *
+                  msPerPixel,
+              ),
+              snapPoints,
             )
           : totalDurationMs
       const afterIndex = timeline.findIndex((item) => cutMs >= item.cutStartMs && cutMs < item.cutEndMs)
@@ -250,6 +352,43 @@ export function CutTimeline({
       onDropMedia({ ...payload, afterSceneId })
     } catch {
       // ignore invalid drag payloads
+    }
+  }
+
+  const onBusDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (disabled || !onDropAudioBus) return
+    if (
+      !event.dataTransfer.types.includes(MEDIA_DRAG_TYPE) &&
+      !event.dataTransfer.types.includes(AUDIO_BUS_DRAG_TYPE)
+    ) {
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  const onBusDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    if (disabled || !onDropAudioBus) return
+    const raw =
+      event.dataTransfer.getData(AUDIO_BUS_DRAG_TYPE) || event.dataTransfer.getData(MEDIA_DRAG_TYPE)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as MediaDragPayload
+      if (!payload.mediaAssetId) return
+      const cutMs =
+        lanesRef.current && totalDurationMs > 0
+          ? snapCutMs(
+              Math.floor(
+                Math.min(Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0), contentWidthPx) *
+                  msPerPixel,
+              ),
+              snapPoints,
+            )
+          : 0
+      onDropAudioBus({ ...payload, timelineStartMs: cutMs })
+    } catch {
+      /* ignore */
     }
   }
 
@@ -368,23 +507,36 @@ export function CutTimeline({
             />
             <TimelineTrackHeader
               id="a1"
-              label="A1"
+              label="A1 · Source"
               variant="audio"
               hidden={tracks.a1.hidden}
               muted={tracks.a1.muted}
               onToggleHidden={() => toggleTrack('a1', 'hidden')}
               onToggleMuted={() => toggleTrack('a1', 'muted')}
-              muteHint={hasStemAudio ? 'Voice-Stem stumm' : 'Tonspur stumm'}
+              muteHint={hasStemAudio ? 'Source Audio Voice (Visual)' : 'Source Audio (Visual)'}
             />
             <TimelineTrackHeader
               id="a2"
-              label="A2"
+              label="A2 · Source"
               variant="audio"
               hidden={tracks.a2.hidden}
               muted={tracks.a2.muted}
               onToggleHidden={() => toggleTrack('a2', 'hidden')}
               onToggleMuted={() => toggleTrack('a2', 'muted')}
-              muteHint={hasStemAudio ? 'Music-Stem stumm' : 'Music-Spur (nur Visual)'}
+              muteHint={hasStemAudio ? 'Source Audio Music (Visual)' : 'Source Audio Music (Visual)'}
+            />
+            <TimelineTrackHeader
+              id="ab"
+              label="A3 · VO"
+              variant="audio"
+              hidden={tracks.ab.hidden}
+              muted={tracks.ab.muted}
+              onToggleHidden={() => toggleTrack('ab', 'hidden')}
+              onToggleMuted={() => {
+                toggleTrack('ab', 'muted')
+                onToggleAudioBusMuted?.()
+              }}
+              muteHint={`${audioBusLabel} stumm`}
             />
             <TimelineTrackHeader
               id="tx"
@@ -408,7 +560,11 @@ export function CutTimeline({
                   />
                 ))}
               </div>
-              <div className="videon-cut-timeline__ruler" onPointerDown={onTrackPointerDown}>
+              <div
+                className="videon-cut-timeline__ruler"
+                onPointerDown={onTrackPointerDown}
+                onContextMenu={emitLaneContextMenu}
+              >
                 <TimelineRuler
                   className="videon-cut-timeline__ruler-ds"
                   marks={ticks
@@ -425,6 +581,7 @@ export function CutTimeline({
                 ref={videoTrackRef}
                 className={`videon-cut-timeline__track videon-cut-timeline__track--video${tracks.v1.hidden ? ' is-collapsed' : ''}${tracks.v1.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
+                onContextMenu={emitLaneContextMenu}
                 onDragOver={onTrackDragOver}
                 onDragLeave={() => setDropHintMs(null)}
                 onDrop={onTrackDrop}
@@ -451,20 +608,25 @@ export function CutTimeline({
                       widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
                       active={isActive}
                       tone="accent"
-                      className={`videon-cut-timeline__clip${dragSceneId === item.scene.id ? ' is-dragging' : ''}`}
+                      className={`videon-cut-timeline__clip${dragSceneId === item.scene.id ? ' is-dragging' : ''}${isActive ? ' is-active-clip' : ''}`}
                       style={{ pointerEvents: tracks.v1.muted ? 'none' : undefined }}
                       draggable={!disabled && !tracks.v1.muted}
                       onDragStart={(event) => onClipDragStart(event, item.scene.id)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={() => onClipDrop(item.scene.id)}
+                      onContextMenu={(event) => emitClipContextMenu(event, item)}
                       onClick={(event) => {
                         event.stopPropagation()
+                        onSelectAudioClip?.(null)
                         onSelectClip(item.index)
                         seekFromPointer(event.clientX)
                       }}
                       title={typeof label === 'string' ? label : undefined}
                     >
                       <TimelineClipThumbnail playbackUrl={playbackUrl} sourceMs={thumbMs} />
+                      <span className="videon-cut-timeline__clip-duration" aria-hidden="true">
+                        {formatClock(item.durationMs)}
+                      </span>
                       {isActive ? (
                         <>
                           <span
@@ -507,7 +669,8 @@ export function CutTimeline({
               </div>
 
               <div
-                className={`videon-cut-timeline__track videon-cut-timeline__track--audio${tracks.a1.hidden ? ' is-collapsed' : ''}${tracks.a1.muted ? ' is-muted' : ''}`}
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--source-audio${tracks.a1.hidden ? ' is-collapsed' : ''}${tracks.a1.muted ? ' is-muted' : ''}`}
+                aria-label="Source Audio A1 Voice"
               >
                 {!tracks.a1.hidden ? (
                   <TimelineAudioTrack
@@ -519,13 +682,14 @@ export function CutTimeline({
                     playbackUrlByMediaId={playbackUrlByMediaId}
                     sourceDurationMsByMediaId={sourceDurationMsByMediaId}
                     clips={clips}
-                    label="Audio-Spur A1 Voice"
+                    label="Source Audio · Voice"
                   />
                 ) : null}
               </div>
 
               <div
-                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music${tracks.a2.hidden ? ' is-collapsed' : ''}${tracks.a2.muted ? ' is-muted' : ''}`}
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music videon-cut-timeline__track--source-audio${tracks.a2.hidden ? ' is-collapsed' : ''}${tracks.a2.muted ? ' is-muted' : ''}`}
+                aria-label="Source Audio A2 Music"
               >
                 {!tracks.a2.hidden ? (
                   <TimelineAudioTrack
@@ -537,8 +701,74 @@ export function CutTimeline({
                     playbackUrlByMediaId={playbackUrlByMediaId}
                     sourceDurationMsByMediaId={sourceDurationMsByMediaId}
                     clips={clips}
-                    label="Audio-Spur A2 Music"
+                    label="Source Audio · Music"
                   />
+                ) : null}
+              </div>
+
+              <div
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--bus${tracks.ab.hidden ? ' is-collapsed' : ''}${tracks.ab.muted ? ' is-muted' : ''}`}
+                onDragOver={onBusDragOver}
+                onDrop={onBusDrop}
+                aria-label={audioBusLabel}
+              >
+                {!tracks.ab.hidden
+                  ? audioClips.map((clip) => {
+                      const duration = Math.max(0, clip.endMs - clip.startMs)
+                      const leftPx = timelineLeftPx(clip.timelineStartMs, msPerPixel)
+                      const widthPx = timelineWidthPx(duration, msPerPixel, 8)
+                      const active = selectedAudioClipId === clip.id
+                      return (
+                        <TimelineClip
+                          key={clip.id}
+                          label={clip.label ?? audioBusLabel}
+                          leftPct={contentWidthPx > 0 ? (leftPx / contentWidthPx) * 100 : 0}
+                          widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
+                          active={active}
+                          tone="accent"
+                          className={`videon-cut-timeline__clip videon-cut-timeline__clip--bus${active ? ' is-active-clip' : ''}`}
+                          draggable={!disabled && Boolean(onMoveAudioClip)}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData('text/plain', clip.id)
+                            event.dataTransfer.effectAllowed = 'move'
+                          }}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => {
+                            event.preventDefault()
+                            if (!onMoveAudioClip || !lanesRef.current) return
+                            const cutMs = snapCutMs(
+                              Math.floor(
+                                Math.min(
+                                  Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0),
+                                  contentWidthPx,
+                                ) * msPerPixel,
+                              ),
+                              snapPoints,
+                            )
+                            onMoveAudioClip(clip.id, cutMs)
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onSelectAudioClip?.(clip.id)
+                            onSeek(clip.timelineStartMs)
+                          }}
+                          onContextMenu={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            onSelectAudioClip?.(clip.id)
+                            if (onDeleteAudioClip && !disabled) {
+                              // Keep lane menu for VO; delete via inspector/toolbar for now.
+                            }
+                          }}
+                          title={clip.label ?? audioBusLabel}
+                        />
+                      )
+                    })
+                  : null}
+                {!tracks.ab.hidden && audioClips.length === 0 ? (
+                  <Text role="meta" className="videon-cut-timeline__bus-empty">
+                    {audioBusLabel} · Media hierher ziehen
+                  </Text>
                 ) : null}
               </div>
 

@@ -6,7 +6,6 @@ import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
 import {
   DEFAULT_SOURCE_TRACK_STATE,
   TimelineTrackHeader,
-  type TimelineTrackId,
   type TimelineTrackState,
 } from '@/components/timeline-track-header'
 import type { ProgramTrackMutes } from '@/lib/use-program-audio-mixer'
@@ -146,7 +145,7 @@ export function SourceMediaTimeline({
   const resolvedVoicePeaks = voicePeaks?.length ? voicePeaks : peaks
   const resolvedMusicPeaks = musicPeaks ?? []
 
-  const toggleTrack = useCallback((id: TimelineTrackId, field: keyof TimelineTrackState) => {
+  const toggleTrack = useCallback((id: keyof typeof DEFAULT_SOURCE_TRACK_STATE, field: keyof TimelineTrackState) => {
     setTracks((current) => ({
       ...current,
       [id]: { ...current[id], [field]: !current[id][field] },

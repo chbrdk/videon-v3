@@ -18,6 +18,17 @@ export type PremiereXmlScene = {
   mediaDurationMs?: number | null
 }
 
+/** Independent Cut audio-bus clips (Voice-Over) — specs/domain/cut-multi-track.md */
+export type PremiereXmlBusClip = {
+  id: string
+  mediaAssetId: string
+  timelineStartMs: number
+  startMs: number
+  endMs: number
+  originalFilename: string
+  zipMediaName?: string
+}
+
 export type PremiereXmlCut = {
   id: string
   name: string
@@ -125,11 +136,13 @@ export function premiereTicksFromMs(ms: number): number {
 export function buildPremiereXmeml(input: {
   cut: PremiereXmlCut
   scenes: PremiereXmlScene[]
+  busClips?: PremiereXmlBusClip[]
 }): string {
   const fps = input.cut.frameRate && input.cut.frameRate > 0 ? input.cut.frameRate : 25
   const width = input.cut.width && input.cut.width > 0 ? input.cut.width : 1920
   const height = input.cut.height && input.cut.height > 0 ? input.cut.height : 1080
   const scenes = input.scenes
+  const busClips = input.busClips ?? []
   const n = scenes.length
   const totalMs = scenes.reduce((sum, scene) => sum + Math.max(0, scene.endMs - scene.startMs), 0)
   const totalFrames = framesFromMs(totalMs, fps)
@@ -141,6 +154,8 @@ export function buildPremiereXmeml(input: {
   // Audio clip ids continue after all video ids (auto-editor / Premiere convention).
   const audioLFirstId = n + 1
   const audioRFirstId = n * 2 + 1
+  const busLFirstId = n * 3 + 1
+  const busRFirstId = n * 3 + 1 + Math.max(busClips.length, 1)
 
   const videoLinkBlock = (index: number) => {
     const clipindex = index + 1
@@ -263,6 +278,77 @@ export function buildPremiereXmeml(input: {
       })
       .join('')
 
+  const busFileBlock = (clip: PremiereXmlBusClip) => {
+    const fileId = `file-${clip.mediaAssetId}`
+    if (definedFiles.has(fileId)) {
+      return `<file id="${fileId}"/>`
+    }
+    definedFiles.add(fileId)
+    const displayName = escapeXml(clip.originalFilename || `bus-${clip.id}`)
+    const zipName =
+      clip.zipMediaName || sanitizePremiereMediaBasename(clip.originalFilename || '', clip.mediaAssetId)
+    const pathUrl = `file://media/${escapeXml(zipName)}`
+    return `<file id="${fileId}">
+							<name>${displayName}</name>
+							<pathurl>${pathUrl}</pathurl>
+							${rate}
+							<duration></duration>
+							<timecode>
+								${rate}
+								<string>00:00:00:00</string>
+								<frame>0</frame>
+								<displayformat>NDF</displayformat>
+							</timecode>
+							<media>
+								<audio>
+									<channelcount>2</channelcount>
+									<samplecharacteristics>
+										<depth>16</depth>
+										<samplerate>48000</samplerate>
+									</samplecharacteristics>
+								</audio>
+							</media>
+						</file>`
+  }
+
+  const busTrackClips = (explodedIndex: 0 | 1) =>
+    busClips
+      .map((clip, index) => {
+        const clipDurMs = Math.max(0, clip.endMs - clip.startMs)
+        const displayName = escapeXml(clip.originalFilename || `bus-${index + 1}`)
+        const firstId = explodedIndex === 0 ? busLFirstId : busRFirstId
+        const clipId = `clipitem-${firstId + index}`
+        const sourceTrackIndex = explodedIndex + 1
+        return `
+					<clipitem id="${clipId}" premiereChannelType="stereo">
+						<name>${displayName}</name>
+						<enabled>TRUE</enabled>
+						<start>${framesFromMs(clip.timelineStartMs, fps)}</start>
+						<end>${framesFromMs(clip.timelineStartMs + clipDurMs, fps)}</end>
+						<in>${framesFromMs(clip.startMs, fps)}</in>
+						<out>${framesFromMs(clip.endMs, fps)}</out>
+						${busFileBlock(clip)}
+						<sourcetrack>
+							<mediatype>audio</mediatype>
+							<trackindex>${sourceTrackIndex}</trackindex>
+						</sourcetrack>
+					</clipitem>`
+      })
+      .join('')
+
+  const busTracksXml =
+    busClips.length > 0
+      ? `
+				<track currentExplodedTrackIndex="0" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					${busTrackClips(0)}
+					<outputchannelindex>1</outputchannelindex>
+				</track>
+				<track currentExplodedTrackIndex="1" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					${busTrackClips(1)}
+					<outputchannelindex>2</outputchannelindex>
+				</track>`
+      : ''
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE xmeml>
 <xmeml version="5">
@@ -307,6 +393,7 @@ export function buildPremiereXmeml(input: {
 					${audioTrackClips(1)}
 					<outputchannelindex>2</outputchannelindex>
 				</track>
+				${busTracksXml}
 			</audio>
 		</media>
 	</sequence>

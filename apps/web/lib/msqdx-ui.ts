@@ -62,6 +62,8 @@ export type {
   FloatingPanelVariant,
 } from '../../../../msqdx-ui/packages/ui/src/components/FloatingPanel'
 export { InspectSection } from '../../../../msqdx-ui/packages/ui/src/components/InspectSection'
+export { PropertyInspector } from '../../../../msqdx-ui/packages/ui/src/components/PropertyInspector'
+export type { PropertyInspectorProps } from '../../../../msqdx-ui/packages/ui/src/components/PropertyInspector'
 export { InspectTabs } from '../../../../msqdx-ui/packages/ui/src/components/InspectTabs'
 export { ScrollArea } from '../../../../msqdx-ui/packages/ui/src/components/ScrollArea'
 export { Stack } from '../../../../msqdx-ui/packages/ui/src/components/Stack'

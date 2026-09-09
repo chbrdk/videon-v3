@@ -906,8 +906,83 @@ main {
 
 .videon-nle__workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 0;
+}
+
+.videon-cut-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--nle-panel);
+  border-right: 1px solid var(--nle-border);
+  z-index: 2;
+}
+
+.videon-cut-rail--right {
+  border-right: none;
+  border-left: 1px solid var(--nle-border);
+}
+
+.videon-cut-rail__chrome {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.videon-cut-rail__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--nle-border);
+  background: color-mix(in srgb, var(--ink) 3%, var(--nle-panel));
+}
+
+.videon-cut-rail__panel {
+  min-height: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.videon-cut-rail__body {
+  overflow: auto;
+  padding: 0.55rem 0.65rem 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+  height: 100%;
+}
+
+.videon-cut-rail__resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.videon-cut-rail__resize--e {
+  right: -3px;
+}
+
+.videon-cut-rail__resize--w {
+  left: -3px;
+}
+
+.videon-cut-rail__resize:hover,
+.videon-cut-rail__resize:focus-visible {
+  background: color-mix(in srgb, var(--accent, #2f5f8f) 35%, transparent);
 }
 
 .videon-nle__program {
@@ -2258,19 +2333,58 @@ a.videon-cut-timeline__track-btn--link {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 0.5rem;
+  width: 0.7rem;
   cursor: ew-resize;
   z-index: 3;
+  opacity: 0.85;
 }
 
 .videon-cut-timeline__clip-handle--start {
   left: 0;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--fg) 55%, transparent), transparent);
+  border-left: 2px solid color-mix(in srgb, var(--fg) 70%, transparent);
 }
 
 .videon-cut-timeline__clip-handle--end {
   right: 0;
-  background: linear-gradient(270deg, rgba(255, 255, 255, 0.35), transparent);
+  background: linear-gradient(270deg, color-mix(in srgb, var(--fg) 55%, transparent), transparent);
+  border-right: 2px solid color-mix(in srgb, var(--fg) 70%, transparent);
+}
+
+.videon-cut-timeline__clip.is-active-clip .videon-cut-timeline__clip-handle,
+.videon-cut-timeline__clip.is-dragging {
+  outline: 1px solid color-mix(in srgb, var(--accent, #2f5f8f) 55%, transparent);
+}
+
+.videon-cut-timeline__clip-duration {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0.2rem;
+  font-size: 0.62rem;
+  font-family: var(--nle-mono);
+  color: color-mix(in srgb, var(--fg) 80%, transparent);
+  pointer-events: none;
+}
+
+.videon-cut-timeline__track--source-audio {
+  opacity: 0.72;
+}
+
+.videon-cut-timeline__track--bus {
+  background: color-mix(in srgb, var(--accent, #2f5f8f) 8%, var(--nle-track));
+}
+
+.videon-cut-timeline__bus-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.videon-cut-timeline__clip--bus {
+  background: color-mix(in srgb, var(--accent, #2f5f8f) 45%, transparent);
 }
 
 .videon-cut-timeline__playhead {

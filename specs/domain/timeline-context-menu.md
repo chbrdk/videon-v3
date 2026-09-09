@@ -1,56 +1,65 @@
-# Timeline context menu (Phase 1)
+# Timeline context menu
 
-**Status:** Accepted  
-**Surface:** Media editor source timeline (`SourceMediaTimeline`)  
+**Status:** Accepted — Phase 2 Cut timeline  
+**Surfaces:** Media editor source timeline · Cut editor sequence timeline  
 **Chrome:** `@msqdx/ui` `ContextMenu` (pointer-positioned)  
-**Related:** `videon-ui-surfaces.md` · `msqdx-ui-context-menu.md`
+**Related:** `videon-ui-surfaces.md` · `cut-multi-source-compose.md` · `msqdx-ui-context-menu.md`
 
 ## Purpose
 
-Right-click on the source timeline opens an editor context menu so operators can open scene inspect, seek, and set In/Out without leaving the timeline. Future capabilities (export, comments) appear as disabled roadmap rows until backends exist.
+Right-click opens an editor context menu so operators can inspect, seek, mark, and edit without leaving the timeline.
 
-## Targets
+## Phase 1 — Media source timeline (`SourceMediaTimeline`)
+
+### Targets
 
 | Target | When |
 |--------|------|
-| `scene` | Right-click SI scene clip **or** SI track at a time inside a scene (full clip hit area, not label-only; track not muted/hidden) |
-| `transcript` | Right-click TX segment (track not muted/hidden) |
-| `lane` | Right-click empty lane / source filmstrip / ruler area (time from pointer) |
+| `scene` | Right-click SI scene clip **or** SI track at a time inside a scene |
+| `transcript` | Right-click TX segment |
+| `lane` | Right-click empty lane / filmstrip / ruler |
 
-Browser default context menu MUST be suppressed (`preventDefault`).
+Browser default context menu MUST be suppressed.
 
-## Phase 1 actions (enabled)
+### Actions (enabled)
 
-### Scene (`kind: scene`)
+Scene: Szenen-Infos · Zur Szene springen · In/Out auf Szene · Szene als Cut.  
+Lane: Hierher springen · In/Out hier · Markierungen löschen.  
+Transcript: Hierher springen · Transkript öffnen.
 
-1. WHEN the operator chooses **Szenen-Infos** THEN the editor MUST seek to `startMs`, set `activeSceneKey`, open the Inspect drawer on tab `scenes`.
-2. WHEN the operator chooses **Zur Szene springen** THEN the editor MUST seek to `startMs` (drawer MAY stay closed).
-3. WHEN the operator chooses **In/Out auf Szene** THEN `markInMs`/`markOutMs` MUST become the scene `startMs`/`endMs`.
-4. WHEN the operator chooses **Szene als Cut** THEN the editor MUST run the same create-cut path as the toolbar for that scene range (prompt for name).
+### Roadmap (disabled)
 
-### Lane (`kind: lane`)
+- Szene exportieren · Kommentar hinzufügen
 
-5. WHEN the operator chooses **Hierher springen** THEN seek to pointer time `atMs`.
-6. WHEN the operator chooses **In hier** / **Out hier** THEN set the matching mark to `atMs`.
-7. WHEN marks exist AND the operator chooses **Markierungen löschen** THEN clear both marks.
+## Phase 2 — Cut sequence timeline (`CutTimeline`)
 
-### Transcript (`kind: transcript`)
+### Targets
 
-8. WHEN the operator chooses **Hierher springen** THEN seek to segment `startMs`.
-9. WHEN the operator chooses **Transkript öffnen** THEN open Inspect drawer on tab `transcript` and seek to `startMs`.
+| Target | When |
+|--------|------|
+| `cut-clip` | Right-click V1 clip |
+| `cut-lane` | Right-click empty V1 lane / ruler (time from pointer) |
 
-## Roadmap (disabled in Phase 1)
+### Actions (enabled)
 
-- **Szene exportieren** (`export-scene`)
-- **Kommentar hinzufügen** (`add-comment`)
+#### Clip (`kind: cut-clip`)
 
-These MUST render disabled with no side effects.
+1. WHEN **Clip prüfen** THEN select the clip and focus the right Clip-Properties rail.
+2. WHEN **Zur Clip-Start** THEN seek Cut playhead to clip timeline start.
+3. WHEN **An Playhead teilen** AND playhead lies inside the clip THEN run `split` at that source time.
+4. WHEN **Mit nächstem verbinden** AND next clip shares `media_asset_id` THEN run `merge`.
+5. WHEN **Löschen** THEN run `delete` (disabled when only one clip remains).
 
-## Non-goals (Phase 1)
+#### Lane (`kind: cut-lane`)
 
-- Nested submenus, Cut-editor timeline parity, mobile long-press, real export/comment backends.
+6. WHEN **Hierher springen** THEN seek to pointer Cut time.
+7. WHEN trim mode labels are shown THEN they are informational only (mode stays toolbar-owned).
+
+### Non-goals (Phase 2)
+
+- Nested submenus, mobile long-press, transitions, editing stem lanes as bus tracks.
 
 ## Acceptance
 
-- Spec + unit builder tests for item ids / disabled flags.
-- Manual: SI right-click → Szenen-Infos opens drawer with that scene.
+- Spec + unit builder tests for Media and Cut item ids / disabled flags.
+- Manual: Cut clip right-click → Clip prüfen opens properties rail.

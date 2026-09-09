@@ -51,15 +51,20 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 | `/settings` | Account / appearance / language | `SettingsShell` per `settings.md` (theme default light, en/de) |
 | `/media/:id`, `/cuts/:id` | NLE | `MediaMonitor`, `TransportBar`, `Timeline*`, `FloatingPanel` / `InspectTabs`, `Toast` |
 
-## Editor IA (Wave B)
+## Editor IA (Wave B — NLE Cut chrome)
 
-1. WHEN the side drawer is open THEN it MUST use `InspectTabs` for panel switching (scenes / transcript / search / pipeline / bin).
-2. WHEN the side drawer is open THEN its width MUST be user-resizable (drag handle on the leading edge) and SHOULD persist in `sessionStorage` (`videon.editor.drawerWidthPx`).
-3. WHEN analysis or export status is visible THEN the editor MUST show `EditorStatusStrip` (StatusDot + Text), not a second toolbar row of ad-hoc notices.
-4. WHEN a non-fatal action succeeds or fails THEN feedback MUST go through `Toast` (`ToastProvider` in app providers). Fatal empty-state errors MAY remain inline.
-5. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, brand) MUST live under a “Mehr” disclosure.
-6. WHEN the pipeline panel is shown in the drawer THEN `PipelineStatusTrack` MUST use `StepStrip orientation="vertical"` — not a horizontal scroller of stage cards.
-7. WHEN the operator chooses „Analyse“ THEN the editor MUST open an `@msqdx/ui` `Dialog` with `Checkbox` options for the four analysis user bundles (Szenen & Vision, Transkript, Stems Demucs, Zusammenfassung), all checked by default — see `analysis-capabilities.md`. Start MUST NOT fire until the dialog is confirmed.
+1. WHEN the **Cut** editor (`/cuts/:id`) renders THEN it MUST use an immersive workspace: **left rail** (Bin / Library), **center** (monitor + transport), **right rail** (Clip properties), **bottom dock** (timeline) — CREATION-style dual rails, NOT a single modal drawer as the primary inspect surface.
+2. WHEN Cut rails render THEN they MUST be docked and user-resizable; widths SHOULD persist in `sessionStorage` (`videon.cut.leftRailPx` / `videon.cut.rightRailPx`).
+3. WHEN a clip is selected THEN the right rail MUST show clip properties via `@msqdx/ui` `PropertyInspector` / `InspectSection` (In/Out, Dauer, Media name, Trim apply) — NOT only toolbar buttons.
+4. WHEN the Media editor (`/media/:id`) side drawer is open THEN it MUST use `InspectTabs` for panel switching (scenes / transcript / search / pipeline / bin) — Media drawer IA unchanged.
+5. WHEN the Media side drawer is open THEN its width MUST be user-resizable (drag handle on the leading edge) and SHOULD persist in `sessionStorage` (`videon.editor.drawerWidthPx`).
+6. WHEN analysis or export status is visible THEN the editor MUST show `EditorStatusStrip` (StatusDot + Text), not a second toolbar row of ad-hoc notices.
+7. WHEN a non-fatal action succeeds or fails THEN feedback MUST go through `Toast` (`ToastProvider` in app providers). Fatal empty-state errors MAY remain inline.
+8. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, brand) MUST live under a “Mehr” disclosure.
+9. WHEN the pipeline panel is shown in the Media drawer THEN `PipelineStatusTrack` MUST use `StepStrip orientation="vertical"` — not a horizontal scroller of stage cards.
+10. WHEN the operator chooses „Analyse“ THEN the editor MUST open an `@msqdx/ui` `Dialog` with `Checkbox` options for the four analysis user bundles (Szenen & Vision, Transkript, Stems Demucs, Zusammenfassung), all checked by default — see `analysis-capabilities.md`. Start MUST NOT fire until the dialog is confirmed.
+11. WHEN Cut timeline stem lanes (A1/A2) render THEN they MUST be labeled as **Source Audio** (read-only visuals bound to V1) — NOT as independently editable bus tracks (see `cut-multi-track.md`).
+12. WHEN the operator right-clicks a Cut timeline clip or lane THEN the editor MUST open `@msqdx/ui` `ContextMenu` per `timeline-context-menu.md` Phase 2 (Cut).
 
 ## Scenes inspect (Wave D)
 

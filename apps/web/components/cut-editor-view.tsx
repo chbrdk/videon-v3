@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Field, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
-import { Select, useToast } from '@msqdx/ui-client'
+import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { CutTimeline, MEDIA_DRAG_TYPE } from '@/components/cut-timeline'
+import { CutEditorRail } from '@/components/cut-editor-rail'
+import { CutClipInspector } from '@/components/cut-clip-inspector'
 import { EditorMonitor } from '@/components/editor-monitor'
-import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
 import { EditorStatusStrip, exportStatusLevel } from '@/components/editor-status-strip'
 import { EditorOverflowItem, EditorOverflowMenu } from '@/components/editor-overflow-menu'
 import {
@@ -45,6 +46,19 @@ import {
   useProgramAudioMixer,
   type ProgramTrackMutes,
 } from '@/lib/use-program-audio-mixer'
+import { useCutBusAudioMixer } from '@/lib/use-cut-bus-audio-mixer'
+import {
+  CUT_LEFT_OPEN_KEY,
+  CUT_RIGHT_OPEN_KEY,
+  readCutRailOpen,
+  writeCutRailOpen,
+} from '@/lib/cut-editor-rails'
+import {
+  buildCutTimelineContextMenuDraft,
+  type CutTimelineContextMenuRequest,
+  type CutTimelineContextTarget,
+} from '@/lib/cut-timeline-context-menu'
+import { clampContextMenuPosition } from '@/lib/timeline-context-menu'
 import { useT } from '@/lib/user-prefs'
 
 type Clip = {
@@ -66,6 +80,25 @@ type LibraryMedia = {
   originalFilename: string
   lifecycleState: string
   durationMs?: number | null
+}
+
+type CutTrack = {
+  id: string
+  kind: string
+  trackIndex: number
+  name: string
+  muted: boolean
+}
+
+type CutAudioClip = {
+  id: string
+  trackId: string
+  cutId: string
+  position: number
+  mediaAssetId: string
+  timelineStartMs: number
+  startMs: number
+  endMs: number
 }
 
 const SEEK_STEP_MS = 1000
@@ -95,9 +128,14 @@ export function CutEditorView({
   cutPlayheadRef.current = cutPlayheadMs
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [sidePanel, setSidePanel] = useState<EditorSidePanel | null>('bin')
-  const [inspectOpen, setInspectOpen] = useState(false)
+  const [leftRailOpen, setLeftRailOpen] = useState(true)
+  const [rightRailOpen, setRightRailOpen] = useState(true)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [timelineMenu, setTimelineMenu] = useState<{
+    x: number
+    y: number
+    target: CutTimelineContextTarget
+  } | null>(null)
 
   const notifyOk = useCallback((message: string) => {
     toast.push({ message, tone: 'ok' })
@@ -134,6 +172,7 @@ export function CutEditorView({
     v1: false,
     a1: false,
     a2: false,
+    ab: false,
   })
   const [trimMode, setTrimMode] = useState<TrimMode>('trim')
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
@@ -143,6 +182,9 @@ export function CutEditorView({
   const [stemPresenceByMediaId, setStemPresenceByMediaId] = useState<
     Record<string, { voice: boolean; music: boolean }>
   >({})
+  const [cutTracks, setCutTracks] = useState<CutTrack[]>([])
+  const [audioClips, setAudioClips] = useState<CutAudioClip[]>([])
+  const [selectedAudioClipId, setSelectedAudioClipId] = useState<string | null>(null)
 
   const timeline = useMemo(
     () =>
@@ -208,6 +250,8 @@ export function CutEditorView({
           music?: boolean
         }
       >
+      tracks?: CutTrack[]
+      audioClips?: CutAudioClip[]
       error?: { message?: string }
     }
     if (!response.ok) throw new Error(body.error?.message || t('cutEditor.loadFailed'))
@@ -230,6 +274,8 @@ export function CutEditorView({
       }
     }
     setClips(body.clips ?? [])
+    setCutTracks(body.tracks ?? [])
+    setAudioClips(body.audioClips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
     const nextVoice: Record<string, number[]> = {}
     const nextMusic: Record<string, number[]> = {}
@@ -357,7 +403,12 @@ export function CutEditorView({
   )
 
   useEffect(() => {
-    const mediaIds = [...new Set(clips.map((clip) => clip.scene.mediaAssetId))]
+    const mediaIds = [
+      ...new Set([
+        ...clips.map((clip) => clip.scene.mediaAssetId),
+        ...audioClips.map((clip) => clip.mediaAssetId),
+      ]),
+    ]
     if (mediaIds.length === 0) {
       setPlaybackUrlByMediaId({})
       return
@@ -385,7 +436,7 @@ export function CutEditorView({
     return () => {
       cancelled = true
     }
-  }, [clips, platformProjectId])
+  }, [clips, audioClips, platformProjectId])
 
   useEffect(() => {
     const urls = [...new Set(Object.values(playbackUrlByMediaId))]
@@ -407,6 +458,11 @@ export function CutEditorView({
       cancelled = true
     }
   }, [playbackUrlByMediaId])
+
+  useEffect(() => {
+    setLeftRailOpen(readCutRailOpen(CUT_LEFT_OPEN_KEY, true))
+    setRightRailOpen(readCutRailOpen(CUT_RIGHT_OPEN_KEY, true))
+  }, [])
 
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
@@ -439,6 +495,17 @@ export function CutEditorView({
     musicUrl: musicStemUrl,
     mutes: trackMutes,
     enabled: Boolean(playbackUrl),
+  })
+
+  const audioBusTrack = cutTracks.find((track) => track.kind === 'audio_bus') ?? cutTracks[0] ?? null
+
+  useCutBusAudioMixer({
+    cutPlayheadMs,
+    isPlaying,
+    clips: audioClips,
+    playbackUrlByMediaId,
+    muted: Boolean(trackMutes.ab || audioBusTrack?.muted),
+    enabled: audioClips.length > 0,
   })
 
   useEffect(() => {
@@ -628,6 +695,86 @@ export function CutEditorView({
     setUndoStack((stack) => [...stack, current])
     void restoreSnapshot(snapshot)
   }
+
+  const setLeftOpen = useCallback((open: boolean) => {
+    setLeftRailOpen(open)
+    writeCutRailOpen(CUT_LEFT_OPEN_KEY, open)
+  }, [])
+
+  const setRightOpen = useCallback((open: boolean) => {
+    setRightRailOpen(open)
+    writeCutRailOpen(CUT_RIGHT_OPEN_KEY, open)
+  }, [])
+
+  const openTimelineContextMenu = useCallback((request: CutTimelineContextMenuRequest) => {
+    const { clientX, clientY, ...target } = request
+    const pos = clampContextMenuPosition(clientX, clientY)
+    setTimelineMenu({ x: pos.x, y: pos.y, target })
+  }, [])
+
+  const closeTimelineContextMenu = useCallback(() => setTimelineMenu(null), [])
+
+  const runTimelineContextAction = (actionId: string, target: CutTimelineContextTarget) => {
+    if (target.kind === 'cut-lane') {
+      if (actionId === 'seek-here') seekToCutMs(target.atMs)
+      return
+    }
+    if (actionId === 'inspect-clip') {
+      setActiveIndex(target.index)
+      setSelectedAudioClipId(null)
+      setRightOpen(true)
+      seekToCutMs(target.cutStartMs)
+      return
+    }
+    if (actionId === 'seek-clip-start') {
+      setActiveIndex(target.index)
+      seekToCutMs(target.cutStartMs)
+      return
+    }
+    if (actionId === 'split-at-playhead' && splitTarget?.sceneId === target.sceneId) {
+      void patchTimeline({ action: 'split', sceneId: target.sceneId, atMs: splitTarget.atMs })
+      return
+    }
+    if (actionId === 'merge-next') {
+      void patchTimeline({ action: 'merge', sceneId: target.sceneId })
+      return
+    }
+    if (actionId === 'delete-clip') {
+      void patchTimeline({ action: 'delete', sceneId: target.sceneId })
+    }
+  }
+
+  const timelineContextItems: ContextMenuItem[] = timelineMenu
+    ? buildCutTimelineContextMenuDraft(timelineMenu.target).map((draft) => ({
+        id: draft.id,
+        label: draft.label,
+        disabled: Boolean(draft.disabled) || busy,
+        danger: draft.danger,
+        separator: draft.separator,
+        section: draft.section,
+        onSelect: () => {
+          if (draft.section || draft.disabled) return
+          runTimelineContextAction(draft.id, timelineMenu.target)
+        },
+      }))
+    : []
+
+  const timelineAudioClips = useMemo(
+    () =>
+      audioClips.map((clip) => ({
+        id: clip.id,
+        trackId: clip.trackId,
+        mediaAssetId: clip.mediaAssetId,
+        timelineStartMs: clip.timelineStartMs,
+        startMs: clip.startMs,
+        endMs: clip.endMs,
+        label:
+          libraryMedia.find((media) => media.id === clip.mediaAssetId)?.originalFilename ??
+          audioBusTrack?.name ??
+          'Voice-Over',
+      })),
+    [audioClips, audioBusTrack?.name, libraryMedia],
+  )
 
   const addSelectedMedia = async () => {
     if (!selectedMediaId) return
@@ -826,8 +973,10 @@ export function CutEditorView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setInspectOpen(false)
+        setLeftOpen(false)
+        setRightOpen(false)
         setShowShortcuts(false)
+        setTimelineMenu(null)
         return
       }
       if (event.key === '?' && !event.metaKey && !event.ctrlKey) {
@@ -842,7 +991,7 @@ export function CutEditorView({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [setLeftOpen, setRightOpen])
 
   if (error && !cut) {
     return (
@@ -1002,14 +1151,19 @@ export function CutEditorView({
           <div className="videon-nle__tool-cluster">
             <Button
               type="button"
-              variant={inspectOpen ? 'primary' : 'ghost'}
+              variant={leftRailOpen ? 'primary' : 'ghost'}
               size="sm"
-              onClick={() => {
-                setSidePanel('bin')
-                setInspectOpen((open) => !open)
-              }}
+              onClick={() => setLeftOpen(!leftRailOpen)}
             >
               Bin ({clips.length})
+            </Button>
+            <Button
+              type="button"
+              variant={rightRailOpen ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setRightOpen(!rightRailOpen)}
+            >
+              Inspect
             </Button>
             <ToolButton
               label="Tastaturkürzel"
@@ -1083,6 +1237,161 @@ export function CutEditorView({
       </div>
 
       <div className="videon-nle__workspace">
+        <CutEditorRail
+          side="left"
+          title={`Bin (${clips.length})`}
+          open={leftRailOpen}
+          onClose={() => setLeftOpen(false)}
+        >
+          <div className="videon-nle__field-row">
+            <Field label="Clip / Szenen einfügen" size="sm">
+              <Select
+                aria-label="Video für Clip"
+                size="sm"
+                value={selectedMediaId}
+                disabled={busy}
+                placeholder="Video wählen …"
+                onChange={setSelectedMediaId}
+                options={libraryMedia.map((media) => ({
+                  value: media.id,
+                  label: media.originalFilename,
+                }))}
+              />
+            </Field>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy || !selectedMediaId || selectedBinSceneKeys.length === 0}
+              onClick={() => void addSelectedBinScenes()}
+            >
+              Szenen einfügen ({selectedBinSceneKeys.length})
+            </Button>
+            <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
+              Ganzes Video
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy || !selectedMediaId}
+              onClick={() => {
+                const media = libraryMedia.find((item) => item.id === selectedMediaId)
+                if (!media) return
+                void patchTimeline({
+                  action: 'addAudioClip',
+                  mediaAssetId: media.id,
+                  startMs: 0,
+                  endMs: Math.max(media.durationMs ?? 60_000, 1000),
+                  timelineStartMs: cutPlayheadMs,
+                })
+              }}
+            >
+              Auf Voice-Over
+            </Button>
+          </div>
+
+          {selectedMediaId ? (
+            <div className="videon-nle__bin-scenes">
+              <Text role="meta" as="span">
+                {binScenesLoading
+                  ? 'Szenen laden …'
+                  : binScenes.length
+                    ? 'Analyse-Szenen (Mehrfachauswahl)'
+                    : 'Keine Analyse-Szenen — Ganzes Video nutzen'}
+              </Text>
+              {binScenes.length > 0 ? (
+                <ul className="videon-editor__scene-list" aria-label="Analyse-Szenen">
+                  {binScenes.map((scene) => {
+                    const checked = selectedBinSceneKeys.includes(scene.sceneKey)
+                    return (
+                      <li key={scene.sceneKey}>
+                        <label className="videon-nle__bin-item">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={busy}
+                            onChange={() => {
+                              setSelectedBinSceneKeys((prev) =>
+                                checked
+                                  ? prev.filter((key) => key !== scene.sceneKey)
+                                  : [...prev, scene.sceneKey],
+                              )
+                            }}
+                          />
+                          <span className="videon-nle__bin-item-title">{scene.sceneKey}</span>
+                          <span className="videon-nle__bin-item-meta">
+                            {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
+                          </span>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          <Text role="meta" as="span">
+            Mediathek · in Timeline / Voice-Over ziehen
+          </Text>
+          <ul className="videon-editor__scene-list">
+            {libraryMedia.map((media) => (
+              <li key={media.id}>
+                <button
+                  type="button"
+                  className="videon-nle__bin-item videon-nle__bin-item--draggable"
+                  draggable={!busy}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData(
+                      MEDIA_DRAG_TYPE,
+                      JSON.stringify({
+                        mediaAssetId: media.id,
+                        startMs: 0,
+                        endMs: media.durationMs ?? 60_000,
+                      }),
+                    )
+                    event.dataTransfer.effectAllowed = 'copy'
+                  }}
+                  onClick={() => setSelectedMediaId(media.id)}
+                >
+                  <span className="videon-nle__bin-item-title">{media.originalFilename}</span>
+                  <span className="videon-nle__bin-item-meta">Ziehen oder klicken zum Auswählen</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <ul className="videon-editor__scene-list">
+            {clips.map((clip, index) => (
+              <li key={clip.scene.id}>
+                <button
+                  type="button"
+                  className={`videon-nle__bin-item${index === activeIndex ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setSelectedAudioClipId(null)
+                    setActiveIndex(index)
+                    const item = timeline[index]
+                    if (item) seekToCutMs(item.cutStartMs)
+                  }}
+                >
+                  <span className="videon-nle__bin-item-title">V1 · {clip.media?.originalFilename ?? 'Unbekannt'}</span>
+                  <span className="videon-nle__bin-item-meta">
+                    {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
+                    {formatClock(timeline[index]?.cutStartMs ?? 0)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {activeClip?.media ? (
+            <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
+              <Button variant="ghost">Quellvideo öffnen</Button>
+            </Link>
+          ) : null}
+        </CutEditorRail>
+
         <section className="videon-nle__program">
           <EditorMonitor
             label="Programm"
@@ -1123,6 +1432,44 @@ export function CutEditorView({
           />
 
         </section>
+
+        <CutEditorRail
+          side="right"
+          title="Clip"
+          open={rightRailOpen}
+          onClose={() => setRightOpen(false)}
+        >
+          <CutClipInspector
+            clip={selectedAudioClipId ? null : activeClip ?? null}
+            busy={busy}
+            onApplyTrim={(sceneId, startMs, endMs) =>
+              void patchTimeline({ action: 'trim', sceneId, startMs, endMs })
+            }
+          />
+          {selectedAudioClipId ? (
+            <div className="videon-nle__inspector-body">
+              <Text role="label">Voice-Over Clip</Text>
+              <Text role="meta">
+                {timelineAudioClips.find((clip) => clip.id === selectedAudioClipId)?.label ?? selectedAudioClipId}
+              </Text>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => void patchTimeline({ action: 'deleteAudioClip', audioClipId: selectedAudioClipId })}
+              >
+                Voice-Over löschen
+              </Button>
+            </div>
+          ) : null}
+          <div className="videon-nle__inspector-body">
+            <Text role="label">Canvas</Text>
+            <Text role="meta">
+              {cut.width && cut.height ? `${cut.width}×${cut.height}` : 'Standard'} · {aspectPreset}
+            </Text>
+          </div>
+        </CutEditorRail>
       </div>
 
       <footer className="videon-nle__timeline-dock">
@@ -1139,7 +1486,15 @@ export function CutEditorView({
           voicePeaksByMediaId={voicePeaksByMediaId}
           musicPeaksByMediaId={musicPeaksByMediaId}
           sourceDurationMsByMediaId={sourceDurationMsByMediaId}
-          onSelectClip={setActiveIndex}
+          audioClips={timelineAudioClips}
+          audioBusLabel={audioBusTrack?.name ?? 'Voice-Over'}
+          audioBusMuted={Boolean(audioBusTrack?.muted)}
+          selectedAudioClipId={selectedAudioClipId}
+          onSelectClip={(index) => {
+            setSelectedAudioClipId(null)
+            setActiveIndex(index)
+            setRightOpen(true)
+          }}
           onSeek={seekToCutMs}
           onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
           onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
@@ -1147,6 +1502,32 @@ export function CutEditorView({
             void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
           }
           onDropMedia={(payload) => void patchTimeline({ action: 'addScene', ...payload })}
+          onDropAudioBus={(payload) =>
+            void patchTimeline({
+              action: 'addAudioClip',
+              mediaAssetId: payload.mediaAssetId,
+              startMs: payload.startMs,
+              endMs: payload.endMs,
+              timelineStartMs: payload.timelineStartMs,
+            })
+          }
+          onSelectAudioClip={(clipId) => {
+            setSelectedAudioClipId(clipId)
+            if (clipId) setRightOpen(true)
+          }}
+          onMoveAudioClip={(clipId, timelineStartMs) =>
+            void patchTimeline({ action: 'moveAudioClip', audioClipId: clipId, timelineStartMs })
+          }
+          onDeleteAudioClip={(clipId) => void patchTimeline({ action: 'deleteAudioClip', audioClipId: clipId })}
+          onToggleAudioBusMuted={() => {
+            if (!audioBusTrack) return
+            void patchTimeline({
+              action: 'setTrackMuted',
+              trackId: audioBusTrack.id,
+              muted: !audioBusTrack.muted,
+            })
+          }}
+          onContextMenuRequest={openTimelineContextMenu}
           onTrackMutesChange={setTrackMutes}
           hasStemAudio={hasStemAudio}
         />
@@ -1154,145 +1535,14 @@ export function CutEditorView({
 
 
       <div className="videon-nle__layer">
-      <EditorSideDrawer
-        open={inspectOpen}
-        title="Inspect"
-        onClose={() => setInspectOpen(false)}
-        tabs={[{ id: 'bin', label: `Bin (${clips.length})` }]}
-        activeTab={sidePanel ?? 'bin'}
-        onTabChange={(id) => {
-          setSidePanel(id)
-          setInspectOpen(true)
-        }}
-      >
-        <div className="videon-nle__field-row">
-          <Field label="Clip / Szenen einfügen" size="sm">
-            <Select
-              aria-label="Video für Clip"
-              size="sm"
-              value={selectedMediaId}
-              disabled={busy}
-              placeholder="Video wählen …"
-              onChange={setSelectedMediaId}
-              options={libraryMedia.map((media) => ({
-                value: media.id,
-                label: media.originalFilename,
-              }))}
-            />
-          </Field>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={busy || !selectedMediaId || selectedBinSceneKeys.length === 0}
-            onClick={() => void addSelectedBinScenes()}
-          >
-            Szenen einfügen ({selectedBinSceneKeys.length})
-          </Button>
-          <Button type="button" variant="ghost" size="sm" disabled={busy || !selectedMediaId} onClick={() => void addSelectedMedia()}>
-            Ganzes Video
-          </Button>
-        </div>
-
-        {selectedMediaId ? (
-          <div className="videon-nle__bin-scenes">
-            <Text role="meta" as="span">
-              {binScenesLoading
-                ? 'Szenen laden …'
-                : binScenes.length
-                  ? 'Analyse-Szenen (Mehrfachauswahl)'
-                  : 'Keine Analyse-Szenen — Ganzes Video nutzen'}
-            </Text>
-            {binScenes.length > 0 ? (
-              <ul className="videon-editor__scene-list" aria-label="Analyse-Szenen">
-                {binScenes.map((scene) => {
-                  const checked = selectedBinSceneKeys.includes(scene.sceneKey)
-                  return (
-                    <li key={scene.sceneKey}>
-                      <label className="videon-nle__bin-item">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={busy}
-                          onChange={() => {
-                            setSelectedBinSceneKeys((prev) =>
-                              checked
-                                ? prev.filter((key) => key !== scene.sceneKey)
-                                : [...prev, scene.sceneKey],
-                            )
-                          }}
-                        />
-                        <span className="videon-nle__bin-item-title">{scene.sceneKey}</span>
-                        <span className="videon-nle__bin-item-meta">
-                          {formatClock(scene.startMs)} – {formatClock(scene.endMs)}
-                        </span>
-                      </label>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-
-        <Text role="meta" as="span">
-          Mediathek · in Timeline ziehen
-        </Text>
-        <ul className="videon-editor__scene-list">
-          {libraryMedia.map((media) => (
-            <li key={media.id}>
-              <button
-                type="button"
-                className="videon-nle__bin-item videon-nle__bin-item--draggable"
-                draggable={!busy}
-                onDragStart={(event) => {
-                  event.dataTransfer.setData(
-                    MEDIA_DRAG_TYPE,
-                    JSON.stringify({
-                      mediaAssetId: media.id,
-                      startMs: 0,
-                      endMs: media.durationMs ?? 60_000,
-                    }),
-                  )
-                  event.dataTransfer.effectAllowed = 'copy'
-                }}
-                onClick={() => setSelectedMediaId(media.id)}
-              >
-                <span className="videon-nle__bin-item-title">{media.originalFilename}</span>
-                <span className="videon-nle__bin-item-meta">Ziehen oder klicken zum Auswählen</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <ul className="videon-editor__scene-list">
-          {clips.map((clip, index) => (
-            <li key={clip.scene.id}>
-              <button
-                type="button"
-                className={`videon-nle__bin-item${index === activeIndex ? ' is-active' : ''}`}
-                onClick={() => {
-                  setActiveIndex(index)
-                  const item = timeline[index]
-                  if (item) seekToCutMs(item.cutStartMs)
-                }}
-              >
-                <span className="videon-nle__bin-item-title">V1 · {clip.media?.originalFilename ?? 'Unbekannt'}</span>
-                <span className="videon-nle__bin-item-meta">
-                  {formatClock(clip.scene.startMs)} – {formatClock(clip.scene.endMs)} · Cut{' '}
-                  {formatClock(timeline[index]?.cutStartMs ?? 0)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        {activeClip?.media ? (
-          <Link href={paths.routes.mediaFor(activeClip.media.id, platformProjectId)}>
-            <Button variant="ghost">Quellvideo öffnen</Button>
-          </Link>
-        ) : null}
-      </EditorSideDrawer>
+      <ContextMenu
+        open={Boolean(timelineMenu)}
+        x={timelineMenu?.x ?? 0}
+        y={timelineMenu?.y ?? 0}
+        onClose={closeTimelineContextMenu}
+        items={timelineContextItems}
+        label="Cut-Timeline-Kontextmenü"
+      />
       {showShortcuts ? (
         <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">
           <div className="videon-nle__shortcuts-panel-header">
@@ -1317,7 +1567,7 @@ export function CutEditorView({
             <li>
               <kbd>F</kbd> Vollbild · <kbd>?</kbd> Hilfe · <kbd>Esc</kbd> schließen
             </li>
-            <li>Mausrad Jog · Mediathek in Timeline ziehen</li>
+            <li>Mausrad Jog · Mediathek in Timeline ziehen · Rechtsklick Kontextmenü</li>
           </ul>
         </div>
       ) : null}

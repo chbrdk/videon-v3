@@ -89,6 +89,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Reframe worker | Coolify `videon-v3:reframe-worker` `hydwudxhs3ovqdf3lpdk9gjz` · port **8092** · FQDN `https://hydwudxhs3ovqdf3lpdk9gjz.projects-a.plygrnd.tech` · `knowledge/staging-coolify-reframe-worker.md` |
 | Multi-source Cuts | `specs/domain/cut-multi-source-compose.md` · `specs/api/cuts.md` — `PATCH addScenes`; MCP `videon.cut_scenes_add` |
 | Cut export extras | `specs/domain/cut-export-extras.md` — canvas presets + Premiere ZIP (`premiere_xml`) |
+| Cut multi-track | `specs/domain/cut-multi-track.md` — extra `audio_bus` / Voice-Over spur |
 
 ## V7 production rollout
 

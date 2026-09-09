@@ -54,21 +54,17 @@ Create a Cut.
 - Inserted in array order after `afterSceneId` (or at end).
 - Returns `{ scenes }` full ordered timeline.
 
-### New: `setCanvas`
+### New: audio bus (`cut-multi-track.md`)
 
-```json
-{
-  "action": "setCanvas",
-  "aspectPreset": "9:16"
-}
-```
+| Action | Body | Result |
+|--------|------|--------|
+| `addAudioClip` | `mediaAssetId`, `startMs`, `endMs`, optional `timelineStartMs`, `trackId` | `{ tracks, audioClips }` |
+| `trimAudioClip` | `audioClipId`, `startMs`?, `endMs`? | `{ audioClips }` |
+| `moveAudioClip` | `audioClipId`, `timelineStartMs` | `{ audioClips }` |
+| `deleteAudioClip` | `audioClipId` | `{ audioClips }` |
+| `setTrackMuted` | `trackId`, `muted` | `{ tracks }` |
 
-| Field | Notes |
-|-------|-------|
-| `aspectPreset` | `9:16` \| `16:9` \| `1:1` \| `custom` |
-| `width` / `height` | Required when `custom`; even integers 2–3840 |
-
-Returns `{ cut }` with updated `width`/`height`. Spec: `cut-export-extras.md`.
+`GET /api/cuts/:id` includes `tracks` and `audioClips` (empty arrays when none).
 
 ## Exports
 

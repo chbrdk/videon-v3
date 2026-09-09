@@ -16,6 +16,15 @@ import {
   rollTrimCutBoundary,
   restoreCutTimeline,
 } from '@/lib/db/cuts'
+import {
+  addCutAudioClip,
+  deleteCutAudioClip,
+  listCutAudioClips,
+  listCutTracks,
+  moveCutAudioClip,
+  setCutTrackMuted,
+  trimCutAudioClip,
+} from '@/lib/db/cut-audio'
 import { findMediaAsset } from '@/lib/db/media'
 import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { CUT_CANVAS_DEFAULT_FPS, resolveCutCanvas } from '@/lib/cut-canvas'
@@ -101,7 +110,10 @@ export async function GET(request: Request, context: RouteContext) {
     }
   }
 
-  return apiJson(request, { cut, clips: media, transcripts, stems })
+  const tracks = await listCutTracks(cut.id)
+  const audioClips = await listCutAudioClips(cut.id)
+
+  return apiJson(request, { cut, clips: media, transcripts, stems, tracks, audioClips })
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
@@ -386,6 +398,73 @@ async function applyCutPatch(input: {
     const scenes = await rollTrimCutBoundary({ cutId: cut.id, leftSceneId, boundaryMs })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
     return apiJson(request, { scenes })
+  }
+
+  const audioClipId = typeof record.audioClipId === 'string' ? record.audioClipId.trim() : ''
+  const trackId = typeof record.trackId === 'string' ? record.trackId.trim() : ''
+  const timelineStartMs = typeof record.timelineStartMs === 'number' ? record.timelineStartMs : null
+  const muted = typeof record.muted === 'boolean' ? record.muted : null
+
+  if (action === 'addAudioClip') {
+    if (!mediaAssetId) return apiError(request, 400, 'invalid_payload', 'mediaAssetId is required for addAudioClip')
+    if (startMs === null || endMs === null) {
+      return apiError(request, 400, 'invalid_payload', 'startMs and endMs are required for addAudioClip')
+    }
+    const media = await findMediaAsset(mediaAssetId)
+    if (!media || media.workspaceId !== workspaceId) {
+      return apiError(request, 404, 'not_found', 'Media asset not found')
+    }
+    const audioClips = await addCutAudioClip({
+      cutId: cut.id,
+      trackId: trackId || null,
+      mediaAssetId,
+      startMs,
+      endMs,
+      ...(timelineStartMs !== null ? { timelineStartMs } : {}),
+    })
+    if (!audioClips) return apiError(request, 409, 'invalid_payload', 'Audio clip could not be added')
+    const tracks = await listCutTracks(cut.id)
+    return apiJson(request, { tracks, audioClips })
+  }
+
+  if (action === 'trimAudioClip') {
+    if (!audioClipId) return apiError(request, 400, 'invalid_payload', 'audioClipId is required for trimAudioClip')
+    if (startMs === null && endMs === null) {
+      return apiError(request, 400, 'invalid_payload', 'startMs or endMs is required for trimAudioClip')
+    }
+    const audioClips = await trimCutAudioClip({
+      cutId: cut.id,
+      audioClipId,
+      ...(startMs !== null ? { startMs } : {}),
+      ...(endMs !== null ? { endMs } : {}),
+    })
+    if (!audioClips) return apiError(request, 409, 'invalid_payload', 'Audio clip could not be trimmed')
+    return apiJson(request, { audioClips })
+  }
+
+  if (action === 'moveAudioClip') {
+    if (!audioClipId) return apiError(request, 400, 'invalid_payload', 'audioClipId is required for moveAudioClip')
+    if (timelineStartMs === null) {
+      return apiError(request, 400, 'invalid_payload', 'timelineStartMs is required for moveAudioClip')
+    }
+    const audioClips = await moveCutAudioClip({ cutId: cut.id, audioClipId, timelineStartMs })
+    if (!audioClips) return apiError(request, 409, 'invalid_payload', 'Audio clip could not be moved')
+    return apiJson(request, { audioClips })
+  }
+
+  if (action === 'deleteAudioClip') {
+    if (!audioClipId) return apiError(request, 400, 'invalid_payload', 'audioClipId is required for deleteAudioClip')
+    const audioClips = await deleteCutAudioClip({ cutId: cut.id, audioClipId })
+    if (!audioClips) return apiError(request, 409, 'invalid_payload', 'Audio clip could not be deleted')
+    return apiJson(request, { audioClips })
+  }
+
+  if (action === 'setTrackMuted') {
+    if (!trackId) return apiError(request, 400, 'invalid_payload', 'trackId is required for setTrackMuted')
+    if (muted === null) return apiError(request, 400, 'invalid_payload', 'muted is required for setTrackMuted')
+    const tracks = await setCutTrackMuted({ cutId: cut.id, trackId, muted })
+    if (!tracks) return apiError(request, 409, 'invalid_payload', 'Track mute could not be updated')
+    return apiJson(request, { tracks })
   }
 
   if (!sceneId) return apiError(request, 400, 'invalid_payload', 'sceneId is required')

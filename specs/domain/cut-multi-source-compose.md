@@ -33,13 +33,21 @@ Assemble and edit a **Cut** from analysis scenes (and whole clips) drawn from **
 
 | Surface | Behavior |
 |---------|----------|
-| Cut editor Bin | List library media → load analysis scenes → multi-select insert; whole-video fallback |
+| Cut editor Bin (left rail) | List library media → load analysis scenes → multi-select insert; whole-video fallback |
+| Cut Clip properties (right rail) | Selected clip In/Out / Dauer / Media via `PropertyInspector` — `videon-ui-surfaces.md` |
+| Cut timeline | DnD reorder, edge trim (TRIM/RIPPLE/ROLL), ContextMenu Phase 2 — `timeline-context-menu.md` |
 | Chat Hit-Strip / Media search | „Zum Cut“ / „Alle zum Cut“ via active Cut (`videon.v3.activeCut`) |
 | Product API | `POST /api/cuts` multi-`scenes[]`; `PATCH` `addScenes` batch |
 | MCP | `videon.cut_create` (multi-media scenes); `videon.cut_scenes_add` append |
 | Catalog | `videon.cut.create` (existing Flow+Agent); `videon.cut.scenes.add` Agent-only (`flow: false`) |
 | Flow node for scenes.add | **Out of scope** |
 | Hit-Card capability confirm for batch add | **Out of scope** (local active-Cut path only) |
+| Extra audio bus track | **Welle 2** — `cut-multi-track.md` (not this compose wave) |
+
+## Chrome parity
+
+- Cut compose MUST use dual docked rails (Bin + Clip properties) matching CREATION immersive patterns adapted for NLE — see `videon-ui-surfaces.md` Wave B.
+- Clip edit ops remain the existing `PATCH` actions (`trim`, `rollTrim`, `split`, `merge`, `delete`, `reorder`, `addScenes`); Welle 1 does not change the flat `cut_scenes` model.
 
 ## Export normalize
 

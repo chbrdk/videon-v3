@@ -5,6 +5,8 @@ export type ProgramTrackMutes = {
   v1: boolean
   a1: boolean
   a2: boolean
+  /** Extra Cut audio bus (Voice-Over); optional for source editor. */
+  ab?: boolean
 }
 
 const DRIFT_SEC = 0.12

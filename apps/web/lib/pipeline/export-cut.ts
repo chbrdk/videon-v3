@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'
 import { findCut, listScenesForCut, type Cut, type CutScene } from '@/lib/db/cuts'
+import { listCutAudioClips, listCutTracks, type CutAudioClip } from '@/lib/db/cut-audio'
 import {
   findCutExport,
   markCutExportFailed,
@@ -191,6 +192,61 @@ async function buildSegments(input: {
   return segmentPaths
 }
 
+/** Mix unmuted bus clips onto program MP4 (adelay + amix). */
+export async function mixBusAudioIntoProgram(input: {
+  programPath: string
+  destinationPath: string
+  clips: CutAudioClip[]
+  sourceCache: Map<string, string>
+}): Promise<void> {
+  if (input.clips.length === 0) {
+    await execFileAsync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', input.programPath, '-c', 'copy', '-y', input.destinationPath], {
+      maxBuffer: 16 * 1024 * 1024,
+    })
+    return
+  }
+
+  const args: string[] = ['-hide_banner', '-loglevel', 'error', '-i', input.programPath]
+  const filterParts: string[] = []
+  const mixInputs: string[] = ['[0:a]']
+
+  for (const [index, clip] of input.clips.entries()) {
+    const sourcePath = input.sourceCache.get(clip.mediaAssetId)
+    if (!sourcePath) throw new Error(`Bus media unavailable for clip ${clip.id}`)
+    args.push('-ss', seconds(clip.startMs), '-t', seconds(clip.endMs - clip.startMs), '-i', sourcePath)
+    const label = `b${index}`
+    const delay = Math.max(0, clip.timelineStartMs)
+    filterParts.push(`[${index + 1}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,adelay=${delay}|${delay}[${label}]`)
+    mixInputs.push(`[${label}]`)
+  }
+
+  const mixCount = mixInputs.length
+  filterParts.push(
+    `${mixInputs.join('')}amix=inputs=${mixCount}:duration=first:dropout_transition=0:normalize=0[aout]`,
+  )
+
+  args.push(
+    '-filter_complex',
+    filterParts.join(';'),
+    '-map',
+    '0:v',
+    '-map',
+    '[aout]',
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-movflags',
+    '+faststart',
+    '-y',
+    input.destinationPath,
+  )
+
+  await execFileAsync('ffmpeg', args, { maxBuffer: 32 * 1024 * 1024 })
+}
+
 async function runPremiereXmlExport(input: {
   exportId: string
   cut: Cut
@@ -200,6 +256,10 @@ async function runPremiereXmlExport(input: {
   const mediaById = new Map<string, MediaAssetDetail>()
   const sourceCache = new Map<string, string>()
   const zipPath = join(tmpdir(), `videon-export-${input.exportId}.zip`)
+  const tracks = await listCutTracks(input.cut.id)
+  const audioClips = await listCutAudioClips(input.cut.id)
+  const unmutedTrackIds = new Set(tracks.filter((track) => !track.muted).map((track) => track.id))
+  const busClips = audioClips.filter((clip) => unmutedTrackIds.has(clip.trackId))
 
   try {
     for (const scene of input.scenes) {
@@ -207,6 +267,22 @@ async function runPremiereXmlExport(input: {
       const media = await findMediaAssetDetail(scene.mediaAssetId)
       if (!media || media.workspaceId !== input.cut.workspaceId) {
         throw new Error(`Source media unavailable for scene ${scene.id}`)
+      }
+      mediaById.set(media.id, media)
+      const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
+      await store.downloadObjectToFile({
+        workspaceId: media.workspaceId,
+        storageKey: media.storageKey,
+        destinationPath: sourcePath,
+      })
+      sourceCache.set(media.id, sourcePath)
+    }
+
+    for (const clip of busClips) {
+      if (mediaById.has(clip.mediaAssetId)) continue
+      const media = await findMediaAssetDetail(clip.mediaAssetId)
+      if (!media || media.workspaceId !== input.cut.workspaceId) {
+        throw new Error(`Bus media unavailable for clip ${clip.id}`)
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
@@ -238,6 +314,18 @@ async function runPremiereXmlExport(input: {
           originalFilename: media.originalFilename,
           zipMediaName: zipNames.get(scene.mediaAssetId),
           mediaDurationMs: media.durationMs,
+        }
+      }),
+      busClips: busClips.map((clip) => {
+        const media = mediaById.get(clip.mediaAssetId)!
+        return {
+          id: clip.id,
+          mediaAssetId: clip.mediaAssetId,
+          timelineStartMs: clip.timelineStartMs,
+          startMs: clip.startMs,
+          endMs: clip.endMs,
+          originalFilename: media.originalFilename,
+          zipMediaName: zipNames.get(clip.mediaAssetId),
         }
       }),
     })
@@ -308,7 +396,12 @@ export async function runCutExport(exportId: string): Promise<void> {
   const sourceCache = new Map<string, string>()
   const mediaById = new Map<string, MediaAssetDetail>()
   let segmentPaths: string[] = []
+  const programPath = join(tmpdir(), `videon-export-${exportId}-program.mp4`)
   const outputPath = join(tmpdir(), `videon-export-${exportId}.mp4`)
+  const tracks = await listCutTracks(cut.id)
+  const audioClipsAll = await listCutAudioClips(cut.id)
+  const unmutedTrackIds = new Set(tracks.filter((track) => !track.muted).map((track) => track.id))
+  const busClips = audioClipsAll.filter((clip) => unmutedTrackIds.has(clip.trackId))
 
   try {
     for (const scene of scenes) {
@@ -327,16 +420,47 @@ export async function runCutExport(exportId: string): Promise<void> {
       sourceCache.set(scene.mediaAssetId, sourcePath)
     }
 
+    for (const clip of busClips) {
+      if (sourceCache.has(clip.mediaAssetId)) continue
+      const media = await findMediaAssetDetail(clip.mediaAssetId)
+      if (!media || media.workspaceId !== cut.workspaceId) {
+        throw new Error(`Bus media unavailable for clip ${clip.id}`)
+      }
+      mediaById.set(media.id, media)
+      const sourcePath = join(tmpdir(), `videon-export-source-${clip.mediaAssetId}-${randomUUID()}`)
+      await store.downloadObjectToFile({
+        workspaceId: media.workspaceId,
+        storageKey: media.storageKey,
+        destinationPath: sourcePath,
+      })
+      sourceCache.set(clip.mediaAssetId, sourcePath)
+    }
+
     const normalize = cutExportNeedsNormalize(cut, scenes, mediaById)
     segmentPaths = await buildSegments({ scenes, sourceCache, reencode: normalize, cut })
 
     try {
-      await concatSegments(segmentPaths, outputPath, normalize)
+      await concatSegments(segmentPaths, programPath, normalize)
     } catch (error) {
       if (normalize) throw error
       for (const path of segmentPaths) await unlink(path).catch(() => {})
       segmentPaths = await buildSegments({ scenes, sourceCache, reencode: true, cut })
-      await concatSegments(segmentPaths, outputPath, true)
+      await concatSegments(segmentPaths, programPath, true)
+    }
+
+    if (busClips.length > 0) {
+      await mixBusAudioIntoProgram({
+        programPath,
+        destinationPath: outputPath,
+        clips: busClips,
+        sourceCache,
+      })
+    } else {
+      await execFileAsync(
+        'ffmpeg',
+        ['-hide_banner', '-loglevel', 'error', '-i', programPath, '-c', 'copy', '-y', outputPath],
+        { maxBuffer: 16 * 1024 * 1024 },
+      )
     }
 
     const storageKey = cutExportStorageKey(cut.workspaceId, cut.id, exportId, 'mp4')
@@ -352,6 +476,7 @@ export async function runCutExport(exportId: string): Promise<void> {
     await markCutExportFailed(exportId, message)
     throw error
   } finally {
+    await unlink(programPath).catch(() => {})
     await unlink(outputPath).catch(() => {})
     for (const path of segmentPaths) await unlink(path).catch(() => {})
     for (const path of sourceCache.values()) await unlink(path).catch(() => {})

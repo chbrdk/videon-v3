@@ -53,6 +53,8 @@ README.txt
 - Duplicate original filenames MUST be disambiguated (`clip.mp4`, `clip-2.mp4`, …).
 - XMEML MUST emit exploded stereo tracks (`currentExplodedTrackIndex` / `premiereTrackType`) with matching `<in>`/`<out>` on video and audio; do **not** emit incorrect `pproTicks*` (they cause Premiere to ignore audio source offsets).
 - Operator flow: extract ZIP → Import XML in Premiere → clips link offline-ready when relative `media/` resolves.
+- WHEN unmuted `audio_bus` clips exist THEN the ZIP MUST include those source files under `media/` and the XMEML MUST place them on additional audio tracks with timeline `start`/`end` and source `<in>`/`<out>` matching `cut_audio_clips` (`cut-multi-track.md`).
+- WHEN exporting `mp4` AND unmuted bus clips exist THEN the job MUST mix bus audio into the program mix.
 
 ## Surfaces
 
