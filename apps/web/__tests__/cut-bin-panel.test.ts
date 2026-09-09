@@ -18,5 +18,8 @@ describe('cut bin mediathek cards', () => {
     expect(mediaDb).toMatch(/sceneCount/)
     expect(mediaDb).toMatch(/LATEST_SCENE_COUNT_SQL/)
     expect(spec).toMatch(/two-column thumbnail card grid/)
+    const card = readFileSync(join(__dirname, '../components/media-card-thumb.tsx'), 'utf8')
+    expect(card).toMatch(/mediaFramePosterAtDuration/)
+    expect(card).toMatch(/useInViewOnce/)
   })
 })

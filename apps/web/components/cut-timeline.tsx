@@ -72,6 +72,7 @@ type CutTimelineProps = {
   transcriptSegments?: CutTranscriptSegment[]
   trimMode?: TrimMode
   disabled?: boolean
+  platformProjectId?: string
   playbackUrlByMediaId?: Record<string, string>
   peaksByUrl?: Record<string, number[]>
   voicePeaksByMediaId?: Record<string, number[]>
@@ -107,6 +108,7 @@ export function CutTimeline({
   transcriptSegments = [],
   trimMode = 'trim',
   disabled = false,
+  platformProjectId,
   playbackUrlByMediaId = {},
   peaksByUrl = {},
   voicePeaksByMediaId = {},
@@ -623,7 +625,12 @@ export function CutTimeline({
                       }}
                       title={typeof label === 'string' ? label : undefined}
                     >
-                      <TimelineClipThumbnail playbackUrl={playbackUrl} sourceMs={thumbMs} />
+                      <TimelineClipThumbnail
+                        sourceMs={thumbMs}
+                        mediaAssetId={clip?.scene.mediaAssetId}
+                        platformProjectId={platformProjectId}
+                        playbackUrl={playbackUrl}
+                      />
                       <span className="videon-cut-timeline__clip-duration" aria-hidden="true">
                         {formatClock(item.durationMs)}
                       </span>

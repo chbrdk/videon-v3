@@ -36,7 +36,7 @@ import { EditorTransport } from '@/components/editor-transport'
 import { IconRedo, IconSplit, IconUndo } from '@/components/editor-icons'
 import { writeStoredActiveCut } from '@/lib/active-cut'
 import { frameDurationMs, formatClock } from '@/lib/editor-time'
-import { normalizeMediaPlaybackUrl } from '@/lib/media-playback-url'
+import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import {
   nextPlaybackTarget,
   resolveClipTransition,
@@ -315,13 +315,9 @@ export function CutEditorView({
         setPlaybackUrl(playbackCacheRef.current.get(mediaId) ?? null)
         return
       }
-      const response = await fetch(paths.routes.apiMediaPlayback(clip.media.id, platformProjectId), {
-        cache: 'no-store',
-      })
-      const body = (await response.json()) as { playbackUrl?: string; error?: { message?: string } }
-      if (!response.ok) throw new Error(body.error?.message || 'Wiedergabe nicht verfügbar')
-      const playback = normalizeMediaPlaybackUrl(body.playbackUrl)
-      playbackCacheRef.current.set(mediaId, playback ?? '')
+      // Cut detail already proved Model B access — use relative stream URL (no extra playback RTT).
+      const playback = mediaStreamPlaybackUrl(mediaId, platformProjectId)
+      playbackCacheRef.current.set(mediaId, playback)
       currentMediaIdRef.current = mediaId
       setPlaybackUrl(playback)
     },
@@ -414,27 +410,29 @@ export function CutEditorView({
       return
     }
     let cancelled = false
-    void Promise.all(
-      mediaIds.map(async (mediaId) => {
-        if (playbackCacheRef.current.has(mediaId)) {
-          return { mediaId, url: playbackCacheRef.current.get(mediaId) ?? '' }
-        }
-        const response = await fetch(paths.routes.apiMediaPlayback(mediaId, platformProjectId), { cache: 'no-store' })
-        const body = (await response.json()) as { playbackUrl?: string }
-        const playback = normalizeMediaPlaybackUrl(body.playbackUrl)
-        if (playback) playbackCacheRef.current.set(mediaId, playback)
-        return { mediaId, url: playback ?? '' }
-      }),
-    ).then((entries) => {
+    const apply = () => {
       if (cancelled) return
       const next: Record<string, string> = {}
-      for (const entry of entries) {
-        if (entry.url) next[entry.mediaId] = entry.url
+      for (const mediaId of mediaIds) {
+        const url = mediaStreamPlaybackUrl(mediaId, platformProjectId)
+        playbackCacheRef.current.set(mediaId, url)
+        next[mediaId] = url
       }
       setPlaybackUrlByMediaId(next)
-    })
+    }
+    // Defer non-active URL map so the active monitor load wins first paint.
+    const idle = typeof window !== 'undefined' ? window.requestIdleCallback : undefined
+    if (typeof idle === 'function') {
+      const idleId = idle(apply, { timeout: 1800 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback?.(idleId)
+      }
+    }
+    const timer = globalThis.setTimeout(apply, 350)
     return () => {
       cancelled = true
+      globalThis.clearTimeout(timer)
     }
   }, [clips, audioClips, platformProjectId])
 
@@ -445,17 +443,30 @@ export function CutEditorView({
       return
     }
     let cancelled = false
-    void Promise.all(
-      urls.map(async (url) => {
-        const peaks = await prefetchWaveformPeaks(url)
-        return [url, peaks] as const
-      }),
-    ).then((entries) => {
-      if (cancelled) return
-      setPeaksByUrl(Object.fromEntries(entries))
-    })
+    const run = () => {
+      void Promise.all(
+        urls.map(async (url) => {
+          const peaks = await prefetchWaveformPeaks(url)
+          return [url, peaks] as const
+        }),
+      ).then((entries) => {
+        if (cancelled) return
+        setPeaksByUrl(Object.fromEntries(entries))
+      })
+    }
+    // Full-stream waveform decode MUST NOT race the open critical path.
+    const idle = typeof window !== 'undefined' ? window.requestIdleCallback : undefined
+    if (typeof idle === 'function') {
+      const idleId = idle(run, { timeout: 5000 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback?.(idleId)
+      }
+    }
+    const timer = globalThis.setTimeout(run, 1200)
     return () => {
       cancelled = true
+      globalThis.clearTimeout(timer)
     }
   }, [playbackUrlByMediaId])
 
@@ -1343,6 +1354,7 @@ export function CutEditorView({
           transcriptSegments={transcriptSegments}
           trimMode={trimMode}
           disabled={busy}
+          platformProjectId={platformProjectId}
           playbackUrlByMediaId={playbackUrlByMediaId}
           peaksByUrl={peaksByUrl}
           voicePeaksByMediaId={voicePeaksByMediaId}

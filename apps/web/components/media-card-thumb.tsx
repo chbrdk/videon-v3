@@ -1,15 +1,16 @@
 'use client'
 
-import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
-import { useClipThumbnail } from '@/lib/use-clip-thumbnail'
+import { useInViewOnce } from '@/lib/use-in-view'
+import { mediaFramePosterAtDuration } from '@/lib/media-frame-poster'
 
-/** Shared Mediathek / Cut-Bin poster from stream + client capture. */
+/** Shared Mediathek / Cut-Bin poster via Frame API (lazy when in view). */
 export function MediaCardThumb({
   mediaAssetId,
   platformProjectId,
   atMs,
   durationMs,
   ready = true,
+  lazy = true,
   className = 'videon-media-card__thumb',
 }: {
   mediaAssetId: string
@@ -18,21 +19,27 @@ export function MediaCardThumb({
   atMs?: number
   durationMs?: number | null
   ready?: boolean
+  /** When true, fetch poster only after the card intersects the viewport. */
+  lazy?: boolean
   className?: string
 }) {
-  const playbackUrl = ready ? mediaStreamPlaybackUrl(mediaAssetId, platformProjectId) : null
-  const seekMs =
-    typeof atMs === 'number' && Number.isFinite(atMs)
-      ? Math.max(0, Math.floor(atMs))
-      : Math.max(0, Math.floor((durationMs ?? 2000) / 2))
-  const thumbnail = useClipThumbnail(playbackUrl, seekMs)
-  if (!thumbnail) {
-    return <div className={`${className} ${className}--empty`} aria-hidden />
+  const [ref, inView] = useInViewOnce<HTMLDivElement>({
+    enabled: ready && lazy,
+    rootMargin: '160px 0px',
+  })
+  const shouldLoad = ready && (!lazy || inView)
+  const posterUrl = shouldLoad
+    ? mediaFramePosterAtDuration(mediaAssetId, platformProjectId, durationMs, atMs)
+    : null
+
+  if (!posterUrl) {
+    return <div ref={ref} className={`${className} ${className}--empty`} aria-hidden />
   }
   return (
     <div
+      ref={ref}
       className={className}
-      style={{ backgroundImage: `url(${thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+      style={{ backgroundImage: `url(${posterUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
       aria-hidden
     />
   )
