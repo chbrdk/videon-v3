@@ -18,24 +18,24 @@ import { paths } from '../lib/paths'
 import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 import { PlatformAssistantHost } from './platform-assistant-host'
-import { useT, useUserPrefs } from '../lib/user-prefs'
+import { useUserPrefs } from '../lib/user-prefs'
 
 /** Chat · Home · Projekte · Mediathek · Analysen — Upload/Cuts via deep links only. */
 const PRIMARY_NAV_IDS = [
-  { id: 'chat', route: paths.routes.chat, labelKey: 'nav.chat', icon: <NavIconChat /> },
-  { id: 'home', route: paths.routes.home, labelKey: 'nav.home', icon: <NavIconOverview /> },
+  { id: 'chat', route: paths.routes.chat, labelKey: 'nav.chat', Icon: NavIconChat },
+  { id: 'home', route: paths.routes.home, labelKey: 'nav.home', Icon: NavIconOverview },
   {
     id: 'projects',
     route: paths.routes.projects,
     labelKey: 'nav.projects',
-    icon: <NavIconProjects />,
+    Icon: NavIconProjects,
   },
-  { id: 'library', route: paths.routes.library, labelKey: 'nav.library', icon: <NavIconLibrary /> },
+  { id: 'library', route: paths.routes.library, labelKey: 'nav.library', Icon: NavIconLibrary },
   {
     id: 'analyses',
     route: paths.routes.analyses,
     labelKey: 'nav.analyses',
-    icon: <NavIconAnalyses />,
+    Icon: NavIconAnalyses,
   },
 ] as const
 
@@ -53,8 +53,7 @@ export function AppShell({
   const pathname = usePathname()
   const { data: session } = useSession()
   const { platformProjectId } = useActiveCollection()
-  const { displayName: prefName } = useUserPrefs()
-  const t = useT()
+  const { displayName: prefName, t } = useUserPrefs()
   const displayName =
     prefName.trim() && prefName !== paths.defaultDisplayName
       ? prefName
@@ -92,12 +91,11 @@ export function AppShell({
           item.id === 'chat'
             ? item.route
             : workspaceHref(item.route, platformProjectId)
-        const label = t(item.labelKey)
         return {
           id: item.id,
           href,
-          label,
-          icon: item.icon,
+          label: t(item.labelKey),
+          Icon: item.Icon,
           active: isActive(item.route, href),
         }
       }),
@@ -105,6 +103,9 @@ export function AppShell({
   )
 
   const settingsActive = pathname.startsWith(paths.routes.settings)
+  const primaryAria = t('nav.primaryAria')
+  const settingsLabel = t('nav.settings')
+  const settingsAria = t('nav.settingsAria')
 
   return (
     <AppFrame
@@ -121,21 +122,27 @@ export function AppShell({
       topbar={
         <>
           <div className="topbar-brand videon-topbar-lead">
-            <nav className="videon-top-nav" aria-label={t('nav.primaryAria')}>
-              {navItems.map((item) => (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={item.active ? 'videon-top-nav__link is-active' : 'videon-top-nav__link'}
-                  aria-current={item.active ? 'page' : undefined}
-                  aria-label={item.label}
-                  title={item.label}
-                >
-                  <span className="videon-top-nav__icon" aria-hidden="true">
-                    {item.icon}
-                  </span>
-                </Link>
-              ))}
+            <nav className="videon-top-nav" aria-label={primaryAria}>
+              {navItems.map((item) => {
+                const Icon = item.Icon
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={
+                      item.active ? 'videon-top-nav__link is-active' : 'videon-top-nav__link'
+                    }
+                    aria-current={item.active ? 'page' : undefined}
+                    aria-label={item.label}
+                    title={item.label}
+                    data-nav-id={item.id}
+                  >
+                    <span className="videon-top-nav__icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                  </Link>
+                )
+              })}
               <Link
                 href={paths.routes.settings}
                 className={
@@ -144,8 +151,9 @@ export function AppShell({
                     : 'videon-top-nav__link videon-top-nav__settings'
                 }
                 aria-current={settingsActive ? 'page' : undefined}
-                aria-label={t('nav.settingsAria')}
-                title={t('nav.settings')}
+                aria-label={settingsAria}
+                title={settingsLabel}
+                data-nav-id="settings"
               >
                 <span className="videon-top-nav__icon" aria-hidden="true">
                   <Avatar name={displayName} size="sm" className="rail-avatar" />
