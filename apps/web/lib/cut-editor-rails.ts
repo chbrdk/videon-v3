@@ -4,8 +4,9 @@
 
 export const CUT_LEFT_RAIL_KEY = 'videon.cut.leftRailPx'
 export const CUT_RIGHT_RAIL_KEY = 'videon.cut.rightRailPx'
-export const CUT_LEFT_OPEN_KEY = 'videon.cut.leftRailOpen'
-export const CUT_RIGHT_OPEN_KEY = 'videon.cut.rightRailOpen'
+/** v2: previous open keys could stick closed after Escape. */
+export const CUT_LEFT_OPEN_KEY = 'videon.cut.leftRailOpen.v2'
+export const CUT_RIGHT_OPEN_KEY = 'videon.cut.rightRailOpen.v2'
 
 export const CUT_RAIL_LIMITS = {
   min: 220,

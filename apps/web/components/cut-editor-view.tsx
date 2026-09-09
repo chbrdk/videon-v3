@@ -461,7 +461,7 @@ export function CutEditorView({
 
   useEffect(() => {
     setLeftRailOpen(readCutRailOpen(CUT_LEFT_OPEN_KEY, true))
-    setRightRailOpen(readCutRailOpen(CUT_RIGHT_OPEN_KEY, false))
+    setRightRailOpen(readCutRailOpen(CUT_RIGHT_OPEN_KEY, true))
   }, [])
 
   useEffect(() => {
@@ -973,10 +973,14 @@ export function CutEditorView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setLeftOpen(false)
-        setRightOpen(false)
-        setShowShortcuts(false)
-        setTimelineMenu(null)
+        // Close ephemeral UI first; do not persist rail closed-state (Esc ≠ hide forever).
+        if (timelineMenu || showShortcuts) {
+          setShowShortcuts(false)
+          setTimelineMenu(null)
+          return
+        }
+        setLeftRailOpen(false)
+        setRightRailOpen(false)
         return
       }
       if (event.key === '?' && !event.metaKey && !event.ctrlKey) {
@@ -991,7 +995,7 @@ export function CutEditorView({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [setLeftOpen, setRightOpen])
+  }, [showShortcuts, timelineMenu])
 
   if (error && !cut) {
     return (
@@ -1152,16 +1156,22 @@ export function CutEditorView({
             </Button>
           </div>
           <div className="videon-nle__tool-cluster">
-            <ToolButton
-              label={`Bin (${clips.length})`}
-              active={leftRailOpen}
+            <Button
+              type="button"
+              variant={leftRailOpen ? 'primary' : 'ghost'}
+              size="sm"
               onClick={() => setLeftOpen(!leftRailOpen)}
             >
               Bin
-            </ToolButton>
-            <ToolButton label="Inspect" active={rightRailOpen} onClick={() => setRightOpen(!rightRailOpen)}>
+            </Button>
+            <Button
+              type="button"
+              variant={rightRailOpen ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setRightOpen(!rightRailOpen)}
+            >
               Clip
-            </ToolButton>
+            </Button>
             <ToolButton
               label="Tastaturkürzel"
               active={showShortcuts}

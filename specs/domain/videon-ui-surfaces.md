@@ -54,7 +54,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 ## Editor IA (Wave B — NLE Cut chrome)
 
 1. WHEN the **Cut** editor (`/cuts/:id`) renders THEN it MUST use an immersive workspace: **left rail** (Bin / Library), **center** (monitor + transport), **right rail** (Clip properties), **bottom dock** (timeline) — CREATION-style dual rails, NOT a single modal drawer as the primary inspect surface.
-2. WHEN Cut rails render THEN they MUST be user-resizable overlays on the **program workspace** (left/right edges); they MUST NOT shrink the program column. Widths SHOULD persist in `sessionStorage` (`videon.cut.leftRailPx` / `videon.cut.rightRailPx`). Open state SHOULD persist (`videon.cut.leftRailOpen` / `videon.cut.rightRailOpen`).
+2. WHEN Cut rails render THEN they MUST be user-resizable overlays on the **program workspace** (left/right edges); they MUST NOT shrink the program column. Widths SHOULD persist in `sessionStorage` (`videon.cut.leftRailPx` / `videon.cut.rightRailPx`). Open state SHOULD persist (`videon.cut.leftRailOpen.v2` / `videon.cut.rightRailOpen.v2`). Escape MAY hide rails for the session without writing closed as the lasting preference when only dismissing menus.
 3. WHEN the Cut editor stage renders THEN it MUST use the available viewport width next to the NavRail (tight stage gutters) so the program monitor stays large with both rails open.
 4. WHEN the Cut program monitor renders THEN it MUST NOT show a redundant “PROGRAMM” chrome label; fullscreen MAY float on the surface.
 5. WHEN the Cut toolbar renders THEN it MUST stay a single compact row (title + primary edit/export/panel toggles); secondary actions (merge/delete/archive) MUST live under overflow.
