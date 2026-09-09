@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -18,6 +18,7 @@ import { paths } from '../lib/paths'
 import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 import { PlatformAssistantHost } from './platform-assistant-host'
+import { TopbarTrailHostProvider } from './topbar-trail-host'
 import { useUserPrefs } from '../lib/user-prefs'
 
 /** Chat · Home · Projekte · Mediathek · Analysen — Upload/Cuts via deep links only. */
@@ -54,6 +55,7 @@ export function AppShell({
   const { data: session } = useSession()
   const { platformProjectId } = useActiveCollection()
   const { displayName: prefName, t } = useUserPrefs()
+  const [trailHost, setTrailHost] = useState<HTMLElement | null>(null)
   const displayName =
     prefName.trim() && prefName !== paths.defaultDisplayName
       ? prefName
@@ -108,68 +110,74 @@ export function AppShell({
   const settingsAria = t('nav.settingsAria')
 
   return (
-    <AppFrame
-      railEdge={paths.railDockEdge}
-      style={frameStyle}
-      className={
-        editor
-          ? 'videon-app-frame--top-chrome videon-app-frame--editor'
-          : 'videon-app-frame--top-chrome'
-      }
-      shellCorners
-      shellCornerRadius={paths.brandCornerRadiusPx}
-      brandCorner={<ShellBrandCorner />}
-      topbar={
-        <>
-          <div className="topbar-brand videon-topbar-lead">
-            <nav className="videon-top-nav" aria-label={primaryAria}>
-              {navItems.map((item) => {
-                const Icon = item.Icon
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    className={
-                      item.active ? 'videon-top-nav__link is-active' : 'videon-top-nav__link'
-                    }
-                    aria-current={item.active ? 'page' : undefined}
-                    aria-label={item.label}
-                    title={item.label}
-                    data-nav-id={item.id}
-                  >
-                    <span className="videon-top-nav__icon" aria-hidden="true">
-                      <Icon />
-                    </span>
-                  </Link>
-                )
-              })}
-              <Link
-                href={paths.routes.settings}
-                className={
-                  settingsActive
-                    ? 'videon-top-nav__link videon-top-nav__settings is-active'
-                    : 'videon-top-nav__link videon-top-nav__settings'
-                }
-                aria-current={settingsActive ? 'page' : undefined}
-                aria-label={settingsAria}
-                title={settingsLabel}
-                data-nav-id="settings"
-              >
-                <span className="videon-top-nav__icon" aria-hidden="true">
-                  <Avatar name={displayName} size="sm" className="rail-avatar" />
-                </span>
-              </Link>
-            </nav>
-          </div>
-          <div className="topbar-right videon-topbar-trail" data-testid="videon-topbar-trail" />
-        </>
-      }
-    >
-      <div className={`videon-stage${editor ? ' videon-stage--editor' : ' videon-stage--flush-top'}`}>
-        {description && !editor ? <p className="videon-page-lead">{description}</p> : null}
-        {children}
-      </div>
-      <PlatformAssistantHost platformProjectId={platformProjectId} />
-    </AppFrame>
+    <TopbarTrailHostProvider host={trailHost}>
+      <AppFrame
+        railEdge={paths.railDockEdge}
+        style={frameStyle}
+        className={
+          editor
+            ? 'videon-app-frame--top-chrome videon-app-frame--editor'
+            : 'videon-app-frame--top-chrome'
+        }
+        shellCorners
+        shellCornerRadius={paths.brandCornerRadiusPx}
+        brandCorner={<ShellBrandCorner />}
+        topbar={
+          <>
+            <div className="topbar-brand videon-topbar-lead">
+              <nav className="videon-top-nav" aria-label={primaryAria}>
+                {navItems.map((item) => {
+                  const Icon = item.Icon
+                  return (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      className={
+                        item.active ? 'videon-top-nav__link is-active' : 'videon-top-nav__link'
+                      }
+                      aria-current={item.active ? 'page' : undefined}
+                      aria-label={item.label}
+                      title={item.label}
+                      data-nav-id={item.id}
+                    >
+                      <span className="videon-top-nav__icon" aria-hidden="true">
+                        <Icon />
+                      </span>
+                    </Link>
+                  )
+                })}
+                <Link
+                  href={paths.routes.settings}
+                  className={
+                    settingsActive
+                      ? 'videon-top-nav__link videon-top-nav__settings is-active'
+                      : 'videon-top-nav__link videon-top-nav__settings'
+                  }
+                  aria-current={settingsActive ? 'page' : undefined}
+                  aria-label={settingsAria}
+                  title={settingsLabel}
+                  data-nav-id="settings"
+                >
+                  <span className="videon-top-nav__icon" aria-hidden="true">
+                    <Avatar name={displayName} size="sm" className="rail-avatar" />
+                  </span>
+                </Link>
+              </nav>
+            </div>
+            <div
+              ref={setTrailHost}
+              className="topbar-right videon-topbar-trail"
+              data-testid="videon-topbar-trail"
+            />
+          </>
+        }
+      >
+        <div className={`videon-stage${editor ? ' videon-stage--editor' : ' videon-stage--flush-top'}`}>
+          {description && !editor ? <p className="videon-page-lead">{description}</p> : null}
+          {children}
+        </div>
+        <PlatformAssistantHost platformProjectId={platformProjectId} />
+      </AppFrame>
+    </TopbarTrailHostProvider>
   )
 }

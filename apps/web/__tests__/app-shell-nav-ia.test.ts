@@ -8,6 +8,8 @@ describe('app-shell primary nav IA', () => {
     expect(source).toMatch(/PRIMARY_NAV_IDS/)
     expect(source).toMatch(/videon-top-nav/)
     expect(source).toMatch(/videon-app-frame--top-chrome/)
+    expect(source).toMatch(/TopbarTrailHostProvider/)
+    expect(source).toMatch(/videon-topbar-trail/)
     expect(source).toMatch(/id: 'chat'/)
     expect(source).toMatch(/id: 'projects'/)
     expect(source).toMatch(/id: 'library'/)
@@ -30,5 +32,18 @@ describe('app-shell primary nav IA', () => {
     }
     expect(de.nav.primaryAria).toBe('Hauptnavigation')
     expect(en.nav.primaryAria).toBe('Primary navigation')
+  })
+})
+
+describe('cut editor topbar trail', () => {
+  it('portals Cut toolbar into TopbarTrailHost like CREATION', () => {
+    const view = readFileSync(join(__dirname, '../components/cut-editor-view.tsx'), 'utf8')
+    const host = readFileSync(join(__dirname, '../components/topbar-trail-host.tsx'), 'utf8')
+    expect(host).toMatch(/TopbarTrailHostProvider/)
+    expect(host).toMatch(/useTopbarTrailHost/)
+    expect(view).toMatch(/useTopbarTrailHost/)
+    expect(view).toMatch(/createPortal/)
+    expect(view).toMatch(/videon-cut-topbar-chrome/)
+    expect(view).toMatch(/videon-nle--topbar-chrome/)
   })
 })

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button, Field, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
@@ -12,6 +13,7 @@ import { CutClipInspector } from '@/components/cut-clip-inspector'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorStatusStrip, exportStatusLevel } from '@/components/editor-status-strip'
 import { EditorOverflowItem, EditorOverflowMenu } from '@/components/editor-overflow-menu'
+import { useTopbarTrailHost } from '@/components/topbar-trail-host'
 import {
   CUT_ASPECT_PRESET_PIXELS,
   type CutAspectPreset,
@@ -114,6 +116,7 @@ export function CutEditorView({
   const router = useRouter()
   const toast = useToast()
   const t = useT()
+  const topbarTrailHost = useTopbarTrailHost()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const cutPlayheadRef = useRef(0)
   const playingRef = useRef(false)
@@ -1009,252 +1012,272 @@ export function CutEditorView({
 
   if (!cut) return <Text role="body">Cut wird geladen …</Text>
 
-  return (
-    <div className="videon-nle videon-nle--player-first">
-      <div className="videon-nle__top">
-      <header className="videon-nle__toolbar videon-nle__toolbar--slim">
-        <div className="videon-nle__toolbar-title">
-          <Link className="videon-nle__back" href={paths.routes.cutsFor(platformProjectId)}>
-            ←
-          </Link>
-          <h2 title={`${clips.length} Clips · ${cut.status}${cut.width && cut.height ? ` · ${cut.width}×${cut.height}` : ''}`}>
-            {cut.name}
-          </h2>
-        </div>
-        <div className="videon-nle__toolbar-groups">
-          <div className="videon-nle__tool-group">
-            <ToolButton label="Rückgängig" disabled={busy || !canUndo} onClick={undo}>
-              <IconUndo />
-            </ToolButton>
-            <ToolButton label="Wiederholen" disabled={busy || !canRedo} onClick={redo}>
-              <IconRedo />
-            </ToolButton>
-            <ToolButton
-              label="An Playhead teilen"
-              disabled={busy || !splitTarget}
-              onClick={() =>
-                void patchTimeline({
-                  action: 'split',
-                  sceneId: splitTarget?.sceneId,
-                  atMs: splitTarget?.atMs,
-                })
-              }
-            >
-              <IconSplit />
-            </ToolButton>
-          </div>
-          <ToggleGroup
-            aria-label="Trim-Modus"
-            size="sm"
-            value={trimMode}
-            onChange={(value) => setTrimMode(value as typeof trimMode)}
-            options={[
-              { value: 'trim', label: 'Trim' },
-              { value: 'ripple', label: 'Rip' },
-              { value: 'roll', label: 'Roll' },
-            ]}
-          />
-          <div className="videon-nle__tool-group">
-            <AspectPresetChips
-              ariaLabel={t('cutEditor.canvas')}
-              value={aspectPreset}
-              disabled={busy || canvasBusy}
-              options={[
-                { value: '9:16', label: '9:16' },
-                { value: '16:9', label: '16:9' },
-                { value: '1:1', label: '1:1' },
-                { value: 'custom', label: t('cutEditor.custom') },
-              ]}
-              onChange={(next) => {
-                setAspectPreset(next)
-                if (next !== 'custom') {
-                  const pixels = CUT_ASPECT_PRESET_PIXELS[next]
-                  setCustomWidth(String(pixels.width))
-                  setCustomHeight(String(pixels.height))
-                  void (async () => {
-                    setCanvasBusy(true)
-                    try {
-                      const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'setCanvas', aspectPreset: next }),
-                      })
-                      const payload = (await response.json()) as {
-                        cut?: CutDetail
-                        error?: { message?: string }
-                      }
-                      if (!response.ok || !payload.cut) {
-                        throw new Error(payload.error?.message || t('cutEditor.canvasFailed'))
-                      }
-                      setCut(payload.cut)
-                    } catch (err) {
-                      notifyError(err instanceof Error ? err.message : t('cutEditor.canvasFailed'))
-                    } finally {
-                      setCanvasBusy(false)
-                    }
-                  })()
-                }
-              }}
-            />
-            {aspectPreset === 'custom' ? (
-              <>
-                <Input
-                  aria-label={t('cutEditor.width')}
-                  type="number"
-                  min={2}
-                  max={3840}
-                  step={2}
-                  value={customWidth}
-                  disabled={busy || canvasBusy}
-                  onChange={(event) => setCustomWidth(event.target.value)}
-                />
-                <Input
-                  aria-label={t('cutEditor.height')}
-                  type="number"
-                  min={2}
-                  max={3840}
-                  step={2}
-                  value={customHeight}
-                  disabled={busy || canvasBusy}
-                  onChange={(event) => setCustomHeight(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy || canvasBusy}
-                  onClick={() => void applyCanvas()}
-                >
-                  OK
-                </Button>
-              </>
-            ) : null}
-          </div>
-          <div className="videon-nle__tool-group">
-            <Select
-              aria-label={t('cutEditor.exportFormat')}
-              size="sm"
-              value={exportFormat}
-              disabled={busy || exportBusy || clips.length === 0}
-              options={[
-                { value: 'mp4', label: 'MP4' },
-                { value: 'premiere_xml', label: 'PPro' },
-              ]}
-              onChange={(value: string) => setExportFormat(value as CutExportFormat)}
-            />
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => void startExport(exportFormat)}
-              disabled={busy || exportBusy || clips.length === 0}
-            >
-              {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
-                ? '…'
-                : 'Export'}
-            </Button>
-          </div>
-          <div className="videon-nle__tool-cluster">
-            <Button
-              type="button"
-              variant={leftRailOpen ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setLeftOpen(!leftRailOpen)}
-            >
-              Bin
-            </Button>
-            <Button
-              type="button"
-              variant={rightRailOpen ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setRightOpen(!rightRailOpen)}
-            >
-              Clip
-            </Button>
-            <ToolButton
-              label="Tastaturkürzel"
-              active={showShortcuts}
-              onClick={() => setShowShortcuts((current) => !current)}
-            >
-              ?
-            </ToolButton>
-            <EditorOverflowMenu>
-              {({ close }) => (
-                <>
-                  <EditorOverflowItem
-                    close={close}
-                    disabled={busy || !activeClip || activeIndex >= clips.length - 1}
-                    onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
-                  >
-                    Verbinden
-                  </EditorOverflowItem>
-                  <EditorOverflowItem
-                    close={close}
-                    disabled={busy || clips.length <= 1 || !activeClip}
-                    onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
-                  >
-                    Löschen
-                  </EditorOverflowItem>
-                  <EditorOverflowItem
-                    close={close}
-                    disabled={busy || exportBusy || clips.length === 0}
-                    onClick={() => void startExport('mp4')}
-                  >
-                    {t('cutEditor.exportMp4')}
-                  </EditorOverflowItem>
-                  <EditorOverflowItem
-                    close={close}
-                    disabled={busy || exportBusy || clips.length === 0}
-                    onClick={() => void startExport('premiere_xml')}
-                  >
-                    {t('cutEditor.exportPremiere')}
-                  </EditorOverflowItem>
-                  {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
-                    <EditorOverflowItem close={close} href={latestExport.downloadUrl}>
-                      {latestExport.format === 'premiere_xml'
-                        ? t('cutEditor.downloadXml')
-                        : t('cutEditor.downloadMp4')}
-                    </EditorOverflowItem>
-                  ) : null}
-                  <EditorOverflowItem close={close} danger disabled={busy} onClick={() => void deleteCut()}>
-                    Archivieren
-                  </EditorOverflowItem>
-                </>
-              )}
-            </EditorOverflowMenu>
-          </div>
-        </div>
-      </header>
-
-      {latestExport ? (
-        <EditorStatusStrip
-          level={exportStatusLevel(latestExport.status)}
-          label={
-            latestExport.status === 'succeeded'
-              ? t('cutEditor.exportReady')
-              : latestExport.status === 'failed'
-                ? t('cutEditor.exportFailed')
-                : t('cutEditor.exportBusy')
-          }
-          detail={latestExport.errorMessage ?? latestExport.status}
-          actionLabel={
-            latestExport.status === 'succeeded' && latestExport.downloadUrl
-              ? latestExport.format === 'premiere_xml'
-                ? t('cutEditor.downloadXml')
-                : t('cutEditor.downloadMp4')
-              : undefined
-          }
-          onAction={
-            latestExport.status === 'succeeded' && latestExport.downloadUrl
-              ? () => {
-                  window.location.href = latestExport.downloadUrl!
-                }
-              : undefined
-          }
-        />
-      ) : null}
-
+  const toolbarMeta = `${clips.length} Clips · ${cut.status}${cut.width && cut.height ? ` · ${cut.width}×${cut.height}` : ''}`
+  const toolbarChrome = (
+    <div
+      className={
+        topbarTrailHost
+          ? 'videon-cut-topbar-chrome'
+          : 'videon-nle__toolbar videon-nle__toolbar--slim'
+      }
+      role="toolbar"
+      aria-label="Cut-Werkzeuge"
+      data-testid="cut-editor-toolbar"
+    >
+      <div className="videon-nle__toolbar-title">
+        <Link className="videon-nle__back" href={paths.routes.cutsFor(platformProjectId)}>
+          ←
+        </Link>
+        <h2 title={toolbarMeta}>{cut.name}</h2>
       </div>
+      <div className="videon-nle__toolbar-groups">
+        <div className="videon-nle__tool-group">
+          <ToolButton label="Rückgängig" disabled={busy || !canUndo} onClick={undo}>
+            <IconUndo />
+          </ToolButton>
+          <ToolButton label="Wiederholen" disabled={busy || !canRedo} onClick={redo}>
+            <IconRedo />
+          </ToolButton>
+          <ToolButton
+            label="An Playhead teilen"
+            disabled={busy || !splitTarget}
+            onClick={() =>
+              void patchTimeline({
+                action: 'split',
+                sceneId: splitTarget?.sceneId,
+                atMs: splitTarget?.atMs,
+              })
+            }
+          >
+            <IconSplit />
+          </ToolButton>
+        </div>
+        <ToggleGroup
+          aria-label="Trim-Modus"
+          size="sm"
+          value={trimMode}
+          onChange={(value) => setTrimMode(value as typeof trimMode)}
+          options={[
+            { value: 'trim', label: 'Trim' },
+            { value: 'ripple', label: 'Rip' },
+            { value: 'roll', label: 'Roll' },
+          ]}
+        />
+        <div className="videon-nle__tool-group">
+          <AspectPresetChips
+            ariaLabel={t('cutEditor.canvas')}
+            value={aspectPreset}
+            disabled={busy || canvasBusy}
+            options={[
+              { value: '9:16', label: '9:16' },
+              { value: '16:9', label: '16:9' },
+              { value: '1:1', label: '1:1' },
+              { value: 'custom', label: t('cutEditor.custom') },
+            ]}
+            onChange={(next) => {
+              setAspectPreset(next)
+              if (next !== 'custom') {
+                const pixels = CUT_ASPECT_PRESET_PIXELS[next]
+                setCustomWidth(String(pixels.width))
+                setCustomHeight(String(pixels.height))
+                void (async () => {
+                  setCanvasBusy(true)
+                  try {
+                    const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'setCanvas', aspectPreset: next }),
+                    })
+                    const payload = (await response.json()) as {
+                      cut?: CutDetail
+                      error?: { message?: string }
+                    }
+                    if (!response.ok || !payload.cut) {
+                      throw new Error(payload.error?.message || t('cutEditor.canvasFailed'))
+                    }
+                    setCut(payload.cut)
+                  } catch (err) {
+                    notifyError(err instanceof Error ? err.message : t('cutEditor.canvasFailed'))
+                  } finally {
+                    setCanvasBusy(false)
+                  }
+                })()
+              }
+            }}
+          />
+          {aspectPreset === 'custom' ? (
+            <>
+              <Input
+                aria-label={t('cutEditor.width')}
+                type="number"
+                min={2}
+                max={3840}
+                step={2}
+                value={customWidth}
+                disabled={busy || canvasBusy}
+                onChange={(event) => setCustomWidth(event.target.value)}
+              />
+              <Input
+                aria-label={t('cutEditor.height')}
+                type="number"
+                min={2}
+                max={3840}
+                step={2}
+                value={customHeight}
+                disabled={busy || canvasBusy}
+                onChange={(event) => setCustomHeight(event.target.value)}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy || canvasBusy}
+                onClick={() => void applyCanvas()}
+              >
+                OK
+              </Button>
+            </>
+          ) : null}
+        </div>
+        <div className="videon-nle__tool-group">
+          <Select
+            aria-label={t('cutEditor.exportFormat')}
+            size="sm"
+            value={exportFormat}
+            disabled={busy || exportBusy || clips.length === 0}
+            options={[
+              { value: 'mp4', label: 'MP4' },
+              { value: 'premiere_xml', label: 'PPro' },
+            ]}
+            onChange={(value: string) => setExportFormat(value as CutExportFormat)}
+          />
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => void startExport(exportFormat)}
+            disabled={busy || exportBusy || clips.length === 0}
+          >
+            {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
+              ? '…'
+              : 'Export'}
+          </Button>
+        </div>
+        <div className="videon-nle__tool-cluster">
+          <Button
+            type="button"
+            variant={leftRailOpen ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={() => setLeftOpen(!leftRailOpen)}
+          >
+            Bin
+          </Button>
+          <Button
+            type="button"
+            variant={rightRailOpen ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={() => setRightOpen(!rightRailOpen)}
+          >
+            Clip
+          </Button>
+          <ToolButton
+            label="Tastaturkürzel"
+            active={showShortcuts}
+            onClick={() => setShowShortcuts((current) => !current)}
+          >
+            ?
+          </ToolButton>
+          <EditorOverflowMenu>
+            {({ close }) => (
+              <>
+                <EditorOverflowItem
+                  close={close}
+                  disabled={busy || !activeClip || activeIndex >= clips.length - 1}
+                  onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
+                >
+                  Verbinden
+                </EditorOverflowItem>
+                <EditorOverflowItem
+                  close={close}
+                  disabled={busy || clips.length <= 1 || !activeClip}
+                  onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
+                >
+                  Löschen
+                </EditorOverflowItem>
+                <EditorOverflowItem
+                  close={close}
+                  disabled={busy || exportBusy || clips.length === 0}
+                  onClick={() => void startExport('mp4')}
+                >
+                  {t('cutEditor.exportMp4')}
+                </EditorOverflowItem>
+                <EditorOverflowItem
+                  close={close}
+                  disabled={busy || exportBusy || clips.length === 0}
+                  onClick={() => void startExport('premiere_xml')}
+                >
+                  {t('cutEditor.exportPremiere')}
+                </EditorOverflowItem>
+                {latestExport?.status === 'succeeded' && latestExport.downloadUrl ? (
+                  <EditorOverflowItem close={close} href={latestExport.downloadUrl}>
+                    {latestExport.format === 'premiere_xml'
+                      ? t('cutEditor.downloadXml')
+                      : t('cutEditor.downloadMp4')}
+                  </EditorOverflowItem>
+                ) : null}
+                <EditorOverflowItem close={close} danger disabled={busy} onClick={() => void deleteCut()}>
+                  Archivieren
+                </EditorOverflowItem>
+              </>
+            )}
+          </EditorOverflowMenu>
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div
+      className={
+        topbarTrailHost
+          ? 'videon-nle videon-nle--player-first videon-nle--topbar-chrome'
+          : 'videon-nle videon-nle--player-first'
+      }
+    >
+      {topbarTrailHost ? createPortal(toolbarChrome, topbarTrailHost) : null}
+      {topbarTrailHost && !latestExport ? null : (
+        <div className="videon-nle__top">
+          {topbarTrailHost ? null : toolbarChrome}
+
+          {latestExport ? (
+            <EditorStatusStrip
+              level={exportStatusLevel(latestExport.status)}
+              label={
+                latestExport.status === 'succeeded'
+                  ? t('cutEditor.exportReady')
+                  : latestExport.status === 'failed'
+                    ? t('cutEditor.exportFailed')
+                    : t('cutEditor.exportBusy')
+              }
+              detail={latestExport.errorMessage ?? latestExport.status}
+              actionLabel={
+                latestExport.status === 'succeeded' && latestExport.downloadUrl
+                  ? latestExport.format === 'premiere_xml'
+                    ? t('cutEditor.downloadXml')
+                    : t('cutEditor.downloadMp4')
+                  : undefined
+              }
+              onAction={
+                latestExport.status === 'succeeded' && latestExport.downloadUrl
+                  ? () => {
+                      window.location.href = latestExport.downloadUrl!
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+        </div>
+      )}
 
       <div className="videon-nle__workspace">
         <CutEditorRail

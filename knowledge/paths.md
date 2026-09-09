@@ -18,6 +18,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 |------------|---------|
 | `apps/web/lib/msqdx-ui.ts` | Shared primitives barrel |
 | `apps/web/lib/msqdx-ui-shell.ts` | AppFrame barrel (product chrome = top-nav pill; NavRail unused) |
+| `apps/web/components/topbar-trail-host.tsx` | CREATION-style trail host for Cut/Media editor tools in `AppFrame.topbar` |
 | `apps/web/lib/msqdx-ui-client.ts` | Client overlays barrel |
 | `hubIndexLayoutKey` | Session storage for cards/list hub layout |
 | `defaultTheme` | `light` → SSR `data-theme=msqdx` via `resolveThemeId` |
