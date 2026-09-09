@@ -11,9 +11,17 @@ export type LaneMoveResult = {
   videoClips: CutVideoClip[]
 }
 
-async function renumberScenes(client: {
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<{ id: string }> }>
-}, cutId: string): Promise<void> {
+function floorMs(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return Math.max(0, Math.floor(fallback))
+  return Math.max(0, Math.floor(value))
+}
+
+async function renumberScenes(
+  client: {
+    query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<{ id: string }> }>
+  },
+  cutId: string,
+): Promise<void> {
   await client.query(`update cut_scenes set position = position + $2 where cut_id = $1`, [
     cutId,
     CUT_SCENE_POSITION_PARK,
@@ -26,9 +34,12 @@ async function renumberScenes(client: {
   }
 }
 
-async function renumberVideoClips(client: {
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<{ id: string }> }>
-}, trackId: string): Promise<void> {
+async function renumberVideoClips(
+  client: {
+    query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<{ id: string }> }>
+  },
+  trackId: string,
+): Promise<void> {
   await client.query(`update cut_video_clips set position = position + $2 where track_id = $1`, [
     trackId,
     CUT_SCENE_POSITION_PARK,
@@ -48,25 +59,43 @@ export async function moveSceneToVideoOverlay(input: {
   sceneId: string
   timelineStartMs?: number
 }): Promise<LaneMoveResult | null> {
-  const scenes = await listScenesForCut(input.cutId)
-  if (scenes.length <= 1) return null
-  const scene = scenes.find((entry) => entry.id === input.sceneId)
-  if (!scene) return null
-  const duration = scene.endMs - scene.startMs
-  if (duration < MIN_CLIP_MS) return null
-
   const track = await ensureDefaultVideoOverlayTrack(input.cutId)
-  const timelineStartMs =
-    typeof input.timelineStartMs === 'number' && Number.isFinite(input.timelineStartMs)
-      ? Math.max(0, Math.floor(input.timelineStartMs))
-      : scene.timelineStartMs
-
   const client = await databasePool().connect()
   try {
     await client.query('begin')
+    const locked = await client.query<{
+      id: string
+      media_asset_id: string
+      start_ms: number
+      end_ms: number
+      timeline_start_ms: number
+    }>(
+      `select id, media_asset_id, start_ms, end_ms, timeline_start_ms
+         from cut_scenes
+        where cut_id = $1
+        for update`,
+      [input.cutId],
+    )
+    if (locked.rows.length <= 1) {
+      await client.query('rollback')
+      return null
+    }
+    const scene = locked.rows.find((row) => row.id === input.sceneId)
+    if (!scene) {
+      await client.query('rollback')
+      return null
+    }
+    const duration = scene.end_ms - scene.start_ms
+    if (duration < MIN_CLIP_MS) {
+      await client.query('rollback')
+      return null
+    }
+    const timelineStartMs = floorMs(input.timelineStartMs, scene.timeline_start_ms)
+
     await client.query(`delete from cut_scenes where id = $1 and cut_id = $2`, [scene.id, input.cutId])
     await renumberScenes(client, input.cutId)
 
+    await client.query(`select id from cut_video_clips where track_id = $1 for update`, [track.id])
     const count = await client.query<{ n: string }>(
       `select count(*)::text as n from cut_video_clips where track_id = $1`,
       [track.id],
@@ -81,10 +110,10 @@ export async function moveSceneToVideoOverlay(input: {
         track.id,
         input.cutId,
         position,
-        scene.mediaAssetId,
+        scene.media_asset_id,
         timelineStartMs,
-        scene.startMs,
-        scene.endMs,
+        scene.start_ms,
+        scene.end_ms,
       ],
     )
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
@@ -108,30 +137,42 @@ export async function moveVideoOverlayToScene(input: {
   videoClipId: string
   timelineStartMs?: number
 }): Promise<LaneMoveResult | null> {
-  const clips = await listCutVideoClips(input.cutId)
-  const clip = clips.find((entry) => entry.id === input.videoClipId)
-  if (!clip) return null
-  const duration = clip.endMs - clip.startMs
-  if (duration < MIN_CLIP_MS) return null
-
-  const timelineStartMs =
-    typeof input.timelineStartMs === 'number' && Number.isFinite(input.timelineStartMs)
-      ? Math.max(0, Math.floor(input.timelineStartMs))
-      : clip.timelineStartMs
-
   const client = await databasePool().connect()
   try {
     await client.query('begin')
-    const deleted = await client.query<{ track_id: string }>(
-      `delete from cut_video_clips where id = $1 and cut_id = $2 returning track_id`,
-      [clip.id, input.cutId],
+    const locked = await client.query<{
+      id: string
+      track_id: string
+      media_asset_id: string
+      start_ms: number
+      end_ms: number
+      timeline_start_ms: number
+    }>(
+      `select id, track_id, media_asset_id, start_ms, end_ms, timeline_start_ms
+         from cut_video_clips
+        where cut_id = $1
+        for update`,
+      [input.cutId],
     )
-    if (!deleted.rows[0]) {
+    const clip = locked.rows.find((row) => row.id === input.videoClipId)
+    if (!clip) {
       await client.query('rollback')
       return null
     }
-    await renumberVideoClips(client, deleted.rows[0].track_id)
+    const duration = clip.end_ms - clip.start_ms
+    if (duration < MIN_CLIP_MS) {
+      await client.query('rollback')
+      return null
+    }
+    const timelineStartMs = floorMs(input.timelineStartMs, clip.timeline_start_ms)
 
+    await client.query(`delete from cut_video_clips where id = $1 and cut_id = $2`, [
+      clip.id,
+      input.cutId,
+    ])
+    await renumberVideoClips(client, clip.track_id)
+
+    await client.query(`select id from cut_scenes where cut_id = $1 for update`, [input.cutId])
     const count = await client.query<{ n: string }>(
       `select count(*)::text as n from cut_scenes where cut_id = $1`,
       [input.cutId],
@@ -145,9 +186,9 @@ export async function moveVideoOverlayToScene(input: {
         randomUUID(),
         input.cutId,
         position,
-        clip.mediaAssetId,
-        clip.startMs,
-        clip.endMs,
+        clip.media_asset_id,
+        clip.start_ms,
+        clip.end_ms,
         timelineStartMs,
       ],
     )

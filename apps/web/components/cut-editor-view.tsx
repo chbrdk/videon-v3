@@ -145,6 +145,13 @@ export function CutEditorView({
   const cutPlayheadRef = useRef(0)
   const playingRef = useRef(false)
   const restoringRef = useRef(false)
+  const pendingLaneSelectRef = useRef<{
+    toLane: 'v1' | 'v2'
+    mediaAssetId: string
+    timelineStartMs: number
+    startMs: number
+    endMs: number
+  } | null>(null)
   const advanceLockRef = useRef<number | null>(null)
   const playbackCacheRef = useRef<Map<string, string>>(new Map())
   const currentMediaIdRef = useRef<string | null>(null)
@@ -382,6 +389,37 @@ export function CutEditorView({
     setAudioClips(body.audioClips ?? [])
     setVideoClips(body.videoClips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
+    const pendingLane = pendingLaneSelectRef.current
+    if (pendingLane) {
+      pendingLaneSelectRef.current = null
+      if (pendingLane.toLane === 'v2') {
+        const match = (body.videoClips ?? []).find(
+          (clip) =>
+            clip.mediaAssetId === pendingLane.mediaAssetId &&
+            clip.startMs === pendingLane.startMs &&
+            clip.endMs === pendingLane.endMs &&
+            Math.abs(clip.timelineStartMs - pendingLane.timelineStartMs) <= 1,
+        )
+        if (match) {
+          setSelectedVideoClipId(match.id)
+          setSelectedAudioClipId(null)
+        }
+      } else {
+        const nextClips = body.clips ?? []
+        const matchIndex = nextClips.findIndex(
+          (clip) =>
+            clip.scene.mediaAssetId === pendingLane.mediaAssetId &&
+            clip.scene.startMs === pendingLane.startMs &&
+            clip.scene.endMs === pendingLane.endMs &&
+            Math.abs((clip.scene.timelineStartMs ?? 0) - pendingLane.timelineStartMs) <= 1,
+        )
+        if (matchIndex >= 0) {
+          setActiveIndex(matchIndex)
+          setSelectedVideoClipId(null)
+          setSelectedAudioClipId(null)
+        }
+      }
+    }
     const nextVoice: Record<string, number[]> = {}
     const nextMusic: Record<string, number[]> = {}
     const nextMix: Record<string, number[]> = {}
@@ -1595,7 +1633,30 @@ export function CutEditorView({
           onMoveClip={(sceneId, timelineStartMs) =>
             void patchTimeline({ action: 'moveScene', sceneId, timelineStartMs })
           }
-          onMoveClipLane={(input) =>
+          onMoveClipLane={(input) => {
+            if (input.fromLane === 'v1') {
+              const scene = clips.find((clip) => clip.scene.id === input.clipId)?.scene
+              if (scene) {
+                pendingLaneSelectRef.current = {
+                  toLane: 'v2',
+                  mediaAssetId: scene.mediaAssetId,
+                  timelineStartMs: input.timelineStartMs,
+                  startMs: scene.startMs,
+                  endMs: scene.endMs,
+                }
+              }
+            } else {
+              const clip = videoClips.find((entry) => entry.id === input.clipId)
+              if (clip) {
+                pendingLaneSelectRef.current = {
+                  toLane: 'v1',
+                  mediaAssetId: clip.mediaAssetId,
+                  timelineStartMs: input.timelineStartMs,
+                  startMs: clip.startMs,
+                  endMs: clip.endMs,
+                }
+              }
+            }
             void patchTimeline({
               action: 'moveClipLane',
               fromLane: input.fromLane,
@@ -1603,7 +1664,12 @@ export function CutEditorView({
               clipId: input.clipId,
               timelineStartMs: input.timelineStartMs,
             })
-          }
+          }}
+          onLaneMoveBlocked={(reason) => {
+            if (reason === 'last_v1_scene') {
+              notifyError('Der letzte V1-Clip kann nicht nach V2 verschoben werden.')
+            }
+          }}
           onTrim={(sceneId, startMs, endMs, timelineStartMs) =>
             void patchTimeline({
               action: 'trim',

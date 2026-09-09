@@ -587,8 +587,8 @@ async function applyCutPatch(input: {
         409,
         'invalid_payload',
         fromLane === 'v1'
-          ? 'Clip could not move to V2 (V1 needs at least one scene)'
-          : 'Clip could not move to V1',
+          ? 'Letzter V1-Clip kann nicht nach V2 (mindestens eine Scene nötig)'
+          : 'Clip konnte nicht nach V1 verschoben werden',
       )
     }
     return apiJson(request, { scenes: moved.scenes, videoClips: moved.videoClips })

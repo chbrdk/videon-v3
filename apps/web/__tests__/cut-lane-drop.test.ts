@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVideoLaneDrop } from '@/lib/cut-lane-drop'
+import { laneDropHighlight, resolveVideoLaneDrop } from '@/lib/cut-lane-drop'
 
 describe('resolveVideoLaneDrop', () => {
   const v1 = { top: 0, bottom: 40 }
@@ -21,9 +21,29 @@ describe('resolveVideoLaneDrop', () => {
     expect(resolveVideoLaneDrop({ clientY: 240, v1, v2 })).toBe('v2')
   })
 
+  it('handles collapsed / zero-height tracks', () => {
+    const collapsedV2 = { top: 200, bottom: 200 }
+    expect(resolveVideoLaneDrop({ clientY: 50, v1, v2: collapsedV2 })).toBe('v1')
+    expect(resolveVideoLaneDrop({ clientY: 210, v1, v2: collapsedV2 })).toBe('v2')
+
+    const collapsedV1 = { top: 0, bottom: 0 }
+    expect(resolveVideoLaneDrop({ clientY: 10, v1: collapsedV1, v2 })).toBe('v1')
+    expect(resolveVideoLaneDrop({ clientY: 180, v1: collapsedV1, v2 })).toBe('v2')
+  })
+
   it('handles missing rects', () => {
     expect(resolveVideoLaneDrop({ clientY: 10, v1: null, v2: null })).toBeNull()
     expect(resolveVideoLaneDrop({ clientY: 10, v1, v2: null })).toBe('v1')
     expect(resolveVideoLaneDrop({ clientY: 10, v1: null, v2 })).toBe('v2')
+  })
+})
+
+describe('laneDropHighlight', () => {
+  it('only highlights the opposite lane', () => {
+    expect(laneDropHighlight({ fromLane: 'v1', targetLane: 'v1' })).toBeNull()
+    expect(laneDropHighlight({ fromLane: 'v1', targetLane: 'v2', canMoveToV2: true })).toBe('v2')
+    expect(laneDropHighlight({ fromLane: 'v1', targetLane: 'v2', canMoveToV2: false })).toBeNull()
+    expect(laneDropHighlight({ fromLane: 'v2', targetLane: 'v1' })).toBe('v1')
+    expect(laneDropHighlight({ fromLane: 'v2', targetLane: 'v2' })).toBeNull()
   })
 })
