@@ -12,7 +12,7 @@ import {
 import { createWriteStream } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
 import type { Readable } from 'node:stream'
-import { sha256HexFromStream } from './object-checksum'
+import { sha256HexFromS3Body } from './object-checksum'
 import { ensureBrowserUploadCors } from './bucket-cors'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { objectStorageConfig, storageUrlLooksBrowserReachable } from '@/lib/runtime-config'
@@ -66,7 +66,32 @@ function buildS3Client(input: {
       accessKeyId: input.accessKeyId,
       secretAccessKey: input.secretAccessKey,
     },
+    // Default WHEN_SUPPORTED tries to hash flowing/web streams and fails UploadPart.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   })
+}
+
+/** Collect a web request body into a Buffer (used for ≤8MiB multipart parts). */
+async function readWebStreamToBuffer(
+  body: ReadableStream<Uint8Array> | null,
+  expectedBytes: number,
+): Promise<Buffer> {
+  if (!body) throw new Error('Upload body is missing')
+  const reader = body.getReader()
+  const chunks: Buffer[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value?.byteLength) continue
+    chunks.push(Buffer.from(value))
+    total += value.byteLength
+  }
+  if (total !== expectedBytes) {
+    throw new Error(`Stream size ${total} does not match declared ${expectedBytes}`)
+  }
+  return chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks, total)
 }
 
 /** Private S3-compatible boundary. Signed URLs are always short-lived and workspace-scoped. */
@@ -166,21 +191,22 @@ export class S3ObjectStore implements ObjectStore {
     body: ReadableStream<Uint8Array> | null
   }): Promise<{ etag: string }> {
     assertWorkspaceKey(input.workspaceId, input.storageKey)
-    if (!input.body) throw new Error('Upload part body is missing')
     if (!Number.isInteger(input.partNumber) || input.partNumber < 1 || input.partNumber > 10000) {
       throw new Error('partNumber must be between 1 and 10000')
     }
     if (!Number.isSafeInteger(input.bytes) || input.bytes <= 0) {
       throw new Error('Upload part size is invalid')
     }
+    // Buffer parts (≤8MiB): AWS SDK cannot hash flowing web streams for UploadPart.
+    const buffer = await readWebStreamToBuffer(input.body, input.bytes)
     const result = await this.client.send(
       new UploadPartCommand({
         Bucket: this.bucket,
         Key: input.storageKey,
         UploadId: input.uploadId,
         PartNumber: input.partNumber,
-        Body: input.body,
-        ContentLength: input.bytes,
+        Body: buffer,
+        ContentLength: buffer.byteLength,
       }),
     )
     if (!result.ETag) throw new Error('UploadPart returned no ETag')
@@ -260,12 +286,15 @@ export class S3ObjectStore implements ObjectStore {
     assertWorkspaceKey(input.workspaceId, input.storageKey)
     if (!input.mimeType.startsWith('video/')) throw new Error('Only video uploads may be stored')
     if (!Number.isSafeInteger(input.bytes) || input.bytes <= 0) throw new Error('Upload size is invalid')
+    // Prefer Node Readable — web streams trip SDK checksum hashing.
+    const { Readable } = await import('node:stream')
     if (!input.body) throw new Error('Upload body is missing')
+    const nodeBody = Readable.fromWeb(input.body as import('node:stream/web').ReadableStream)
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: input.storageKey,
-        Body: input.body,
+        Body: nodeBody,
         ContentType: input.mimeType,
         ContentLength: input.bytes,
       }),
@@ -341,7 +370,7 @@ export class S3ObjectStore implements ObjectStore {
       new GetObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
     )
     if (!object.Body) throw new Error('Stored object body is missing')
-    return sha256HexFromStream(object.Body as AsyncIterable<Uint8Array>)
+    return sha256HexFromS3Body(object.Body as Parameters<typeof sha256HexFromS3Body>[0])
   }
 
   async uploadFileFromPath(input: {
