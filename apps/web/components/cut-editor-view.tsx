@@ -1537,6 +1537,15 @@ export function CutEditorView({
           onMoveClip={(sceneId, timelineStartMs) =>
             void patchTimeline({ action: 'moveScene', sceneId, timelineStartMs })
           }
+          onMoveClipLane={(input) =>
+            void patchTimeline({
+              action: 'moveClipLane',
+              fromLane: input.fromLane,
+              toLane: input.toLane,
+              clipId: input.clipId,
+              timelineStartMs: input.timelineStartMs,
+            })
+          }
           onTrim={(sceneId, startMs, endMs, timelineStartMs) =>
             void patchTimeline({
               action: 'trim',

@@ -113,6 +113,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 4. WHEN the operator drags a V1 clip body THEN the editor MUST call `moveScene` (free arrange on `timeline_start_ms`). Edge handles MUST resize clip duration (source trim); Slip/Roll remain optional toolbar modes.
 5. WHEN V1 clips overlap THEN the clip with higher `position` MUST win program video at that Cut time **unless** an unmuted V2 overlay clip covers the same time (then V2 wins — `cut-multi-track.md`).
 6. WHEN the Cut timeline renders THEN it MUST show a **V2** video overlay lane directly under V1. Bin drop / body drag / edge resize on V2 MUST call `addVideoClip` / `moveVideoClip` / `trimVideoClip`.
+7. WHEN the operator drags a clip body from V1 onto V2 (or V2 onto V1) THEN the editor MUST call `moveClipLane` and relocate the clip (not copy).
 4. WHEN timeline clips/lanes support authoring actions THEN right-click MUST use `ContextMenu` (`timeline-context-menu.md`).
 
 ## Acceptance

@@ -80,7 +80,15 @@ Create a Cut.
 | `trimVideoClip` | `videoClipId`, `startMs`?, `endMs`?, optional `timelineStartMs` | `{ videoClips }` |
 | `moveVideoClip` | `videoClipId`, `timelineStartMs` | `{ videoClips }` |
 | `deleteVideoClip` | `videoClipId` | `{ videoClips }` |
+| `moveClipLane` | `fromLane` (`v1`\|`v2`), `toLane` (`v1`\|`v2`), `clipId`, optional `timelineStartMs` | `{ scenes, videoClips }` |
 | `setTrackMuted` | `trackId`, `muted` | `{ tracks }` |
+
+#### `moveClipLane` (V1 ↔ V2)
+
+Moves a clip between the main V1 track (`cut_scenes`) and the V2 overlay (`cut_video_clips`). Media + in/out are preserved; `timelineStartMs` MAY update the free-arrange start.
+
+- `fromLane: "v1"`, `toLane: "v2"`: `clipId` is a scene id. Fails if fewer than two V1 scenes would remain.
+- `fromLane: "v2"`, `toLane: "v1"`: `clipId` is a video clip id.
 
 `GET /api/cuts/:id` includes `tracks`, `audioClips`, and `videoClips` (empty arrays when none).
 

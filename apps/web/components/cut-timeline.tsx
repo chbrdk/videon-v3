@@ -102,6 +102,12 @@ type CutTimelineProps = {
   onSeek: (cutMs: number) => void
   onReorder: (sceneIds: string[]) => void
   onMoveClip?: (sceneId: string, timelineStartMs: number) => void
+  onMoveClipLane?: (input: {
+    fromLane: 'v1' | 'v2'
+    toLane: 'v1' | 'v2'
+    clipId: string
+    timelineStartMs: number
+  }) => void
   onTrim: (sceneId: string, startMs: number, endMs: number, timelineStartMs?: number) => void
   onRollTrim?: (leftSceneId: string, boundaryMs: number) => void
   onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null; timelineStartMs?: number }) => void
@@ -149,6 +155,7 @@ export function CutTimeline({
   onSeek,
   onReorder,
   onMoveClip,
+  onMoveClipLane,
   onTrim,
   onRollTrim,
   onDropMedia,
@@ -168,6 +175,7 @@ export function CutTimeline({
   hasStemAudio = false,
 }: CutTimelineProps) {
   const videoTrackRef = useRef<HTMLDivElement | null>(null)
+  const videoOverlayTrackRef = useRef<HTMLDivElement | null>(null)
   const lanesRef = useRef<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const [dragSceneId, setDragSceneId] = useState<string | null>(null)
@@ -202,6 +210,8 @@ export function CutTimeline({
     sceneId: string
     originTimelineStartMs: number
     pointerStartX: number
+    pointerStartY: number
+    lastClientY: number
     armed: boolean
     previewStartMs: number
   } | null>(null)
@@ -397,7 +407,7 @@ export function CutTimeline({
   }
 
   const startClipMove = (event: ReactPointerEvent<HTMLDivElement>, item: CutTimelineItem) => {
-    if (disabled || !onMoveClip) return
+    if (disabled || (!onMoveClip && !onMoveClipLane)) return
     if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
     event.stopPropagation()
     event.preventDefault()
@@ -411,6 +421,8 @@ export function CutTimeline({
       sceneId: item.scene.id,
       originTimelineStartMs: item.cutStartMs,
       pointerStartX: event.clientX,
+      pointerStartY: event.clientY,
+      lastClientY: event.clientY,
       armed: false,
       previewStartMs: item.cutStartMs,
     }
@@ -420,11 +432,12 @@ export function CutTimeline({
       const current = moveRef.current
       if (!current || current.sceneId !== origin.sceneId) return
       const deltaPx = moveEvent.clientX - current.pointerStartX
-      if (!current.armed && Math.abs(deltaPx) < 4) return
+      const deltaPy = moveEvent.clientY - current.pointerStartY
+      if (!current.armed && Math.abs(deltaPx) < 4 && Math.abs(deltaPy) < 4) return
       current.armed = true
+      current.lastClientY = moveEvent.clientY
       setDragSceneId(current.sceneId)
-      const deltaMs = Math.round(deltaPx * msPerPixel)
-      const nextStart = Math.max(0, snapCutMs(current.originTimelineStartMs + deltaMs, snapPoints))
+      const nextStart = Math.max(0, snapCutMs(current.originTimelineStartMs + Math.round(deltaPx * msPerPixel), snapPoints))
       current.previewStartMs = nextStart
       setMovePreview({ sceneId: current.sceneId, timelineStartMs: nextStart })
     }
@@ -436,7 +449,18 @@ export function CutTimeline({
       moveRef.current = null
       setDragSceneId(null)
       setMovePreview(null)
-      if (!current?.armed || !onMoveClip) return
+      if (!current?.armed) return
+      const targetLane = videoLaneAtClientY(current.lastClientY)
+      if (targetLane === 'v2' && onMoveClipLane) {
+        onMoveClipLane({
+          fromLane: 'v1',
+          toLane: 'v2',
+          clipId: current.sceneId,
+          timelineStartMs: current.previewStartMs,
+        })
+        return
+      }
+      if (!onMoveClip) return
       if (current.previewStartMs === current.originTimelineStartMs) return
       onMoveClip(current.sceneId, current.previewStartMs)
     }
@@ -639,6 +663,8 @@ export function CutTimeline({
     clipId: string
     originTimelineStartMs: number
     pointerStartX: number
+    pointerStartY: number
+    lastClientY: number
     armed: boolean
     previewStartMs: number
   } | null>(null)
@@ -709,8 +735,21 @@ export function CutTimeline({
     }
   }
 
+  const videoLaneAtClientY = (clientY: number): 'v1' | 'v2' | null => {
+    const v1 = videoTrackRef.current?.getBoundingClientRect()
+    const v2 = videoOverlayTrackRef.current?.getBoundingClientRect()
+    if (v2 && clientY >= v2.top && clientY <= v2.bottom) return 'v2'
+    if (v1 && clientY >= v1.top && clientY <= v1.bottom) return 'v1'
+    if (v1 && v2) {
+      const mid1 = (v1.top + v1.bottom) / 2
+      const mid2 = (v2.top + v2.bottom) / 2
+      return Math.abs(clientY - mid2) <= Math.abs(clientY - mid1) ? 'v2' : 'v1'
+    }
+    return null
+  }
+
   const startV2ClipMove = (event: ReactPointerEvent<HTMLDivElement>, clip: CutTimelineVideoClip) => {
-    if (disabled || !onMoveVideoClip) return
+    if (disabled || (!onMoveVideoClip && !onMoveClipLane)) return
     if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
     event.stopPropagation()
     event.preventDefault()
@@ -718,6 +757,8 @@ export function CutTimeline({
       clipId: clip.id,
       originTimelineStartMs: clip.timelineStartMs,
       pointerStartX: event.clientX,
+      pointerStartY: event.clientY,
+      lastClientY: event.clientY,
       armed: false,
       previewStartMs: clip.timelineStartMs,
     }
@@ -726,9 +767,14 @@ export function CutTimeline({
       const current = v2MoveRef.current
       if (!current || current.clipId !== origin.clipId) return
       const deltaPx = moveEvent.clientX - current.pointerStartX
-      if (!current.armed && Math.abs(deltaPx) < 4) return
+      const deltaPy = moveEvent.clientY - current.pointerStartY
+      if (!current.armed && Math.abs(deltaPx) < 4 && Math.abs(deltaPy) < 4) return
       current.armed = true
-      const nextStart = Math.max(0, snapCutMs(current.originTimelineStartMs + Math.round(deltaPx * msPerPixel), snapPoints))
+      current.lastClientY = moveEvent.clientY
+      const nextStart = Math.max(
+        0,
+        snapCutMs(current.originTimelineStartMs + Math.round(deltaPx * msPerPixel), snapPoints),
+      )
       current.previewStartMs = nextStart
       setV2MovePreview({ clipId: current.clipId, timelineStartMs: nextStart })
     }
@@ -738,7 +784,18 @@ export function CutTimeline({
       const current = v2MoveRef.current
       v2MoveRef.current = null
       setV2MovePreview(null)
-      if (!current?.armed || !onMoveVideoClip) return
+      if (!current?.armed) return
+      const targetLane = videoLaneAtClientY(current.lastClientY)
+      if (targetLane === 'v1' && onMoveClipLane) {
+        onMoveClipLane({
+          fromLane: 'v2',
+          toLane: 'v1',
+          clipId: current.clipId,
+          timelineStartMs: current.previewStartMs,
+        })
+        return
+      }
+      if (!onMoveVideoClip) return
       if (current.previewStartMs === current.originTimelineStartMs) return
       onMoveVideoClip(current.clipId, current.previewStartMs)
     }
@@ -1025,6 +1082,7 @@ export function CutTimeline({
               </div>
 
               <div
+                ref={videoOverlayTrackRef}
                 className={`videon-cut-timeline__track videon-cut-timeline__track--video videon-cut-timeline__track--v2${tracks.v2.hidden ? ' is-collapsed' : ''}${tracks.v2.muted ? ' is-muted' : ''}`}
                 onPointerDown={onTrackPointerDown}
                 onDragOver={onV2TrackDragOver}

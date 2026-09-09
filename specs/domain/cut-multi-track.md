@@ -69,6 +69,7 @@ Clips MAY overlap on the bus (export MUST mix all unmuted clips).
 | GET cut detail | Include `tracks` + `audioClips` + `videoClips` |
 | `addAudioClip` / `trimAudioClip` / `moveAudioClip` / `deleteAudioClip` | Audio bus edits |
 | `addVideoClip` / `trimVideoClip` / `moveVideoClip` / `deleteVideoClip` | V2 overlay edits |
+| `moveClipLane` | Move clip between V1 (`cut_scenes`) and V2 (`cut_video_clips`); keep media + in/out |
 | `setTrackMuted` | Toggle mute for audio bus or V2 by `trackId` |
 
 ## Playback / export
@@ -102,11 +103,14 @@ V2 is **video-only** in the program mix (no V2 clip audio).
 4. WHEN the V2 track is muted THEN playback and MP4 export MUST ignore V2 and show V1 only.
 5. WHERE stem lanes render THEN they MUST remain read-only Source Audio visuals.
 6. WHEN unmuted V2 and V1 both cover `t` THEN program video MUST show V2.
+7. WHEN the operator drops a V1 clip onto the V2 lane THEN the editor MUST call `moveClipLane` (move, not copy). V1 MUST keep at least one scene.
+8. WHEN the operator drops a V2 clip onto the V1 lane THEN the editor MUST call `moveClipLane` onto `cut_scenes`.
 
 ## Acceptance
 
 - [ ] Default Voice-Over and V2 tracks visible
 - [ ] Drop/add/move/trim/delete on bus and V2
+- [ ] Drag clips between V1 and V2 (lane move)
 - [ ] Program shows V2 over V1 when unmuted; mute V2 restores V1
 - [ ] MP4 export respects V2 overlay + bus audio
 - [ ] Premiere ZIP imports with V2 video track + bus audio

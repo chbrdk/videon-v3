@@ -33,6 +33,7 @@ import {
   moveCutVideoClip,
   trimCutVideoClip,
 } from '@/lib/db/cut-video'
+import { moveSceneToVideoOverlay, moveVideoOverlayToScene } from '@/lib/db/cut-lane-move'
 import { findMediaAsset } from '@/lib/db/media'
 import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { CUT_CANVAS_DEFAULT_FPS, resolveCutCanvas } from '@/lib/cut-canvas'
@@ -555,6 +556,42 @@ async function applyCutPatch(input: {
     const videoClips = await deleteCutVideoClip({ cutId: cut.id, videoClipId })
     if (!videoClips) return apiError(request, 409, 'invalid_payload', 'Video clip could not be deleted')
     return apiJson(request, { videoClips })
+  }
+
+  if (action === 'moveClipLane') {
+    const fromLane = typeof record.fromLane === 'string' ? record.fromLane.trim() : ''
+    const toLane = typeof record.toLane === 'string' ? record.toLane.trim() : ''
+    const clipId = typeof record.clipId === 'string' ? record.clipId.trim() : ''
+    if (!clipId) return apiError(request, 400, 'invalid_payload', 'clipId is required for moveClipLane')
+    if (
+      (fromLane === 'v1' && toLane === 'v2') === false &&
+      (fromLane === 'v2' && toLane === 'v1') === false
+    ) {
+      return apiError(request, 400, 'invalid_payload', 'moveClipLane requires fromLane/toLane v1↔v2')
+    }
+    const moved =
+      fromLane === 'v1'
+        ? await moveSceneToVideoOverlay({
+            cutId: cut.id,
+            sceneId: clipId,
+            ...(timelineStartMs !== null ? { timelineStartMs } : {}),
+          })
+        : await moveVideoOverlayToScene({
+            cutId: cut.id,
+            videoClipId: clipId,
+            ...(timelineStartMs !== null ? { timelineStartMs } : {}),
+          })
+    if (!moved) {
+      return apiError(
+        request,
+        409,
+        'invalid_payload',
+        fromLane === 'v1'
+          ? 'Clip could not move to V2 (V1 needs at least one scene)'
+          : 'Clip could not move to V1',
+      )
+    }
+    return apiJson(request, { scenes: moved.scenes, videoClips: moved.videoClips })
   }
 
   if (action === 'setTrackMuted') {
