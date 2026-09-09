@@ -110,6 +110,8 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 1. WHEN the cut timeline renders ticks THEN it MUST compose `TimelineRuler` (percent offsets); seek/trim math MAY stay pixel-based in app code.
 2. WHEN video/transcript/audio clips render THEN they MUST use `TimelineClip` (and `Waveform` for audio peaks) — edit handlers stay app-local.
 3. `TimelineTrack` dual-column chrome is optional while VIDEON keeps the two-column header + lanes layout.
+4. WHEN the operator drags a V1 clip body THEN the editor MUST call `moveScene` (free arrange on `timeline_start_ms`). Edge handles MUST resize clip duration (source trim); Slip/Roll remain optional toolbar modes.
+5. WHEN V1 clips overlap THEN the clip with higher `position` MUST win program video at that Cut time.
 4. WHEN timeline clips/lanes support authoring actions THEN right-click MUST use `ContextMenu` (`timeline-context-menu.md`).
 
 ## Acceptance

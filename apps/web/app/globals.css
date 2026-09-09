@@ -834,8 +834,8 @@ main {
   --nle-border: var(--line);
   --nle-border-strong: color-mix(in srgb, var(--line) 70%, var(--fg));
   --nle-track: color-mix(in srgb, var(--bg0, var(--bg)) 96%, var(--ink, #0f172a));
-  --nle-clip: color-mix(in srgb, var(--accent, #2f5f8f) 55%, transparent);
-  --nle-clip-active: color-mix(in srgb, var(--accent, #4f8ec8) 70%, transparent);
+  --nle-clip: color-mix(in srgb, var(--accent, #2f5f8f) 78%, #0a1624 22%);
+  --nle-clip-active: color-mix(in srgb, var(--accent, #4f8ec8) 85%, #0a1624 15%);
   --nle-transcript: color-mix(in srgb, var(--accent, #6b5a2a) 40%, transparent);
   --nle-playhead: var(--accent, #ff6b00);
   --nle-mark: color-mix(in srgb, var(--accent, #fbbf24) 28%, transparent);
@@ -1646,7 +1646,7 @@ main {
   inset: 0 0 1.1rem;
   background-size: cover;
   background-position: center;
-  opacity: 0.55;
+  opacity: 0.92;
   pointer-events: none;
   overflow: hidden;
 }
@@ -1833,6 +1833,21 @@ main {
   place-items: center;
   color: var(--nle-muted);
   padding: 2rem;
+}
+
+.videon-nle__video-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.videon-nle__video-stack .videon-nle__video-placeholder--gap {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  background: #000;
+  color: color-mix(in srgb, var(--nle-muted, #9aa4b2) 80%, white);
 }
 
 .videon-nle__transport {
@@ -2611,9 +2626,21 @@ main {
   min-height: 1.45rem;
 }
 
-.videon-cut-timeline__header-label.is-muted,
-.videon-cut-timeline__track.is-muted {
+.videon-cut-timeline__header-label.is-muted {
   opacity: 0.45;
+}
+
+.videon-cut-timeline__track.is-muted {
+  opacity: 1;
+}
+
+.videon-cut-timeline__track.is-muted::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--nle-track, transparent) 12%, transparent);
+  opacity: 0.35;
 }
 
 .videon-cut-timeline__header-name {
@@ -2866,7 +2893,7 @@ a.videon-cut-timeline__track-btn--link {
 }
 
 .videon-cut-timeline__clip.is-dragging {
-  opacity: 0.55;
+  opacity: 0.78;
 }
 
 .videon-cut-timeline__clip--scene {
@@ -2887,14 +2914,19 @@ a.videon-cut-timeline__track-btn--link {
 }
 
 .videon-cut-timeline__clip-label {
+  position: relative;
+  z-index: 1;
   font-size: 0.64rem;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: #f8fafc;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
   max-width: 100%;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.5));
+  margin: 0 -0.35rem -0.2rem;
+  padding: 0.35rem 0.35rem 0.15rem;
 }
 
 .videon-cut-timeline__clip--insight .videon-cut-timeline__clip-label {
@@ -2911,7 +2943,14 @@ a.videon-cut-timeline__track-btn--link {
   width: 0.7rem;
   cursor: ew-resize;
   z-index: 3;
-  opacity: 0.85;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.videon-cut-timeline__clip:hover .videon-cut-timeline__clip-handle,
+.videon-cut-timeline__clip.is-active .videon-cut-timeline__clip-handle,
+.videon-cut-timeline__clip.is-trimming .videon-cut-timeline__clip-handle {
+  opacity: 0.95;
 }
 
 .videon-cut-timeline__clip-handle--start {

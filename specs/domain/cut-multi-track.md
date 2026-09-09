@@ -15,7 +15,7 @@ Add at least one **independent audio bus track** on a Cut for overlays (music, f
 | V1 video sequence | **Keep** — `cut_scenes` remains authoritative for video |
 | Stem lanes A1/A2 | **Keep as visuals** — derived from media stems, not bus clips |
 | Extra audio bus | **Keep** — `cut_tracks` + `cut_audio_clips` |
-| Multi-video tracks / transitions | **Drop** this wave |
+| Multi-video tracks / transitions | **Drop** this wave — **Follow-up:** `video_overlay` / V2 free-place track (mirror `cut_audio_clips`) |
 | Mic capture / TTS voice-replace | **Drop** — spur ready only |
 
 ## Model

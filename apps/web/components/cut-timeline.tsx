@@ -40,6 +40,7 @@ export type CutTimelineClip = {
     position: number
     startMs: number
     endMs: number
+    timelineStartMs?: number
     mediaAssetId: string
   }
   media: { id: string; originalFilename: string } | null
@@ -86,9 +87,10 @@ type CutTimelineProps = {
   onSelectClip: (index: number) => void
   onSeek: (cutMs: number) => void
   onReorder: (sceneIds: string[]) => void
-  onTrim: (sceneId: string, startMs: number, endMs: number) => void
+  onMoveClip?: (sceneId: string, timelineStartMs: number) => void
+  onTrim: (sceneId: string, startMs: number, endMs: number, timelineStartMs?: number) => void
   onRollTrim?: (leftSceneId: string, boundaryMs: number) => void
-  onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null }) => void
+  onDropMedia?: (payload: MediaDragPayload & { afterSceneId?: string | null; timelineStartMs?: number }) => void
   onDropAudioBus?: (payload: MediaDragPayload & { timelineStartMs: number }) => void
   onSelectAudioClip?: (clipId: string | null) => void
   onMoveAudioClip?: (clipId: string, timelineStartMs: number) => void
@@ -107,7 +109,7 @@ export function CutTimeline({
   cutPlayheadMs,
   totalDurationMs,
   transcriptSegments = [],
-  trimMode = 'trim',
+  trimMode = 'ripple',
   disabled = false,
   platformProjectId,
   playbackUrlByMediaId = {},
@@ -123,6 +125,7 @@ export function CutTimeline({
   onSelectClip,
   onSeek,
   onReorder,
+  onMoveClip,
   onTrim,
   onRollTrim,
   onDropMedia,
@@ -145,8 +148,10 @@ export function CutTimeline({
     sceneId: string
     startMs: number
     endMs: number
+    timelineStartMs?: number
     rollBoundaryMs?: number
   } | null>(null)
+  const [movePreview, setMovePreview] = useState<{ sceneId: string; timelineStartMs: number } | null>(null)
   const [dropHintMs, setDropHintMs] = useState<number | null>(null)
   const [tracks, setTracks] = useState(DEFAULT_CUT_TRACK_STATE)
   const trimRef = useRef<{
@@ -154,10 +159,18 @@ export function CutTimeline({
     edge: 'start' | 'end'
     startMs: number
     endMs: number
+    timelineStartMs: number
     pointerStartX: number
     clipWidthPx: number
     mediaDurationMs: number
     nextClip?: { startMs: number; endMs: number; sameMedia: boolean }
+  } | null>(null)
+  const moveRef = useRef<{
+    sceneId: string
+    originTimelineStartMs: number
+    pointerStartX: number
+    armed: boolean
+    previewStartMs: number
   } | null>(null)
 
   const zoomLevel = TIMELINE_ZOOM_LEVELS[zoomIndex] ?? 1
@@ -195,15 +208,27 @@ export function CutTimeline({
   }, [tracks.v1.muted, tracks.a1.muted, tracks.a2.muted, tracks.ab.muted, onTrackMutesChange])
 
   const timeline = useMemo(() => {
-    const scenes = clips.map((clip) => ({
-      id: clip.scene.id,
-      position: clip.scene.position,
-      mediaAssetId: clip.scene.mediaAssetId,
-      startMs: trimPreview?.sceneId === clip.scene.id ? trimPreview.startMs : clip.scene.startMs,
-      endMs: trimPreview?.sceneId === clip.scene.id ? trimPreview.endMs : clip.scene.endMs,
-    }))
+    const scenes = clips.map((clip) => {
+      const trimming = trimPreview?.sceneId === clip.scene.id
+      const moving = movePreview?.sceneId === clip.scene.id
+      const baseTimelineStart = clip.scene.timelineStartMs ?? 0
+      let timelineStartMs = baseTimelineStart
+      if (trimming && typeof trimPreview.timelineStartMs === 'number') {
+        timelineStartMs = trimPreview.timelineStartMs
+      } else if (moving) {
+        timelineStartMs = movePreview.timelineStartMs
+      }
+      return {
+        id: clip.scene.id,
+        position: clip.scene.position,
+        mediaAssetId: clip.scene.mediaAssetId,
+        startMs: trimming ? trimPreview.startMs : clip.scene.startMs,
+        endMs: trimming ? trimPreview.endMs : clip.scene.endMs,
+        timelineStartMs,
+      }
+    })
     return buildCutTimeline(scenes)
-  }, [clips, trimPreview])
+  }, [clips, trimPreview, movePreview])
 
   const snapPoints = useMemo(
     () => cutEdgeSnapPoints(timeline, cutPlayheadMs),
@@ -295,13 +320,20 @@ export function CutTimeline({
   )
 
   const onClipDragStart = (event: DragEvent<HTMLDivElement>, sceneId: string) => {
-    if (disabled) return
+    if (disabled || onMoveClip) {
+      event.preventDefault()
+      return
+    }
     setDragSceneId(sceneId)
     event.dataTransfer.setData('text/plain', sceneId)
     event.dataTransfer.effectAllowed = 'move'
   }
 
   const onClipDrop = (targetSceneId: string) => {
+    if (onMoveClip) {
+      setDragSceneId(null)
+      return
+    }
     if (!dragSceneId || dragSceneId === targetSceneId) {
       setDragSceneId(null)
       return
@@ -320,14 +352,55 @@ export function CutTimeline({
     setDragSceneId(null)
   }
 
+  const startClipMove = (event: ReactPointerEvent<HTMLDivElement>, item: CutTimelineItem) => {
+    if (disabled || !onMoveClip || tracks.v1.muted) return
+    if ((event.target as HTMLElement).closest('.videon-cut-timeline__clip-handle')) return
+    event.stopPropagation()
+    const origin = {
+      sceneId: item.scene.id,
+      originTimelineStartMs: item.cutStartMs,
+      pointerStartX: event.clientX,
+      armed: false,
+      previewStartMs: item.cutStartMs,
+    }
+    moveRef.current = origin
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const current = moveRef.current
+      if (!current || current.sceneId !== origin.sceneId) return
+      const deltaPx = moveEvent.clientX - current.pointerStartX
+      if (!current.armed && Math.abs(deltaPx) < 5) return
+      current.armed = true
+      setDragSceneId(current.sceneId)
+      const deltaMs = Math.round(deltaPx * msPerPixel)
+      const nextStart = Math.max(0, snapCutMs(current.originTimelineStartMs + deltaMs, snapPoints))
+      current.previewStartMs = nextStart
+      setMovePreview({ sceneId: current.sceneId, timelineStartMs: nextStart })
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      const current = moveRef.current
+      moveRef.current = null
+      setDragSceneId(null)
+      setMovePreview(null)
+      if (!current?.armed || !onMoveClip) return
+      if (current.previewStartMs === current.originTimelineStartMs) return
+      onMoveClip(current.sceneId, current.previewStartMs)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
   const onTrackDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (disabled || !onDropMedia) return
     if (!event.dataTransfer.types.includes(MEDIA_DRAG_TYPE)) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
-    if (lanesRef.current && totalDurationMs > 0) {
+    if (lanesRef.current) {
       const rect = lanesRef.current.getBoundingClientRect()
-      const x = Math.min(Math.max(event.clientX - rect.left, 0), contentWidthPx)
+      const maxX = Math.max(contentWidthPx, rect.width)
+      const x = Math.min(Math.max(event.clientX - rect.left, 0), maxX)
       setDropHintMs(snapCutMs(Math.floor(x * msPerPixel), snapPoints))
     }
   }
@@ -341,19 +414,16 @@ export function CutTimeline({
     try {
       const payload = JSON.parse(raw) as MediaDragPayload
       if (!payload.mediaAssetId) return
+      const rect = lanesRef.current?.getBoundingClientRect()
+      const maxX = Math.max(contentWidthPx, rect?.width ?? 0)
       const cutMs =
-        lanesRef.current && totalDurationMs > 0
+        rect != null
           ? snapCutMs(
-              Math.floor(
-                Math.min(Math.max(event.clientX - lanesRef.current.getBoundingClientRect().left, 0), contentWidthPx) *
-                  msPerPixel,
-              ),
+              Math.floor(Math.min(Math.max(event.clientX - rect.left, 0), maxX) * msPerPixel),
               snapPoints,
             )
           : totalDurationMs
-      const afterIndex = timeline.findIndex((item) => cutMs >= item.cutStartMs && cutMs < item.cutEndMs)
-      const afterSceneId = afterIndex >= 0 ? timeline[afterIndex]?.scene.id ?? null : timeline.at(-1)?.scene.id ?? null
-      onDropMedia({ ...payload, afterSceneId })
+      onDropMedia({ ...payload, timelineStartMs: cutMs, afterSceneId: null })
     } catch {
       // ignore invalid drag payloads
     }
@@ -401,7 +471,14 @@ export function CutTimeline({
     if (disabled) return
     const clipElement = event.currentTarget.closest('.videon-cut-timeline__clip')
     if (!clipElement) return
-    const nextClip = clips[item.index + 1]
+    const nextByTime = timeline.find(
+      (entry) =>
+        entry.scene.id !== item.scene.id &&
+        Math.abs(entry.cutStartMs - item.cutEndMs) < 2,
+    )
+    const nextClip = nextByTime
+      ? clips.find((clip) => clip.scene.id === nextByTime.scene.id)
+      : undefined
     const sameMedia = nextClip?.scene.mediaAssetId === item.scene.mediaAssetId
     const mediaDurationMs =
       sourceDurationMsByMediaId[item.scene.mediaAssetId] ?? Math.max(item.scene.endMs, item.durationMs)
@@ -410,11 +487,12 @@ export function CutTimeline({
       edge,
       startMs: item.scene.startMs,
       endMs: item.scene.endMs,
+      timelineStartMs: item.cutStartMs,
       pointerStartX: event.clientX,
       clipWidthPx: clipElement.getBoundingClientRect().width,
       mediaDurationMs,
       nextClip: nextClip
-        ? { startMs: nextClip.scene.startMs, endMs: nextClip.scene.endMs, sameMedia }
+        ? { startMs: nextClip.scene.startMs, endMs: nextClip.scene.endMs, sameMedia: Boolean(sameMedia) }
         : undefined,
     }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -423,9 +501,11 @@ export function CutTimeline({
   const onTrimPointerMove = (event: ReactPointerEvent<HTMLSpanElement>) => {
     const trim = trimRef.current
     if (!trim || trim.clipWidthPx <= 0) return
-    const sourceDuration = trim.endMs - trim.startMs
     const deltaPx = event.clientX - trim.pointerStartX
-    const sourceDelta = Math.round((deltaPx / trim.clipWidthPx) * sourceDuration)
+    const sourceDelta =
+      trimMode === 'trim'
+        ? Math.round((deltaPx / trim.clipWidthPx) * (trim.endMs - trim.startMs))
+        : Math.round(deltaPx * msPerPixel)
     const preview = computeTrimPreview({
       mode: trimMode,
       edge: trim.edge,
@@ -436,7 +516,11 @@ export function CutTimeline({
       nextClip: trim.nextClip ?? null,
     })
     if (!preview) return
-    setTrimPreview({ sceneId: trim.sceneId, ...preview })
+    const timelineStartMs =
+      trimMode !== 'trim' && trim.edge === 'start'
+        ? Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
+        : trim.timelineStartMs
+    setTrimPreview({ sceneId: trim.sceneId, ...preview, timelineStartMs })
   }
 
   const endTrim = (event: ReactPointerEvent<HTMLSpanElement>) => {
@@ -452,8 +536,14 @@ export function CutTimeline({
       if (preview.rollBoundaryMs !== trim.endMs) onRollTrim(trim.sceneId, preview.rollBoundaryMs)
       return
     }
-    if (preview.startMs === trim.startMs && preview.endMs === trim.endMs) return
-    onTrim(preview.sceneId, preview.startMs, preview.endMs)
+    if (
+      preview.startMs === trim.startMs &&
+      preview.endMs === trim.endMs &&
+      (preview.timelineStartMs ?? trim.timelineStartMs) === trim.timelineStartMs
+    ) {
+      return
+    }
+    onTrim(preview.sceneId, preview.startMs, preview.endMs, preview.timelineStartMs)
   }
 
   const playheadLeftPx = timelineLeftPx(cutPlayheadMs, msPerPixel)
@@ -600,10 +690,11 @@ export function CutTimeline({
                   const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
                   const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
                   const isActive = item.index === activeIndex
-                  const clip = clips[item.index]
+                  const clip = clips.find((entry) => entry.scene.id === item.scene.id)
                   const label = clip?.media?.originalFilename ?? `Clip ${item.index + 1}`
                   const thumbMs = item.scene.startMs + Math.floor(item.durationMs / 2)
                   const playbackUrl = clip ? playbackUrlByMediaId[clip.scene.mediaAssetId] ?? null : null
+                  const isMoving = dragSceneId === item.scene.id || movePreview?.sceneId === item.scene.id
                   return (
                     <TimelineClip
                       key={item.scene.id}
@@ -612,15 +703,17 @@ export function CutTimeline({
                       widthPct={contentWidthPx > 0 ? (widthPx / contentWidthPx) * 100 : 0}
                       active={isActive}
                       tone="accent"
-                      className={`videon-cut-timeline__clip${dragSceneId === item.scene.id ? ' is-dragging' : ''}${isActive ? ' is-active-clip' : ''}`}
+                      className={`videon-cut-timeline__clip${isMoving ? ' is-dragging' : ''}${isActive ? ' is-active-clip' : ''}${trimPreview?.sceneId === item.scene.id ? ' is-trimming' : ''}`}
                       style={{ pointerEvents: tracks.v1.muted ? 'none' : undefined }}
-                      draggable={!disabled && !tracks.v1.muted}
+                      draggable={!disabled && !tracks.v1.muted && !onMoveClip}
                       onDragStart={(event) => onClipDragStart(event, item.scene.id)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={() => onClipDrop(item.scene.id)}
+                      onPointerDown={(event) => startClipMove(event, item)}
                       onContextMenu={(event) => emitClipContextMenu(event, item)}
                       onClick={(event) => {
                         event.stopPropagation()
+                        if (moveRef.current?.armed) return
                         onSelectAudioClip?.(null)
                         onSelectClip(item.index)
                         seekFromPointer(event.clientX)
@@ -636,38 +729,34 @@ export function CutTimeline({
                       <span className="videon-cut-timeline__clip-duration" aria-hidden="true">
                         {formatClock(item.durationMs)}
                       </span>
-                      {isActive ? (
-                        <>
-                          <span
-                            className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--start"
-                            title={
-                              trimMode === 'trim'
-                                ? 'Slip: Fenster schieben'
-                                : trimMode === 'ripple'
-                                  ? 'Ripple: Startkante (Dauer)'
-                                  : 'Roll: gemeinsame Grenze'
-                            }
-                            onPointerDown={(event) => startTrim(event, item, 'start')}
-                            onPointerMove={onTrimPointerMove}
-                            onPointerUp={endTrim}
-                            onPointerCancel={endTrim}
-                          />
-                          <span
-                            className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--end"
-                            title={
-                              trimMode === 'trim'
-                                ? 'Slip: Fenster schieben'
-                                : trimMode === 'ripple'
-                                  ? 'Ripple: Endkante (Dauer)'
-                                  : 'Roll: gemeinsame Grenze'
-                            }
-                            onPointerDown={(event) => startTrim(event, item, 'end')}
-                            onPointerMove={onTrimPointerMove}
-                            onPointerUp={endTrim}
-                            onPointerCancel={endTrim}
-                          />
-                        </>
-                      ) : null}
+                      <span
+                        className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--start"
+                        title={
+                          trimMode === 'trim'
+                            ? 'Slip: Fenster schieben'
+                            : trimMode === 'ripple'
+                              ? 'Resize: Startkante (Länge)'
+                              : 'Roll: gemeinsame Grenze'
+                        }
+                        onPointerDown={(event) => startTrim(event, item, 'start')}
+                        onPointerMove={onTrimPointerMove}
+                        onPointerUp={endTrim}
+                        onPointerCancel={endTrim}
+                      />
+                      <span
+                        className="videon-cut-timeline__clip-handle videon-cut-timeline__clip-handle--end"
+                        title={
+                          trimMode === 'trim'
+                            ? 'Slip: Fenster schieben'
+                            : trimMode === 'ripple'
+                              ? 'Resize: Endkante (Länge)'
+                              : 'Roll: gemeinsame Grenze'
+                        }
+                        onPointerDown={(event) => startTrim(event, item, 'end')}
+                        onPointerMove={onTrimPointerMove}
+                        onPointerUp={endTrim}
+                        onPointerCancel={endTrim}
+                      />
                     </TimelineClip>
                   )
                 })

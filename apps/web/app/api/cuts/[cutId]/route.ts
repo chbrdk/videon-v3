@@ -8,6 +8,7 @@ import {
   mergeCutSceneWithNext,
   deleteCutScene,
   trimCutScene,
+  moveCutScene,
   reorderCutScenes,
   renameCut,
   updateCutCanvas,
@@ -316,6 +317,25 @@ async function applyCutPatch(input: {
     return apiJson(request, { scenes })
   }
 
+  const timelineStartMsEarly =
+    typeof record.timelineStartMs === 'number' && Number.isFinite(record.timelineStartMs)
+      ? Math.max(0, Math.floor(record.timelineStartMs))
+      : null
+
+  if (action === 'moveScene') {
+    if (!sceneId) return apiError(request, 400, 'invalid_payload', 'sceneId is required for moveScene')
+    if (timelineStartMsEarly === null) {
+      return apiError(request, 400, 'invalid_payload', 'timelineStartMs is required for moveScene')
+    }
+    const scenes = await moveCutScene({
+      cutId: cut.id,
+      sceneId,
+      timelineStartMs: timelineStartMsEarly,
+    })
+    if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
+    return apiJson(request, { scenes })
+  }
+
   if (action === 'restore') {
     if (!rawRestoreScenes?.length) {
       return apiError(request, 400, 'invalid_payload', 'scenes is required for restore')
@@ -374,6 +394,7 @@ async function applyCutPatch(input: {
     const scenes = await addScenesToCut({
       cutId: cut.id,
       afterSceneId,
+      ...(timelineStartMsEarly !== null ? { timelineStartMs: timelineStartMsEarly } : {}),
       scenes: resolved.scenes,
     })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
@@ -398,6 +419,7 @@ async function applyCutPatch(input: {
       endMs,
       sceneKey,
       afterSceneId,
+      ...(timelineStartMsEarly !== null ? { timelineStartMs: timelineStartMsEarly } : {}),
     })
     if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
     return apiJson(request, { scenes })
@@ -492,11 +514,16 @@ async function applyCutPatch(input: {
     if (startMs === null && endMs === null) {
       return apiError(request, 400, 'invalid_payload', 'startMs or endMs is required for trim')
     }
+    const timelineStartMs =
+      typeof record.timelineStartMs === 'number' && Number.isFinite(record.timelineStartMs)
+        ? Math.max(0, Math.floor(record.timelineStartMs))
+        : null
     scenes = await trimCutScene({
       cutId: cut.id,
       sceneId,
       ...(startMs !== null ? { startMs } : {}),
       ...(endMs !== null ? { endMs } : {}),
+      ...(timelineStartMs !== null ? { timelineStartMs } : {}),
     })
   } else {
     return apiError(request, 400, 'invalid_payload', 'Unsupported action')

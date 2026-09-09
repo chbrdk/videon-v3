@@ -11,6 +11,8 @@ export type PremiereXmlScene = {
   mediaAssetId: string
   startMs: number
   endMs: number
+  /** Free-arrange placement; when omitted, falls back to contiguous packing by index. */
+  timelineStartMs?: number
   originalFilename: string
   /** Basename under `media/` in the ZIP; defaults to sanitized originalFilename. */
   zipMediaName?: string
@@ -51,9 +53,13 @@ function framesFromMs(ms: number, fps: number): number {
 }
 
 function timelineStartMs(scenes: PremiereXmlScene[], index: number): number {
+  const scene = scenes[index]
+  if (scene && typeof scene.timelineStartMs === 'number' && Number.isFinite(scene.timelineStartMs)) {
+    return Math.max(0, Math.floor(scene.timelineStartMs))
+  }
   let cumulative = 0
   for (let i = 0; i < index; i += 1) {
-    cumulative += Math.max(0, scenes[i].endMs - scenes[i].startMs)
+    cumulative += Math.max(0, scenes[i]!.endMs - scenes[i]!.startMs)
   }
   return cumulative
 }

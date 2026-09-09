@@ -24,6 +24,7 @@ export type CutScene = {
   mediaAssetId: string
   startMs: number
   endMs: number
+  timelineStartMs: number
   sceneKey: string | null
   createdAt: string
 }
@@ -48,9 +49,13 @@ type CutSceneRow = {
   media_asset_id: string
   start_ms: number
   end_ms: number
+  timeline_start_ms: number
   scene_key: string | null
   created_at: Date | string
 }
+
+const CUT_SCENE_SELECT =
+  'id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key, created_at'
 
 function mapCut(row: CutRow): Cut {
   return {
@@ -75,6 +80,7 @@ function mapCutScene(row: CutSceneRow): CutScene {
     mediaAssetId: row.media_asset_id,
     startMs: row.start_ms,
     endMs: row.end_ms,
+    timelineStartMs: row.timeline_start_ms ?? 0,
     sceneKey: row.scene_key,
     createdAt: new Date(row.created_at).toISOString(),
   }
@@ -108,10 +114,10 @@ export async function findCut(cutId: string): Promise<Cut | null> {
 
 export async function listScenesForCut(cutId: string): Promise<CutScene[]> {
   const result = await databasePool().query<CutSceneRow>(
-    `select id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key, created_at
+    `select ${CUT_SCENE_SELECT}
        from cut_scenes
       where cut_id = $1
-      order by position asc`,
+      order by timeline_start_ms asc, position asc`,
     [cutId],
   )
   return result.rows.map(mapCutScene)
@@ -147,11 +153,13 @@ export async function createCutWithScenes(input: {
       ],
     )
     const scenes: CutScene[] = []
+    let timelineCursor = 0
     for (const [position, scene] of input.scenes.entries()) {
+      const duration = Math.max(0, scene.endMs - scene.startMs)
       const sceneResult = await client.query<CutSceneRow>(
-        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
-         values ($1, $2, $3, $4, $5, $6, $7)
-         returning id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key, created_at`,
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         returning ${CUT_SCENE_SELECT}`,
         [
           randomUUID(),
           cutId,
@@ -159,10 +167,12 @@ export async function createCutWithScenes(input: {
           scene.mediaAssetId,
           scene.startMs,
           scene.endMs,
+          timelineCursor,
           scene.sceneKey?.trim() || null,
         ],
       )
       scenes.push(mapCutScene(sceneResult.rows[0]))
+      timelineCursor += duration
     }
     await client.query('commit')
     return { cut: mapCut(cutResult.rows[0]), scenes }
@@ -248,7 +258,7 @@ async function renumberCutScenes(client: PoolClient, cutId: string): Promise<voi
 
 export async function findCutScene(sceneId: string): Promise<CutScene | null> {
   const result = await databasePool().query<CutSceneRow>(
-    `select id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key, created_at
+    `select ${CUT_SCENE_SELECT}
        from cut_scenes where id = $1`,
     [sceneId],
   )
@@ -275,9 +285,10 @@ export async function splitCutScene(input: {
       [scene.id, splitAt],
     )
     await shiftCutScenePositionsUp(client, scene.cutId, scene.position + 1, 1)
+    const rightTimelineStart = scene.timelineStartMs + (splitAt - scene.startMs)
     await client.query(
-      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
+      `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         randomUUID(),
         scene.cutId,
@@ -285,6 +296,7 @@ export async function splitCutScene(input: {
         scene.mediaAssetId,
         splitAt,
         scene.endMs,
+        rightTimelineStart,
         scene.sceneKey,
       ],
     )
@@ -350,6 +362,7 @@ export async function trimCutScene(input: {
   sceneId: string
   startMs?: number
   endMs?: number
+  timelineStartMs?: number
 }): Promise<CutScene[] | null> {
   const scene = await findCutScene(input.sceneId)
   if (!scene || scene.cutId !== input.cutId) return null
@@ -357,14 +370,44 @@ export async function trimCutScene(input: {
   const startMs = input.startMs ?? scene.startMs
   const endMs = input.endMs ?? scene.endMs
   if (endMs - startMs < MIN_CLIP_MS || startMs >= endMs) return null
+  const timelineStartMs =
+    typeof input.timelineStartMs === 'number' && Number.isFinite(input.timelineStartMs)
+      ? Math.max(0, Math.floor(input.timelineStartMs))
+      : scene.timelineStartMs
 
   const client = await databasePool().connect()
   try {
     await client.query('begin')
-    await client.query(`update cut_scenes set start_ms = $2, end_ms = $3 where id = $1`, [
+    await client.query(
+      `update cut_scenes set start_ms = $2, end_ms = $3, timeline_start_ms = $4 where id = $1`,
+      [scene.id, Math.floor(startMs), Math.floor(endMs), timelineStartMs],
+    )
+    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    await client.query('commit')
+    return listScenesForCut(input.cutId)
+  } catch (error) {
+    await client.query('rollback')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function moveCutScene(input: {
+  cutId: string
+  sceneId: string
+  timelineStartMs: number
+}): Promise<CutScene[] | null> {
+  const scene = await findCutScene(input.sceneId)
+  if (!scene || scene.cutId !== input.cutId) return null
+  const timelineStartMs = Math.max(0, Math.floor(input.timelineStartMs))
+
+  const client = await databasePool().connect()
+  try {
+    await client.query('begin')
+    await client.query(`update cut_scenes set timeline_start_ms = $2 where id = $1`, [
       scene.id,
-      Math.floor(startMs),
-      Math.floor(endMs),
+      timelineStartMs,
     ])
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
     await client.query('commit')
@@ -417,17 +460,22 @@ export async function reorderCutScenes(input: {
   const existingIds = new Set(scenes.map((scene) => scene.id))
   if (input.sceneIds.some((sceneId) => !existingIds.has(sceneId))) return null
   if (new Set(input.sceneIds).size !== input.sceneIds.length) return null
+  const byId = new Map(scenes.map((scene) => [scene.id, scene]))
 
   const client = await databasePool().connect()
   try {
     await client.query('begin')
     await parkAllCutScenePositions(client, input.cutId)
+    let timelineCursor = 0
     for (const [position, sceneId] of input.sceneIds.entries()) {
-      await client.query(`update cut_scenes set position = $2 where id = $1 and cut_id = $3`, [
-        sceneId,
-        position,
-        input.cutId,
-      ])
+      const scene = byId.get(sceneId)
+      if (!scene) continue
+      const duration = Math.max(0, scene.endMs - scene.startMs)
+      await client.query(
+        `update cut_scenes set position = $2, timeline_start_ms = $3 where id = $1 and cut_id = $4`,
+        [sceneId, position, timelineCursor, input.cutId],
+      )
+      timelineCursor += duration
     }
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
     await client.query('commit')
@@ -494,10 +542,12 @@ export async function addSceneToCut(input: {
   endMs: number
   sceneKey?: string | null
   afterSceneId?: string | null
+  timelineStartMs?: number
 }): Promise<CutScene[] | null> {
   return addScenesToCut({
     cutId: input.cutId,
     afterSceneId: input.afterSceneId,
+    timelineStartMs: input.timelineStartMs,
     scenes: [
       {
         mediaAssetId: input.mediaAssetId,
@@ -512,11 +562,23 @@ export async function addSceneToCut(input: {
 export async function addScenesToCut(input: {
   cutId: string
   afterSceneId?: string | null
-  scenes: Array<{ mediaAssetId: string; startMs: number; endMs: number; sceneKey?: string | null }>
+  timelineStartMs?: number
+  scenes: Array<{
+    mediaAssetId: string
+    startMs: number
+    endMs: number
+    sceneKey?: string | null
+    timelineStartMs?: number
+  }>
 }): Promise<CutScene[] | null> {
   if (!input.scenes.length) return null
-  const normalized: Array<{ mediaAssetId: string; startMs: number; endMs: number; sceneKey: string | null }> =
-    []
+  const normalized: Array<{
+    mediaAssetId: string
+    startMs: number
+    endMs: number
+    sceneKey: string | null
+    timelineStartMs: number | null
+  }> = []
   for (const scene of input.scenes) {
     const startMs = Math.floor(scene.startMs)
     const endMs = Math.floor(scene.endMs)
@@ -527,14 +589,26 @@ export async function addScenesToCut(input: {
       startMs,
       endMs,
       sceneKey: scene.sceneKey?.trim() || null,
+      timelineStartMs:
+        typeof scene.timelineStartMs === 'number' && Number.isFinite(scene.timelineStartMs)
+          ? Math.max(0, Math.floor(scene.timelineStartMs))
+          : null,
     })
   }
 
   const client = await databasePool().connect()
   try {
     await client.query('begin')
-    const locked = await client.query<{ id: string; position: number }>(
-      `select id, position from cut_scenes where cut_id = $1 order by position asc for update`,
+    const locked = await client.query<{
+      id: string
+      position: number
+      start_ms: number
+      end_ms: number
+      timeline_start_ms: number
+    }>(
+      `select id, position, start_ms, end_ms, timeline_start_ms
+         from cut_scenes where cut_id = $1
+         order by position asc for update`,
       [input.cutId],
     )
     let position = locked.rows.length
@@ -543,11 +617,31 @@ export async function addScenesToCut(input: {
       if (index >= 0) position = index + 1
     }
 
+    let timelineCursor: number
+    if (typeof input.timelineStartMs === 'number' && Number.isFinite(input.timelineStartMs)) {
+      timelineCursor = Math.max(0, Math.floor(input.timelineStartMs))
+    } else if (input.afterSceneId) {
+      const after = locked.rows.find((scene) => scene.id === input.afterSceneId)
+      timelineCursor = after
+        ? after.timeline_start_ms + Math.max(0, after.end_ms - after.start_ms)
+        : locked.rows.reduce(
+            (max, row) => Math.max(max, row.timeline_start_ms + Math.max(0, row.end_ms - row.start_ms)),
+            0,
+          )
+    } else {
+      timelineCursor = locked.rows.reduce(
+        (max, row) => Math.max(max, row.timeline_start_ms + Math.max(0, row.end_ms - row.start_ms)),
+        0,
+      )
+    }
+
     await shiftCutScenePositionsUp(client, input.cutId, position, normalized.length)
     for (const [offset, scene] of normalized.entries()) {
+      const duration = Math.max(0, scene.endMs - scene.startMs)
+      const startAt = scene.timelineStartMs ?? timelineCursor
       await client.query(
-        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           randomUUID(),
           input.cutId,
@@ -555,9 +649,11 @@ export async function addScenesToCut(input: {
           scene.mediaAssetId,
           scene.startMs,
           scene.endMs,
+          startAt,
           scene.sceneKey,
         ],
       )
+      timelineCursor = startAt + duration
     }
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
     await client.query('commit')
@@ -578,6 +674,7 @@ export async function restoreCutTimeline(input: {
     mediaAssetId: string
     startMs: number
     endMs: number
+    timelineStartMs?: number
     sceneKey?: string | null
   }>
 }): Promise<CutScene[] | null> {
@@ -591,10 +688,16 @@ export async function restoreCutTimeline(input: {
     await client.query('begin')
     await client.query(`delete from cut_scenes where cut_id = $1`, [input.cutId])
     const ordered = [...input.scenes].sort((a, b) => a.position - b.position)
+    let timelineCursor = 0
     for (const [position, scene] of ordered.entries()) {
+      const duration = Math.max(0, scene.endMs - scene.startMs)
+      const timelineStartMs =
+        typeof scene.timelineStartMs === 'number' && Number.isFinite(scene.timelineStartMs)
+          ? Math.max(0, Math.floor(scene.timelineStartMs))
+          : timelineCursor
       await client.query(
-        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, scene_key)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
+        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           scene.id,
           input.cutId,
@@ -602,9 +705,11 @@ export async function restoreCutTimeline(input: {
           scene.mediaAssetId,
           scene.startMs,
           scene.endMs,
+          timelineStartMs,
           scene.sceneKey?.trim() || null,
         ],
       )
+      timelineCursor = timelineStartMs + duration
     }
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
     await client.query('commit')

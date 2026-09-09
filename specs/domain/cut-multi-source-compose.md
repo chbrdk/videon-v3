@@ -26,6 +26,7 @@ Assemble and edit a **Cut** from analysis scenes (and whole clips) drawn from **
 |-------|-------|
 | `cut_scenes.media_asset_id` | Required; any ready media in the Cut’s workspace |
 | `start_ms` / `end_ms` | Required; `end > start`; min clip 500 ms |
+| `timeline_start_ms` | Placement on the Cut timeline (≥ 0). Gaps and overlaps allowed. Program length = max(timeline_start + duration). At overlap, higher `position` wins playback/export. |
 | `scene_key` | Optional; copied from analysis / search at insert; not re-bound on re-analysis |
 | Cut canvas | `width` / `height` / `frame_rate` from primary media at create (export target) |
 
@@ -35,19 +36,20 @@ Assemble and edit a **Cut** from analysis scenes (and whole clips) drawn from **
 |---------|----------|
 | Cut editor Bin (left rail) | Mediathek-Karten (2-Spalten-Grid + Suche): zuerst volle Videos mit `sceneCount`; Klick öffnet Szenen-Karten; Insert per Klick/DnD; Ganzes Video / Voice-Over im Szenen-Header |
 | Cut Clip properties (right rail) | Selected clip In/Out / Dauer / Media via `PropertyInspector` — `videon-ui-surfaces.md` |
-| Cut timeline | DnD reorder, edge trim (TRIM/RIPPLE/ROLL), ContextMenu Phase 2 — `timeline-context-menu.md` |
+| Cut timeline | Free arrange (`moveScene`), edge resize (source trim + timeline anchor), Slip/Roll modes, ContextMenu Phase 2 — `timeline-context-menu.md` |
 | Chat Hit-Strip / Media search | „Zum Cut“ / „Alle zum Cut“ via active Cut (`videon.v3.activeCut`) |
-| Product API | `POST /api/cuts` multi-`scenes[]`; `PATCH` `addScenes` batch |
+| Product API | `POST /api/cuts` multi-`scenes[]`; `PATCH` `addScenes` batch; `moveScene` |
 | MCP | `videon.cut_create` (multi-media scenes); `videon.cut_scenes_add` append |
 | Catalog | `videon.cut.create` (existing Flow+Agent); `videon.cut.scenes.add` Agent-only (`flow: false`) |
 | Flow node for scenes.add | **Out of scope** |
 | Hit-Card capability confirm for batch add | **Out of scope** (local active-Cut path only) |
-| Extra audio bus track | **Welle 2** — `cut-multi-track.md` (not this compose wave) |
+| Extra audio bus track | Done — `cut-multi-track.md` |
+| Second video track (V2 overlay) | **Follow-up** — not this wave |
 
 ## Chrome parity
 
 - Cut compose MUST use dual docked rails (Bin + Clip properties) matching CREATION immersive patterns adapted for NLE — see `videon-ui-surfaces.md` Wave B.
-- Clip edit ops remain the existing `PATCH` actions (`trim`, `rollTrim`, `split`, `merge`, `delete`, `reorder`, `addScenes`); Welle 1 does not change the flat `cut_scenes` model.
+- Clip edit ops: `PATCH` `trim`, `rollTrim`, `split`, `merge`, `delete`, `reorder`, `moveScene`, `addScenes`.
 
 ## Export normalize
 

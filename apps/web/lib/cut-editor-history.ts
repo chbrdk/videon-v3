@@ -4,6 +4,7 @@ export type CutTimelineSnapshotScene = {
   mediaAssetId: string
   startMs: number
   endMs: number
+  timelineStartMs?: number
   sceneKey?: string | null
 }
 
@@ -21,6 +22,7 @@ export function snapshotFromClips(
       mediaAssetId: string
       startMs: number
       endMs: number
+      timelineStartMs?: number
       sceneKey?: string | null
     }
   }>,
@@ -34,6 +36,7 @@ export function snapshotFromClips(
       mediaAssetId: clip.scene.mediaAssetId,
       startMs: clip.scene.startMs,
       endMs: clip.scene.endMs,
+      timelineStartMs: clip.scene.timelineStartMs ?? 0,
       sceneKey: clip.scene.sceneKey ?? null,
     })),
     cutPlayheadMs,

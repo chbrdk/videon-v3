@@ -24,6 +24,7 @@ import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
   cutTotalDurationMs,
+  findTimelineItemAtCutMs,
   mapTranscriptToCutTimeline,
   splitSourceMsForCutPlayhead,
   type TranscriptSegment,
@@ -66,7 +67,14 @@ import { clampContextMenuPosition } from '@/lib/timeline-context-menu'
 import { useT } from '@/lib/user-prefs'
 
 type Clip = {
-  scene: { id: string; position: number; startMs: number; endMs: number; mediaAssetId: string }
+  scene: {
+    id: string
+    position: number
+    startMs: number
+    endMs: number
+    mediaAssetId: string
+    timelineStartMs: number
+  }
   media: { id: string; originalFilename: string; mimeType: string; durationMs?: number | null } | null
 }
 
@@ -176,7 +184,7 @@ export function CutEditorView({
     a2: false,
     ab: false,
   })
-  const [trimMode, setTrimMode] = useState<TrimMode>('trim')
+  const [trimMode, setTrimMode] = useState<TrimMode>('ripple')
   const [playbackUrlByMediaId, setPlaybackUrlByMediaId] = useState<Record<string, string>>({})
   const [voicePeaksByMediaId, setVoicePeaksByMediaId] = useState<Record<string, number[]>>({})
   const [musicPeaksByMediaId, setMusicPeaksByMediaId] = useState<Record<string, number[]>>({})
@@ -197,6 +205,7 @@ export function CutEditorView({
           mediaAssetId: clip.scene.mediaAssetId,
           startMs: clip.scene.startMs,
           endMs: clip.scene.endMs,
+          timelineStartMs: clip.scene.timelineStartMs ?? 0,
         })),
       ),
     [clips],
@@ -210,6 +219,7 @@ export function CutEditorView({
           mediaAssetId: clip.scene.mediaAssetId,
           startMs: clip.scene.startMs,
           endMs: clip.scene.endMs,
+          timelineStartMs: clip.scene.timelineStartMs ?? 0,
         })),
       ),
     [clips],
@@ -227,7 +237,14 @@ export function CutEditorView({
     }
     return next
   }, [clips])
-  const activeClip = clips[activeIndex]
+  const activeItem = timeline[activeIndex] ?? null
+  const activeClip =
+    (activeItem ? clips.find((clip) => clip.scene.id === activeItem.scene.id) : null) ??
+    clips[activeIndex] ??
+    null
+  const inTimelineGap = Boolean(
+    timeline.length > 0 && cutPlayheadMs < totalDurationMs && !findTimelineItemAtCutMs(timeline, cutPlayheadMs),
+  )
 
   const rememberSnapshot = useCallback(() => {
     if (restoringRef.current || clips.length === 0) return
@@ -276,7 +293,15 @@ export function CutEditorView({
         setCustomHeight(String(h))
       }
     }
-    setClips(body.clips ?? [])
+    setClips(
+      (body.clips ?? []).map((clip) => ({
+        ...clip,
+        scene: {
+          ...clip.scene,
+          timelineStartMs: clip.scene.timelineStartMs ?? 0,
+        },
+      })),
+    )
     setCutTracks(body.tracks ?? [])
     setAudioClips(body.audioClips ?? [])
     setTranscriptsByMediaId(body.transcripts ?? {})
@@ -392,8 +417,15 @@ export function CutEditorView({
       advanceLockRef.current = null
       const clamped = Math.max(0, Math.min(cutMs, totalDurationMs))
       setCutPlayheadMs(clamped)
-      const item = timeline.find((entry) => clamped >= entry.cutStartMs && clamped < entry.cutEndMs) ?? timeline.at(-1)
-      if (!item) return
+      const item = findTimelineItemAtCutMs(timeline, clamped)
+      if (!item) {
+        const video = videoRef.current
+        if (video && !video.paused) {
+          playingRef.current = false
+          video.pause()
+        }
+        return
+      }
       setActiveIndex(item.index)
       const sourceMs = item.scene.startMs + (clamped - item.cutStartMs)
       const video = videoRef.current
@@ -555,8 +587,8 @@ export function CutEditorView({
 
   useEffect(() => {
     const video = videoRef.current
-    const clip = clips[activeIndex]
     const item = timeline[activeIndex]
+    const clip = item ? clips.find((entry) => entry.scene.id === item.scene.id) : null
     if (!video || !clip || !item || !playbackUrl) return
 
     const frameMs = frameDurationMs(cut?.frameRate)
@@ -564,6 +596,8 @@ export function CutEditorView({
     const onLoaded = () => {
       if (video.readyState < 1) return
       const playhead = cutPlayheadRef.current
+      const mapped = findTimelineItemAtCutMs(timeline, playhead)
+      if (!mapped || mapped.scene.id !== item.scene.id) return
       const targetSec = (clip.scene.startMs + Math.max(playhead - item.cutStartMs, 0)) / 1000
       if (Number.isFinite(targetSec)) {
         try {
@@ -592,7 +626,9 @@ export function CutEditorView({
       }
 
       const nextTarget = nextPlaybackTarget(timeline, activeIndex)
-      const nextClip = nextTarget ? clips[nextTarget.index] ?? null : null
+      const nextClip = nextTarget
+        ? clips.find((entry) => entry.scene.id === timeline[nextTarget.index]?.scene.id) ?? null
+        : null
       const transition = resolveClipTransition({
         current: {
           mediaAssetId: clip.scene.mediaAssetId,
@@ -1310,14 +1346,22 @@ export function CutEditorView({
             onSeekDelta={(deltaMs) => nudgePlayhead(deltaMs)}
           >
             {playbackUrl ? (
-              <video
-                ref={videoRef}
-                className="videon-nle__video"
-                src={playbackUrl}
-                poster={activePosterUrl ?? undefined}
-                playsInline
-                preload={monitorEngaged || isPlaying ? 'auto' : 'none'}
-              />
+              <div className={`videon-nle__video-stack${inTimelineGap ? ' is-gap' : ''}`}>
+                <video
+                  ref={videoRef}
+                  className="videon-nle__video"
+                  src={playbackUrl}
+                  poster={activePosterUrl ?? undefined}
+                  playsInline
+                  preload={monitorEngaged || isPlaying ? 'auto' : 'none'}
+                  style={inTimelineGap ? { visibility: 'hidden' } : undefined}
+                />
+                {inTimelineGap ? (
+                  <div className="videon-nle__video-placeholder videon-nle__video-placeholder--gap" aria-label="Lücke">
+                    <Text role="body">Lücke</Text>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <div className="videon-nle__video-placeholder">
                 <Text role="body">Keine Wiedergabe für diesen Clip</Text>
@@ -1407,7 +1451,18 @@ export function CutEditorView({
           }}
           onSeek={seekToCutMs}
           onReorder={(sceneIds) => void patchTimeline({ action: 'reorder', sceneIds })}
-          onTrim={(sceneId, startMs, endMs) => void patchTimeline({ action: 'trim', sceneId, startMs, endMs })}
+          onMoveClip={(sceneId, timelineStartMs) =>
+            void patchTimeline({ action: 'moveScene', sceneId, timelineStartMs })
+          }
+          onTrim={(sceneId, startMs, endMs, timelineStartMs) =>
+            void patchTimeline({
+              action: 'trim',
+              sceneId,
+              startMs,
+              endMs,
+              ...(typeof timelineStartMs === 'number' ? { timelineStartMs } : {}),
+            })
+          }
           onRollTrim={(leftSceneId, boundaryMs) =>
             void patchTimeline({ action: 'rollTrim', leftSceneId, boundaryMs })
           }

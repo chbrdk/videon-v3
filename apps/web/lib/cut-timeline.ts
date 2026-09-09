@@ -6,6 +6,8 @@ export type CutTimelineScene = {
   mediaAssetId: string
   startMs: number
   endMs: number
+  /** Placement on the Cut timeline (gaps/overlaps allowed). */
+  timelineStartMs: number
 }
 
 export type CutTimelineItem = {
@@ -20,34 +22,54 @@ export function clipDurationMs(scene: Pick<CutTimelineScene, 'startMs' | 'endMs'
   return Math.max(scene.endMs - scene.startMs, 0)
 }
 
+/**
+ * Free-arrange timeline: cutStartMs comes from timelineStartMs.
+ * Sort for listing: timeline start, then position (overlap winner = higher position).
+ */
 export function buildCutTimeline(scenes: CutTimelineScene[]): CutTimelineItem[] {
-  const ordered = [...scenes].sort((a, b) => a.position - b.position)
-  let cutStartMs = 0
+  const ordered = [...scenes].sort((a, b) => {
+    const startDiff = a.timelineStartMs - b.timelineStartMs
+    if (startDiff !== 0) return startDiff
+    return a.position - b.position
+  })
   return ordered.map((scene, index) => {
     const durationMs = clipDurationMs(scene)
-    const item: CutTimelineItem = {
+    const cutStartMs = Math.max(0, Math.floor(scene.timelineStartMs))
+    return {
       scene,
       index,
       durationMs,
       cutStartMs,
       cutEndMs: cutStartMs + durationMs,
     }
-    cutStartMs += durationMs
-    return item
   })
 }
 
+/** Program length = furthest clip end (gaps do not add unless covered). */
 export function cutTotalDurationMs(scenes: CutTimelineScene[]): number {
-  return buildCutTimeline(scenes).reduce((total, item) => total + item.durationMs, 0)
+  const timeline = buildCutTimeline(scenes)
+  if (timeline.length === 0) return 0
+  return timeline.reduce((max, item) => Math.max(max, item.cutEndMs), 0)
 }
 
+/**
+ * At cutMs, prefer the covering clip with the highest position (overlap winner).
+ * In a gap, return null (caller may hold last frame / show black).
+ */
 export function findTimelineItemAtCutMs(timeline: CutTimelineItem[], cutMs: number): CutTimelineItem | null {
   if (timeline.length === 0) return null
   const clamped = Math.max(cutMs, 0)
-  const hit =
-    timeline.find((item) => clamped >= item.cutStartMs && clamped < item.cutEndMs) ??
-    timeline[timeline.length - 1]
-  return hit ?? null
+  const covering = timeline.filter((item) => clamped >= item.cutStartMs && clamped < item.cutEndMs)
+  if (covering.length === 0) {
+    // After last clip end: stay on last winner by end time; inside a gap: null.
+    const maxEnd = timeline.reduce((max, item) => Math.max(max, item.cutEndMs), 0)
+    if (clamped >= maxEnd) {
+      const atEnd = timeline.filter((item) => item.cutEndMs === maxEnd)
+      return atEnd.sort((a, b) => b.scene.position - a.scene.position)[0] ?? null
+    }
+    return null
+  }
+  return covering.sort((a, b) => b.scene.position - a.scene.position)[0] ?? null
 }
 
 export function sourceMsForCutPlayhead(timeline: CutTimelineItem[], cutMs: number): {
@@ -93,6 +115,20 @@ export function canTrimScene(
   const startMs = next.startMs ?? scene.startMs
   const endMs = next.endMs ?? scene.endMs
   return endMs - startMs >= MIN_CUT_CLIP_MS && startMs < endMs
+}
+
+/** Contiguous backfill helper for migration / reorder convenience. */
+export function contiguousTimelineStarts(
+  scenes: Array<Pick<CutTimelineScene, 'id' | 'position' | 'startMs' | 'endMs'>>,
+): Record<string, number> {
+  const ordered = [...scenes].sort((a, b) => a.position - b.position)
+  const starts: Record<string, number> = {}
+  let cursor = 0
+  for (const scene of ordered) {
+    starts[scene.id] = cursor
+    cursor += clipDurationMs(scene)
+  }
+  return starts
 }
 
 export type TranscriptSegment = {

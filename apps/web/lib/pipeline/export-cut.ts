@@ -13,6 +13,7 @@ import {
   markCutExportSucceeded,
 } from '@/lib/db/cut-exports'
 import { findMediaAssetDetail, type MediaAssetDetail } from '@/lib/db/media'
+import { buildProgramExportSlices } from '@/lib/cut-export-program'
 import { buildPremiereXmeml, assignPremiereZipMediaNames, premierePackageReadme, sanitizePremiereXmlFilename } from '@/lib/pipeline/export-premiere-xml'
 import { safeUnlink, writePremiereExportZip } from '@/lib/pipeline/export-premiere-zip'
 import { cutExportStorageKey } from '@/lib/storage/object-store'
@@ -154,6 +155,53 @@ async function concatSegments(
   }
 }
 
+async function extractBlackSegment(input: {
+  durationMs: number
+  destinationPath: string
+  width: number
+  height: number
+  frameRate: number
+}): Promise<void> {
+  const fps = Number.isFinite(input.frameRate) && input.frameRate > 0 ? input.frameRate : 25
+  const w = input.width > 0 ? input.width : 1280
+  const h = input.height > 0 ? input.height : 720
+  const durationSec = Math.max(input.durationMs / 1000, 0.04)
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      `color=c=black:s=${w}x${h}:r=${fps}`,
+      '-f',
+      'lavfi',
+      '-i',
+      'anullsrc=r=48000:cl=stereo',
+      '-t',
+      durationSec.toFixed(3),
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '20',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '160k',
+      '-shortest',
+      '-movflags',
+      '+faststart',
+      '-y',
+      input.destinationPath,
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  )
+}
+
 async function buildSegments(input: {
   scenes: CutScene[]
   sourceCache: Map<string, string>
@@ -165,15 +213,40 @@ async function buildSegments(input: {
   const height = input.cut.height && input.cut.height > 0 ? input.cut.height : 720
   const frameRate = input.cut.frameRate && input.cut.frameRate > 0 ? input.cut.frameRate : 25
 
-  for (const scene of input.scenes) {
-    const sourcePath = input.sourceCache.get(scene.mediaAssetId)
-    if (!sourcePath) throw new Error(`Source media unavailable for scene ${scene.id}`)
-    const segmentPath = join(tmpdir(), `videon-export-segment-${scene.id}-${randomUUID()}.mp4`)
-    if (input.reencode) {
+  const slices = buildProgramExportSlices(
+    input.scenes.map((scene) => ({
+      id: scene.id,
+      position: scene.position,
+      mediaAssetId: scene.mediaAssetId,
+      startMs: scene.startMs,
+      endMs: scene.endMs,
+      timelineStartMs: scene.timelineStartMs ?? 0,
+    })),
+  )
+
+  const needsPadOrOverlap = slices.some((slice) => slice.kind === 'black') || slices.length !== input.scenes.length
+  const forceReencode = input.reencode || needsPadOrOverlap
+
+  for (const slice of slices) {
+    const segmentPath = join(tmpdir(), `videon-export-segment-${randomUUID()}.mp4`)
+    if (slice.kind === 'black') {
+      await extractBlackSegment({
+        durationMs: slice.durationMs,
+        destinationPath: segmentPath,
+        width,
+        height,
+        frameRate,
+      })
+      segmentPaths.push(segmentPath)
+      continue
+    }
+    const sourcePath = input.sourceCache.get(slice.mediaAssetId)
+    if (!sourcePath) throw new Error(`Source media unavailable for scene ${slice.sceneId}`)
+    if (forceReencode) {
       await extractSegmentReencode({
         sourcePath,
-        startMs: scene.startMs,
-        endMs: scene.endMs,
+        startMs: slice.startMs,
+        endMs: slice.endMs,
         destinationPath: segmentPath,
         width,
         height,
@@ -182,8 +255,8 @@ async function buildSegments(input: {
     } else {
       await extractSegmentCopy({
         sourcePath,
-        startMs: scene.startMs,
-        endMs: scene.endMs,
+        startMs: slice.startMs,
+        endMs: slice.endMs,
         destinationPath: segmentPath,
       })
     }
@@ -311,6 +384,7 @@ async function runPremiereXmlExport(input: {
           mediaAssetId: scene.mediaAssetId,
           startMs: scene.startMs,
           endMs: scene.endMs,
+          timelineStartMs: scene.timelineStartMs ?? 0,
           originalFilename: media.originalFilename,
           zipMediaName: zipNames.get(scene.mediaAssetId),
           mediaDurationMs: media.durationMs,

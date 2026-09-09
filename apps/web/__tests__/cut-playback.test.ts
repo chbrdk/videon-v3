@@ -21,8 +21,8 @@ describe('cut playback', () => {
 
   it('returns the next timeline target', () => {
     const timeline = buildCutTimeline([
-      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 2000 },
-      { id: 'b', position: 1, mediaAssetId: 'm1', startMs: 2000, endMs: 5000 },
+      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 2000, timelineStartMs: 0 },
+      { id: 'b', position: 1, mediaAssetId: 'm1', startMs: 2000, endMs: 5000, timelineStartMs: 2000 },
     ])
     expect(nextPlaybackTarget(timeline, 0)).toEqual({
       index: 1,
@@ -31,6 +31,19 @@ describe('cut playback', () => {
       mediaAssetId: 'm1',
     })
     expect(nextPlaybackTarget(timeline, 1)).toBeNull()
+  })
+
+  it('skips gaps to the next covering clip', () => {
+    const timeline = buildCutTimeline([
+      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 1000, timelineStartMs: 0 },
+      { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 1000, timelineStartMs: 4000 },
+    ])
+    expect(nextPlaybackTarget(timeline, 0)).toEqual({
+      index: 1,
+      cutStartMs: 4000,
+      sourceStartMs: 0,
+      mediaAssetId: 'm2',
+    })
   })
 
   it('classifies same-media seek vs cross-media swap vs sequence end', () => {

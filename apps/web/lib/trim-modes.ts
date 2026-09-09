@@ -3,14 +3,14 @@ import { MIN_CUT_CLIP_MS } from '@/lib/cut-timeline'
 export type TrimMode = 'trim' | 'ripple' | 'roll'
 
 export const TRIM_MODE_LABELS: Record<TrimMode, string> = {
-  trim: 'TRIM (Slip)',
-  ripple: 'RIPPLE',
+  trim: 'SLIP',
+  ripple: 'RESIZE',
   roll: 'ROLL',
 }
 
 export const TRIM_MODE_HELP: Record<TrimMode, string> = {
-  trim: 'Slip: Quellfenster verschieben — Dauer und Sequenzlänge bleiben gleich',
-  ripple: 'Ripple: Kante ändert die Clip-Dauer — nachfolgende Clips rücken nach',
+  trim: 'Slip: Quellfenster verschieben — Clip-Länge auf der Timeline bleibt gleich',
+  ripple: 'Resize: Kante ändert die Clip-Länge (Free-Timeline, Nachbarn bleiben)',
   roll: 'Roll: gemeinsame Schnittgrenze zweier Clips derselben Quelle',
 }
 

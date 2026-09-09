@@ -3,25 +3,44 @@ import {
   buildCutTimeline,
   cutPlayheadForSourceMs,
   cutTotalDurationMs,
+  findTimelineItemAtCutMs,
   mapTranscriptToCutTimeline,
   splitSourceMsForCutPlayhead,
   sourceMsForCutPlayhead,
 } from '@/lib/cut-timeline'
 
 const scenes = [
-  { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 1000, endMs: 4000 },
-  { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 2000 },
+  { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 1000, endMs: 4000, timelineStartMs: 0 },
+  { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 2000, timelineStartMs: 3000 },
 ]
 
 describe('cut timeline mapping', () => {
   const timeline = buildCutTimeline(scenes)
 
-  it('builds sequential cut offsets from source in/out ranges', () => {
+  it('builds cut offsets from timelineStartMs + source duration', () => {
     expect(timeline).toHaveLength(2)
     expect(timeline[0]?.cutStartMs).toBe(0)
     expect(timeline[0]?.durationMs).toBe(3000)
     expect(timeline[1]?.cutStartMs).toBe(3000)
     expect(cutTotalDurationMs(scenes)).toBe(5000)
+  })
+
+  it('supports gaps in total duration', () => {
+    const gapped = [
+      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 1000, timelineStartMs: 0 },
+      { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 1000, timelineStartMs: 5000 },
+    ]
+    expect(cutTotalDurationMs(gapped)).toBe(6000)
+    expect(findTimelineItemAtCutMs(buildCutTimeline(gapped), 2500)).toBeNull()
+  })
+
+  it('picks higher position as overlap winner', () => {
+    const overlapped = [
+      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 4000, timelineStartMs: 0 },
+      { id: 'b', position: 2, mediaAssetId: 'm2', startMs: 0, endMs: 2000, timelineStartMs: 1000 },
+    ]
+    const tl = buildCutTimeline(overlapped)
+    expect(findTimelineItemAtCutMs(tl, 1500)?.scene.id).toBe('b')
   })
 
   it('maps cut playhead to source time inside the active clip', () => {
@@ -43,8 +62,8 @@ describe('cut timeline mapping', () => {
 describe('mapTranscriptToCutTimeline', () => {
   it('maps source transcript segments onto cut offsets', () => {
     const timeline = buildCutTimeline([
-      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 1000, endMs: 4000 },
-      { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 2000 },
+      { id: 'a', position: 0, mediaAssetId: 'm1', startMs: 1000, endMs: 4000, timelineStartMs: 0 },
+      { id: 'b', position: 1, mediaAssetId: 'm2', startMs: 0, endMs: 2000, timelineStartMs: 3000 },
     ])
     const mapped = mapTranscriptToCutTimeline(timeline, {
       m1: [{ startMs: 2000, endMs: 3500, text: 'erster clip' }],

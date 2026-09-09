@@ -36,7 +36,21 @@ Create a Cut.
 
 ### Existing actions
 
-`addScene`, `split`, `merge`, `delete`, `trim`, `rollTrim`, `restore`, rename, …
+`addScene`, `split`, `merge`, `delete`, `trim`, `rollTrim`, `restore`, `reorder`, rename, …
+
+### New: `moveScene` (free arrange)
+
+```json
+{
+  "action": "moveScene",
+  "sceneId": "<id>",
+  "timelineStartMs": 12000
+}
+```
+
+- Sets `cut_scenes.timeline_start_ms` (≥ 0). Gaps and overlaps allowed.
+- `trim` MAY also send `timelineStartMs` when the start edge is resized (anchor right edge).
+- Returns `{ scenes }` with `timelineStartMs` on each scene.
 
 ### New: `addScenes`
 
