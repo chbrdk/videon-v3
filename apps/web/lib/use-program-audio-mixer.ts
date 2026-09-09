@@ -7,6 +7,9 @@ export type ProgramTrackMutes = {
   v2?: boolean
   a1: boolean
   a2: boolean
+  /** V2 companion Source Audio mutes (lane-aware when V2 wins). */
+  v2a1?: boolean
+  v2a2?: boolean
   /** Extra Cut audio bus (Voice-Over); optional for source editor. */
   ab?: boolean
 }

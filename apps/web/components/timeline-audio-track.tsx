@@ -62,14 +62,14 @@ export function TimelineAudioTrack({
 
   const urlsNeeded = useMemo(() => {
     const urls = new Set<string>()
-    for (const clip of clips) {
-      const mediaId = clip.scene.mediaAssetId
+    for (const item of timeline) {
+      const mediaId = item.scene.mediaAssetId
       if (peaksByMediaId[mediaId]?.length || mixPeaksByMediaId[mediaId]?.length) continue
       const url = playbackUrlByMediaId[mediaId]
       if (url) urls.add(url)
     }
     return [...urls]
-  }, [clips, mixPeaksByMediaId, peaksByMediaId, playbackUrlByMediaId])
+  }, [timeline, mixPeaksByMediaId, peaksByMediaId, playbackUrlByMediaId])
 
   useEffect(() => {
     if (lazyPeaks && !inView) return
@@ -110,25 +110,23 @@ export function TimelineAudioTrack({
   return (
     <div ref={laneRef} className="videon-cut-timeline__audio-lane" aria-label={label}>
       {timeline.map((item) => {
-        const clip = clips[item.index]
-        if (!clip) return null
-        const url = playbackUrlByMediaId[clip.scene.mediaAssetId]
+        const mediaAssetId = item.scene.mediaAssetId
+        const startMs = item.scene.startMs
+        const endMs = item.scene.endMs
+        const url = playbackUrlByMediaId[mediaAssetId]
         const peaks =
-          peaksByMediaId[clip.scene.mediaAssetId] ??
-          mixPeaksByMediaId[clip.scene.mediaAssetId] ??
+          peaksByMediaId[mediaAssetId] ??
+          mixPeaksByMediaId[mediaAssetId] ??
           (url ? localPeaksByUrl[url] ?? peaksByUrl[url] : null)
         if (!peaks?.length) return null
 
         const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
         const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
-        const sourceDuration = Math.max(
-          sourceDurationMsByMediaId[clip.scene.mediaAssetId] ?? clip.scene.endMs,
-          1,
-        )
-        const startIndex = Math.floor((clip.scene.startMs / sourceDuration) * peaks.length)
+        const sourceDuration = Math.max(sourceDurationMsByMediaId[mediaAssetId] ?? endMs, 1)
+        const startIndex = Math.floor((startMs / sourceDuration) * peaks.length)
         const endIndex = Math.max(
           startIndex + 1,
-          Math.floor((clip.scene.endMs / sourceDuration) * peaks.length),
+          Math.floor((endMs / sourceDuration) * peaks.length),
         )
         const slice = peaks.slice(startIndex, endIndex)
         const targetBars = Math.max(4, Math.min(120, Math.round(widthPx / 2)))

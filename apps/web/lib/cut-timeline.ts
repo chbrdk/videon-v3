@@ -168,3 +168,18 @@ export function mapTranscriptToCutTimeline(
   }
   return mapped.sort((a, b) => a.cutStartMs - b.cutStartMs)
 }
+
+/** Map media transcripts onto V2 overlay clips (`timeline_start_ms` placement). */
+export function mapTranscriptToVideoOverlay(
+  clips: Array<{
+    id: string
+    position: number
+    mediaAssetId: string
+    startMs: number
+    endMs: number
+    timelineStartMs: number
+  }>,
+  transcriptsByMediaId: Record<string, TranscriptSegment[]>,
+): CutTranscriptSegment[] {
+  return mapTranscriptToCutTimeline(buildCutTimeline(clips), transcriptsByMediaId)
+}

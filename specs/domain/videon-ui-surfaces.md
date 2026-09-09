@@ -68,7 +68,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 11. WHILE the toolbar stays dense, primary edit/export actions MUST stay visible; secondary actions (download, archive, brand) MUST live under a “Mehr” disclosure.
 12. WHEN the pipeline panel is shown in the Media drawer THEN `PipelineStatusTrack` MUST use `StepStrip orientation="vertical"` — not a horizontal scroller of stage cards.
 13. WHEN the operator chooses „Analyse“ THEN the editor MUST open an `@msqdx/ui` `Dialog` with `Checkbox` options for the four analysis user bundles (Szenen & Vision, Transkript, Stems Demucs, Zusammenfassung), all checked by default — see `analysis-capabilities.md`. Start MUST NOT fire until the dialog is confirmed.
-14. WHEN Cut timeline stem lanes (A1/A2) render THEN they MUST be labeled as **Source Audio** (read-only visuals bound to V1) — NOT as independently editable bus tracks (see `cut-multi-track.md`).
+14. WHEN Cut timeline stem lanes render THEN V1 A1/A2 MUST be labeled as **Source Audio** (read-only, bound to V1) and V2-A1/V2-A2 MUST be read-only Source Audio bound to V2 clips — NOT independently editable bus tracks (see `cut-multi-track.md`).
 15. WHEN the operator right-clicks a Cut timeline clip or lane THEN the editor MUST open `@msqdx/ui` `ContextMenu` per `timeline-context-menu.md` Phase 2 (Cut).
 
 ## Scenes inspect (Wave D)
@@ -98,12 +98,13 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 2. WHEN the timeline dock renders THEN it MUST size to its track stack (`auto`) and MUST NOT clip with a vertical scrollbar; horizontal overflow for zoom/scrub is allowed.
 3. WHEN scene/transcript clips render on a source timeline THEN visible labels MUST be truncated; full text stays in `title` / Inspect.
 4. WHEN V1 or A1 mute is toggled AND no stem streams are available THEN the program `<video>` MUST set `muted` (`programAudioMuted`); mute MUST NOT be visual-only.
-5. WHEN voice/music stems exist THEN the program monitor MUST play stem streams (`/stems/{voice|music}/stream`) synced to the video clock; the `<video>` audio bus MUST stay muted (split-out original). A1/A2 mute MUST mute only the matching stem — never silence sibling stems via `video.muted`.
-6. WHEN stem separation runs without Demucs THEN it MUST use center-band approximation (`ffmpeg_center_band`), not raw mid/side as \"voice\". True Voice/Music REQUIRES Demucs — see `knowledge/stem-separation.md`.
-7. WHEN voice/music stems exist THEN the editor MUST offer a download of each stem WAV (`/stems/{voice|music}/stream?download=1`) so operators can inspect A1/A2 offline (debug / share).
-8. WHEN the program monitor renders THEN its frame MUST be **height-first**: size with `aspect-ratio: 16 / 9` using `min(available height, available width × 9/16)` — NOT stretch to ultrawide width. The video MUST stay fully visible (`object-fit: contain`, centered).
-9. WHEN the program/source monitor plays THEN it MUST NOT burn scene insight summary or scene timing onto the picture (Inspect drawer / SI track own that narrative). In/Out mark readout on the monitor MAY remain while marks are set.
-10. WHEN Light theme is active THEN editor chrome MUST use brand paper tokens (`--bg0` / `--bg1`, e.g. `#f8f6f0`) — NOT `color-mix(..., black)` washes that turn the stage gray.
+5. WHEN voice/music stems exist THEN the program monitor MUST play stem streams (`/stems/{voice|music}/stream`) synced to the video clock; the `<video>` audio bus MUST stay muted (split-out original). Active-lane A1/A2 (or V2-A1/V2-A2) mute MUST mute only the matching stem — never silence sibling stems via `video.muted`.
+6. WHEN unmuted V2 covers the playhead THEN stem URLs and mute keys MUST come from that V2 clip’s media / V2-A1/V2-A2; otherwise from the V1 scene / A1/A2 (`cut-multi-track.md` lane-aware audio).
+7. WHEN stem separation runs without Demucs THEN it MUST use center-band approximation (`ffmpeg_center_band`), not raw mid/side as \"voice\". True Voice/Music REQUIRES Demucs — see `knowledge/stem-separation.md`.
+8. WHEN voice/music stems exist THEN the editor MUST offer a download of each stem WAV (`/stems/{voice|music}/stream?download=1`) so operators can inspect A1/A2 offline (debug / share).
+9. WHEN the program monitor renders THEN its frame MUST be **height-first**: size with `aspect-ratio: 16 / 9` using `min(available height, available width × 9/16)` — NOT stretch to ultrawide width. The video MUST stay fully visible (`object-fit: contain`, centered).
+10. WHEN the program/source monitor plays THEN it MUST NOT burn scene insight summary or scene timing onto the picture (Inspect drawer / SI track own that narrative). In/Out mark readout on the monitor MAY remain while marks are set.
+11. WHEN Light theme is active THEN editor chrome MUST use brand paper tokens (`--bg0` / `--bg1`, e.g. `#f8f6f0`) — NOT `color-mix(..., black)` washes that turn the stage gray.
 
 ## Timeline DS shell (Wave C)
 
@@ -112,9 +113,10 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 3. `TimelineTrack` dual-column chrome is optional while VIDEON keeps the two-column header + lanes layout.
 4. WHEN the operator drags a V1 clip body THEN the editor MUST call `moveScene` (free arrange on `timeline_start_ms`). Edge handles MUST resize clip duration (source trim); Slip/Roll remain optional toolbar modes.
 5. WHEN V1 clips overlap THEN the clip with higher `position` MUST win program video at that Cut time **unless** an unmuted V2 overlay clip covers the same time (then V2 wins — `cut-multi-track.md`).
-6. WHEN the Cut timeline renders THEN it MUST show a **V2** video overlay lane directly under V1. Bin drop / body drag / edge resize on V2 MUST call `addVideoClip` / `moveVideoClip` / `trimVideoClip`.
+6. WHEN the Cut timeline renders THEN lane order MUST be **V1 → A1/A2/TX → V2 → V2-A1/V2-A2/V2-TX → VO**. Bin drop / body drag / edge resize on V2 MUST call `addVideoClip` / `moveVideoClip` / `trimVideoClip`.
 7. WHEN the operator drags a clip body from V1 onto V2 (or V2 onto V1) THEN the editor MUST call `moveClipLane` and relocate the clip (not copy).
-4. WHEN timeline clips/lanes support authoring actions THEN right-click MUST use `ContextMenu` (`timeline-context-menu.md`).
+8. WHEN V2 companion TX renders THEN segments MUST map from V2 clip media transcripts onto `timeline_start_ms` (same rules as V1 TX).
+9. WHEN timeline clips/lanes support authoring actions THEN right-click MUST use `ContextMenu` (`timeline-context-menu.md`).
 
 ## Acceptance
 

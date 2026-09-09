@@ -26,10 +26,12 @@ import {
   cutTotalDurationMs,
   findTimelineItemAtCutMs,
   mapTranscriptToCutTimeline,
+  mapTranscriptToVideoOverlay,
   splitSourceMsForCutPlayhead,
   type TranscriptSegment,
 } from '@/lib/cut-timeline'
 import { findProgramVideoAtCutMs } from '@/lib/cut-program-hit'
+import { effectiveStemMutes } from '@/lib/cut-lane-aware-audio'
 import {
   snapshotFromClips,
   type CutEditorSnapshot,
@@ -195,6 +197,8 @@ export function CutEditorView({
     v2: false,
     a1: false,
     a2: false,
+    v2a1: false,
+    v2a2: false,
     ab: false,
   })
   const [trimMode, setTrimMode] = useState<TrimMode>('ripple')
@@ -248,6 +252,21 @@ export function CutEditorView({
     () => mapTranscriptToCutTimeline(timeline, transcriptsByMediaId),
     [timeline, transcriptsByMediaId],
   )
+  const v2TranscriptSegments = useMemo(
+    () =>
+      mapTranscriptToVideoOverlay(
+        videoClips.map((clip) => ({
+          id: clip.id,
+          position: clip.position,
+          mediaAssetId: clip.mediaAssetId,
+          startMs: clip.startMs,
+          endMs: clip.endMs,
+          timelineStartMs: clip.timelineStartMs,
+        })),
+        transcriptsByMediaId,
+      ),
+    [transcriptsByMediaId, videoClips],
+  )
   const sourceDurationMsByMediaId = useMemo(() => {
     const next: Record<string, number> = {}
     for (const clip of clips) {
@@ -255,8 +274,31 @@ export function CutEditorView({
       const duration = clip.media.durationMs ?? clip.scene.endMs
       next[clip.media.id] = Math.max(next[clip.media.id] ?? 0, duration)
     }
+    for (const clip of videoClips) {
+      const media = libraryMedia.find((entry) => entry.id === clip.mediaAssetId)
+      const duration = media?.durationMs ?? clip.endMs
+      next[clip.mediaAssetId] = Math.max(next[clip.mediaAssetId] ?? 0, duration)
+    }
     return next
-  }, [clips])
+  }, [clips, libraryMedia, videoClips])
+
+  const programHit = useMemo(
+    () =>
+      findProgramVideoAtCutMs({
+        cutMs: cutPlayheadMs,
+        v1Scenes: clips.map((clip) => ({
+          id: clip.scene.id,
+          position: clip.scene.position,
+          mediaAssetId: clip.scene.mediaAssetId,
+          startMs: clip.scene.startMs,
+          endMs: clip.scene.endMs,
+          timelineStartMs: clip.scene.timelineStartMs ?? 0,
+        })),
+        v2Clips: videoClips,
+        v2Muted,
+      }),
+    [clips, cutPlayheadMs, v2Muted, videoClips],
+  )
   const activeItem = timeline[activeIndex] ?? null
   const activeClip =
     (activeItem ? clips.find((clip) => clip.scene.id === activeItem.scene.id) : null) ??
@@ -559,13 +601,11 @@ export function CutEditorView({
   useEffect(() => {
     const mediaIds = [
       ...new Set(
-        clips
-          .map((clip) => clip.scene.mediaAssetId)
-          .filter(
-            (id) =>
-              !(voicePeaksByMediaId[id]?.length || mixPeaksByMediaId[id]?.length) &&
-              !peaksBackfillAttemptedRef.current.has(id),
-          ),
+        [...clips.map((clip) => clip.scene.mediaAssetId), ...videoClips.map((clip) => clip.mediaAssetId)].filter(
+          (id) =>
+            !(voicePeaksByMediaId[id]?.length || mixPeaksByMediaId[id]?.length) &&
+            !peaksBackfillAttemptedRef.current.has(id),
+        ),
       ),
     ]
     if (mediaIds.length === 0) return
@@ -603,7 +643,7 @@ export function CutEditorView({
       cancelled = true
       globalThis.clearTimeout(timer)
     }
-  }, [clips, mixPeaksByMediaId, platformProjectId, voicePeaksByMediaId])
+  }, [clips, videoClips, mixPeaksByMediaId, platformProjectId, voicePeaksByMediaId])
 
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : 'Cut nicht verfügbar'))
@@ -618,7 +658,12 @@ export function CutEditorView({
     void loadPlayback(clip).catch((err) => notifyError(err instanceof Error ? err.message : 'Wiedergabe fehlgeschlagen'))
   }, [clips, activeIndex, loadPlayback, playbackUrl])
 
-  const activeMediaId = activeClip?.media?.id ?? activeClip?.scene.mediaAssetId ?? null
+  const activeMediaId =
+    programHit?.lane === 'v2'
+      ? programHit.clip.mediaAssetId
+      : programHit?.lane === 'v1'
+        ? programHit.item.scene.mediaAssetId
+        : (activeClip?.media?.id ?? activeClip?.scene.mediaAssetId ?? null)
   const activeStemPresence = activeMediaId ? stemPresenceByMediaId[activeMediaId] : undefined
   const voiceStemUrl =
     activeMediaId && activeStemPresence?.voice
@@ -628,13 +673,25 @@ export function CutEditorView({
     activeMediaId && activeStemPresence?.music
       ? paths.routes.apiMediaStemStream(activeMediaId, 'music', platformProjectId)
       : null
-  const hasStemAudio = Boolean(voiceStemUrl || musicStemUrl)
+  const hasAnyStemAudio = useMemo(
+    () => Object.values(stemPresenceByMediaId).some((entry) => entry.voice || entry.music),
+    [stemPresenceByMediaId],
+  )
+  const hasStemAudio = Boolean(voiceStemUrl || musicStemUrl) || hasAnyStemAudio
+  const stemMutes = effectiveStemMutes({
+    programLane: programHit?.lane ?? null,
+    mutes: trackMutes,
+  })
 
   useProgramAudioMixer({
     videoRef,
     voiceUrl: voiceStemUrl,
     musicUrl: musicStemUrl,
-    mutes: trackMutes,
+    mutes: {
+      ...trackMutes,
+      a1: stemMutes.a1,
+      a2: stemMutes.a2,
+    },
     enabled: Boolean(playbackUrl),
   })
 
@@ -1511,6 +1568,7 @@ export function CutEditorView({
           cutPlayheadMs={cutPlayheadMs}
           totalDurationMs={totalDurationMs}
           transcriptSegments={transcriptSegments}
+          v2TranscriptSegments={v2TranscriptSegments}
           trimMode={trimMode}
           disabled={busy}
           platformProjectId={platformProjectId}

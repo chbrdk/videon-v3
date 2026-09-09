@@ -16,12 +16,15 @@ Independent Cut tracks beyond the flat V1 `cut_scenes` video model:
 | Concern | Decision |
 |---------|----------|
 | V1 video sequence | **Keep** — `cut_scenes` remains authoritative for main video |
-| Stem lanes A1/A2 | **Keep as visuals** — derived from media stems, not bus clips |
-| Extra audio bus | **Keep** — `cut_tracks` + `cut_audio_clips` |
+| Stem lanes A1/A2 (V1) | **Keep as visuals** — derived from V1 media stems, not bus clips |
+| Stem lanes V2-A1/V2-A2 + V2-TX | **Keep as visuals** — derived from V2 `cut_video_clips` media (stems + transcript) |
+| Extra audio bus | **Keep** — one shared VO bus (`cut_tracks` + `cut_audio_clips`) after V2 companions |
 | V2 video overlay | **Keep** — `cut_tracks.kind = video_overlay` + `cut_video_clips` (full-frame cover, no PiP) |
+| Lane-aware program stems | **Keep** — when unmuted V2 covers playhead, monitor uses that clip’s stems + V2-A1/A2 mute |
 | PiP / transforms / opacity / soft transitions | **Drop** this wave |
 | Multiple overlay lanes | **Drop** — one V2 track only |
-| V2 clip audio in program mix | **Drop** — video-only overlay; A1/A2 stay on V1; bus unchanged |
+| Second VO bus per video lane | **Drop** — one shared A3 bus only |
+| V2 original (non-stem) in program mix | **Drop** — stems or silent when no stems (same as V1 split-out) |
 | Mic capture / TTS voice-replace | **Drop** — spur ready only |
 
 ## Model
@@ -82,11 +85,30 @@ At Cut time `t`:
 2. Else use V1 winner (`cut_scenes` / higher `position`).
 3. Else black / gap.
 
-V2 is **video-only** in the program mix (no V2 clip audio).
+### Companion Source Audio + TX (UI)
+
+Cut timeline lane order MUST be:
+
+`V1 → A1/A2/TX → V2 → V2-A1/V2-A2/V2-TX → A3 (VO)`
+
+- V1 A1/A2/TX are read-only visuals bound to `cut_scenes` media.
+- V2-A1/V2-A2/V2-TX are read-only visuals bound to `cut_video_clips` media (same stem/transcript maps keyed by `mediaAssetId`).
+- Companion lanes are **not** `cut_tracks` rows and are **not** editable bus clips.
+
+### Program monitor audio (lane-aware)
+
+At Cut time `t`:
+
+1. Resolve program video winner (`findProgramVideoAtCutMs`).
+2. If winner is V2 → play that clip’s voice/music stems; mute keys are V2-A1 / V2-A2.
+3. Else if winner is V1 → play that scene’s stems; mute keys are A1 / A2.
+4. Always mix unmuted VO bus clips on top.
+
+MP4 export / Premiere MAY continue to treat V2 as video-only for mux (stems stay monitor UX); VO bus export rules unchanged.
 
 ### Audio bus
 
-- Program monitor MUST mix unmuted bus clips with V1.
+- Program monitor MUST mix unmuted bus clips with the active video lane’s stems.
 - MP4 export MUST mix bus audio onto the program mix when unmuted clips exist.
 - Premiere ZIP MUST include bus source files under `media/` and map them to additional XMEML audio tracks.
 
@@ -101,16 +123,20 @@ V2 is **video-only** in the program mix (no V2 clip audio).
 2. WHEN `addAudioClip` / `addVideoClip` succeeds THEN GET cut detail MUST return the clip on that track.
 3. WHEN the bus track is muted THEN playback and MP4 export MUST omit bus audio.
 4. WHEN the V2 track is muted THEN playback and MP4 export MUST ignore V2 and show V1 only.
-5. WHERE stem lanes render THEN they MUST remain read-only Source Audio visuals.
+5. WHERE stem / TX companion lanes render THEN they MUST remain read-only Source Audio / transcript visuals (V1 and V2 groups).
 6. WHEN unmuted V2 and V1 both cover `t` THEN program video MUST show V2.
 7. WHEN the operator drops a V1 clip onto the V2 lane THEN the editor MUST call `moveClipLane` (move, not copy). V1 MUST keep at least one scene.
 8. WHEN the operator drops a V2 clip onto the V1 lane THEN the editor MUST call `moveClipLane` onto `cut_scenes`.
+9. WHEN the Cut timeline renders THEN lane order MUST be V1 → A1/A2/TX → V2 → V2-A1/V2-A2/V2-TX → VO.
+10. WHEN unmuted V2 covers the playhead AND stems exist for that media THEN the monitor MUST play those stems gated by V2-A1/V2-A2 mute (not V1 A1/A2).
 
 ## Acceptance
 
 - [ ] Default Voice-Over and V2 tracks visible
+- [ ] V2 companion A1/A2/TX lanes visible under V2
 - [ ] Drop/add/move/trim/delete on bus and V2
 - [ ] Drag clips between V1 and V2 (lane move)
 - [ ] Program shows V2 over V1 when unmuted; mute V2 restores V1
+- [ ] Lane-aware stems: V2 cover → V2 stems; else V1 stems
 - [ ] MP4 export respects V2 overlay + bus audio
 - [ ] Premiere ZIP imports with V2 video track + bus audio
