@@ -5,7 +5,8 @@ import { MediaMonitor, Text, ToolButton } from '@msqdx/ui'
 import { useJogShuttle } from '@/lib/use-jog-shuttle'
 
 type EditorMonitorProps = {
-  label: string
+  /** Empty/omitted hides the chrome label row (fullscreen floats on the surface). */
+  label?: string | null
   videoRef?: RefObject<HTMLVideoElement | null>
   playbackUrl: string | null
   frameMs?: number
@@ -22,7 +23,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function EditorMonitor({
-  label,
+  label = null,
   videoRef,
   playbackUrl,
   frameMs = 40,
@@ -33,6 +34,7 @@ export function EditorMonitor({
 }: EditorMonitorProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const bare = !label
 
   const seekDelta = useCallback(
     (deltaMs: number) => {
@@ -75,26 +77,31 @@ export function EditorMonitor({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [disabled, toggleFullscreen])
 
+  const fullscreenButton = (
+    <ToolButton label="Vollbild" onClick={() => void toggleFullscreen()}>
+      ⛶
+    </ToolButton>
+  )
+
   return (
     <div ref={wrapRef} className="videon-nle__monitor-host">
       <MediaMonitor
-        className="videon-nle__monitor"
-        label={label}
+        className={`videon-nle__monitor${bare ? ' videon-nle__monitor--bare' : ''}`}
+        label={label ?? ''}
         fullscreen={isFullscreen}
-        actions={
-          <ToolButton label="Vollbild" onClick={() => void toggleFullscreen()}>
-            ⛶
-          </ToolButton>
-        }
+        actions={bare ? undefined : fullscreenButton}
         media={
-          children ??
-          (playbackUrl && videoRef ? (
-            <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
-          ) : (
-            <div className="videon-nle__video-placeholder">
-              <Text role="body">Keine Wiedergabe</Text>
-            </div>
-          ))
+          <>
+            {children ??
+              (playbackUrl && videoRef ? (
+                <video ref={videoRef} className="videon-nle__video" src={playbackUrl} playsInline preload="metadata" />
+              ) : (
+                <div className="videon-nle__video-placeholder">
+                  <Text role="body">Keine Wiedergabe</Text>
+                </div>
+              ))}
+            {bare ? <div className="videon-nle__monitor-float-actions">{fullscreenButton}</div> : null}
+          </>
         }
         hud={hud}
       />

@@ -1007,76 +1007,16 @@ export function CutEditorView({
   return (
     <div className="videon-nle videon-nle--player-first">
       <div className="videon-nle__top">
-      <header className="videon-nle__toolbar">
+      <header className="videon-nle__toolbar videon-nle__toolbar--slim">
         <div className="videon-nle__toolbar-title">
           <Link className="videon-nle__back" href={paths.routes.cutsFor(platformProjectId)}>
-            ← Alle Cuts
+            ←
           </Link>
-          <h2>{cut.name}</h2>
-          <p className="videon-nle__toolbar-meta">
-            Cut · {clips.length} Clip{clips.length === 1 ? '' : 's'} · {cut.status}
-            {cut.width && cut.height ? ` · ${cut.width}×${cut.height}` : ''}
-          </p>
+          <h2 title={`${clips.length} Clips · ${cut.status}${cut.width && cut.height ? ` · ${cut.width}×${cut.height}` : ''}`}>
+            {cut.name}
+          </h2>
         </div>
         <div className="videon-nle__toolbar-groups">
-          <div className="videon-nle__tool-group videon-nle__tool-group--canvas">
-            <Field label={t('cutEditor.canvas')}>
-              <Select
-                value={aspectPreset}
-                disabled={busy || canvasBusy}
-                options={[
-                  { value: '9:16', label: '9:16' },
-                  { value: '16:9', label: '16:9' },
-                  { value: '1:1', label: '1:1' },
-                  { value: 'custom', label: t('cutEditor.custom') },
-                ]}
-                onChange={(value: string) => {
-                  const next = value as CutAspectPreset
-                  setAspectPreset(next)
-                  if (next !== 'custom') {
-                    const pixels = CUT_ASPECT_PRESET_PIXELS[next]
-                    setCustomWidth(String(pixels.width))
-                    setCustomHeight(String(pixels.height))
-                  }
-                }}
-              />
-            </Field>
-            {aspectPreset === 'custom' ? (
-              <>
-                <Field label={t('cutEditor.width')}>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={3840}
-                    step={2}
-                    value={customWidth}
-                    disabled={busy || canvasBusy}
-                    onChange={(event) => setCustomWidth(event.target.value)}
-                  />
-                </Field>
-                <Field label={t('cutEditor.height')}>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={3840}
-                    step={2}
-                    value={customHeight}
-                    disabled={busy || canvasBusy}
-                    onChange={(event) => setCustomHeight(event.target.value)}
-                  />
-                </Field>
-              </>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy || canvasBusy}
-              onClick={() => void applyCanvas()}
-            >
-              {canvasBusy ? t('cutEditor.canvasApplying') : t('cutEditor.canvasApply')}
-            </Button>
-          </div>
           <div className="videon-nle__tool-group">
             <ToolButton label="Rückgängig" disabled={busy || !canUndo} onClick={undo}>
               <IconUndo />
@@ -1084,19 +1024,6 @@ export function CutEditorView({
             <ToolButton label="Wiederholen" disabled={busy || !canRedo} onClick={redo}>
               <IconRedo />
             </ToolButton>
-          </div>
-          <ToggleGroup
-            aria-label="Trim-Modus"
-            size="sm"
-            value={trimMode}
-            onChange={(value) => setTrimMode(value as typeof trimMode)}
-            options={[
-              { value: 'trim', label: 'TRIM' },
-              { value: 'ripple', label: 'RIPPLE' },
-              { value: 'roll', label: 'ROLL' },
-            ]}
-          />
-          <div className="videon-nle__tool-group">
             <ToolButton
               label="An Playhead teilen"
               disabled={busy || !splitTarget}
@@ -1110,35 +1037,108 @@ export function CutEditorView({
             >
               <IconSplit />
             </ToolButton>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || !activeClip || activeIndex >= clips.length - 1}
-              onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
-            >
-              Verbinden
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || clips.length <= 1 || !activeClip}
-              onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
-            >
-              Löschen
-            </Button>
+          </div>
+          <ToggleGroup
+            aria-label="Trim-Modus"
+            size="sm"
+            value={trimMode}
+            onChange={(value) => setTrimMode(value as typeof trimMode)}
+            options={[
+              { value: 'trim', label: 'Trim' },
+              { value: 'ripple', label: 'Rip' },
+              { value: 'roll', label: 'Roll' },
+            ]}
+          />
+          <div className="videon-nle__tool-group">
+            <Select
+              aria-label={t('cutEditor.canvas')}
+              size="sm"
+              value={aspectPreset}
+              disabled={busy || canvasBusy}
+              options={[
+                { value: '9:16', label: '9:16' },
+                { value: '16:9', label: '16:9' },
+                { value: '1:1', label: '1:1' },
+                { value: 'custom', label: t('cutEditor.custom') },
+              ]}
+              onChange={(value: string) => {
+                const next = value as CutAspectPreset
+                setAspectPreset(next)
+                if (next !== 'custom') {
+                  const pixels = CUT_ASPECT_PRESET_PIXELS[next]
+                  setCustomWidth(String(pixels.width))
+                  setCustomHeight(String(pixels.height))
+                  void (async () => {
+                    setCanvasBusy(true)
+                    try {
+                      const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'setCanvas', aspectPreset: next }),
+                      })
+                      const payload = (await response.json()) as {
+                        cut?: CutDetail
+                        error?: { message?: string }
+                      }
+                      if (!response.ok || !payload.cut) {
+                        throw new Error(payload.error?.message || t('cutEditor.canvasFailed'))
+                      }
+                      setCut(payload.cut)
+                    } catch (err) {
+                      notifyError(err instanceof Error ? err.message : t('cutEditor.canvasFailed'))
+                    } finally {
+                      setCanvasBusy(false)
+                    }
+                  })()
+                }
+              }}
+            />
+            {aspectPreset === 'custom' ? (
+              <>
+                <Input
+                  aria-label={t('cutEditor.width')}
+                  type="number"
+                  min={2}
+                  max={3840}
+                  step={2}
+                  value={customWidth}
+                  disabled={busy || canvasBusy}
+                  onChange={(event) => setCustomWidth(event.target.value)}
+                />
+                <Input
+                  aria-label={t('cutEditor.height')}
+                  type="number"
+                  min={2}
+                  max={3840}
+                  step={2}
+                  value={customHeight}
+                  disabled={busy || canvasBusy}
+                  onChange={(event) => setCustomHeight(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy || canvasBusy}
+                  onClick={() => void applyCanvas()}
+                >
+                  OK
+                </Button>
+              </>
+            ) : null}
           </div>
           <div className="videon-nle__tool-group">
-            <Field label={t('cutEditor.exportFormat')}>
-              <Select
-                value={exportFormat}
-                disabled={busy || exportBusy || clips.length === 0}
-                options={[
-                  { value: 'mp4', label: t('cutEditor.exportMp4') },
-                  { value: 'premiere_xml', label: t('cutEditor.exportPremiere') },
-                ]}
-                onChange={(value: string) => setExportFormat(value as CutExportFormat)}
-              />
-            </Field>
+            <Select
+              aria-label={t('cutEditor.exportFormat')}
+              size="sm"
+              value={exportFormat}
+              disabled={busy || exportBusy || clips.length === 0}
+              options={[
+                { value: 'mp4', label: 'MP4' },
+                { value: 'premiere_xml', label: 'PPro' },
+              ]}
+              onChange={(value: string) => setExportFormat(value as CutExportFormat)}
+            />
             <Button
               type="button"
               variant="primary"
@@ -1147,27 +1147,21 @@ export function CutEditorView({
               disabled={busy || exportBusy || clips.length === 0}
             >
               {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
-                ? t('cutEditor.exportBusy')
-                : t('cutEditor.exportStart')}
+                ? '…'
+                : 'Export'}
             </Button>
           </div>
           <div className="videon-nle__tool-cluster">
-            <Button
-              type="button"
-              variant={leftRailOpen ? 'primary' : 'ghost'}
-              size="sm"
+            <ToolButton
+              label={`Bin (${clips.length})`}
+              active={leftRailOpen}
               onClick={() => setLeftOpen(!leftRailOpen)}
             >
-              Bin ({clips.length})
-            </Button>
-            <Button
-              type="button"
-              variant={rightRailOpen ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setRightOpen(!rightRailOpen)}
-            >
-              Inspect
-            </Button>
+              Bin
+            </ToolButton>
+            <ToolButton label="Inspect" active={rightRailOpen} onClick={() => setRightOpen(!rightRailOpen)}>
+              Clip
+            </ToolButton>
             <ToolButton
               label="Tastaturkürzel"
               active={showShortcuts}
@@ -1178,6 +1172,20 @@ export function CutEditorView({
             <EditorOverflowMenu>
               {({ close }) => (
                 <>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={busy || !activeClip || activeIndex >= clips.length - 1}
+                    onClick={() => void patchTimeline({ action: 'merge', sceneId: activeClip?.scene.id })}
+                  >
+                    Verbinden
+                  </EditorOverflowItem>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={busy || clips.length <= 1 || !activeClip}
+                    onClick={() => void patchTimeline({ action: 'delete', sceneId: activeClip?.scene.id })}
+                  >
+                    Löschen
+                  </EditorOverflowItem>
                   <EditorOverflowItem
                     close={close}
                     disabled={busy || exportBusy || clips.length === 0}
@@ -1397,7 +1405,6 @@ export function CutEditorView({
 
         <section className="videon-nle__program">
           <EditorMonitor
-            label="Programm"
             videoRef={videoRef}
             playbackUrl={playbackUrl}
             frameMs={frameDurationMs(cut.frameRate)}

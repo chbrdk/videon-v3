@@ -942,7 +942,6 @@ export function MediaEditorView({
       <div className="videon-nle__workspace">
         <section className="videon-nle__program">
           <EditorMonitor
-            label="Quellmonitor"
             videoRef={videoRef}
             playbackUrl={playbackUrl}
             frameMs={frameDurationMs(media.frameRate)}
