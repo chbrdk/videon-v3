@@ -1060,9 +1060,6 @@ export function CutTimeline({
     window.addEventListener('pointerup', onUp)
   }
 
-  const playheadLeftPx = timelineLeftPx(cutPlayheadMs, msPerPixel)
-  const dropHintLeftPx = dropHintMs !== null ? timelineLeftPx(dropHintMs, msPerPixel) : null
-
   const [v2MovePreview, setV2MovePreview] = useState<{ clipId: string; timelineStartMs: number } | null>(null)
   const [v2TrimPreview, setV2TrimPreview] = useState<{
     clipId: string
@@ -1388,6 +1385,11 @@ export function CutTimeline({
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
   }
+
+  const playheadLeftPx = timelineLeftPx(cutPlayheadMs, msPerPixel)
+  const dropHintLeftPx = dropHintMs !== null ? timelineLeftPx(dropHintMs, msPerPixel) : null
+  const linkV1Audio = linkAudio && selection.some((item) => item.lane === 'v1')
+  const linkV2Audio = linkAudio && selection.some((item) => item.lane === 'v2')
 
   usePlayheadFollow(viewportRef, playheadLeftPx, !disabled && isPlaying)
   const activeTxIndex = useMemo(
@@ -1763,7 +1765,7 @@ export function CutTimeline({
               </div>
 
               <div
-                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--source-audio${tracks.a1.hidden ? ' is-collapsed' : ''}${tracks.a1.muted ? ' is-muted' : ''}`}
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--source-audio${tracks.a1.hidden ? ' is-collapsed' : ''}${tracks.a1.muted ? ' is-muted' : ''}${linkV1Audio ? ' is-link-highlight' : ''}`}
                 aria-label="Source Audio A1 Voice"
               >
                 {!tracks.a1.hidden ? (
@@ -1784,7 +1786,7 @@ export function CutTimeline({
               </div>
 
               <div
-                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music videon-cut-timeline__track--source-audio${tracks.a2.hidden ? ' is-collapsed' : ''}${tracks.a2.muted ? ' is-muted' : ''}`}
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music videon-cut-timeline__track--source-audio${tracks.a2.hidden ? ' is-collapsed' : ''}${tracks.a2.muted ? ' is-muted' : ''}${linkV1Audio ? ' is-link-highlight' : ''}`}
                 aria-label="Source Audio A2 Music"
               >
                 {!tracks.a2.hidden ? (
@@ -1912,7 +1914,7 @@ export function CutTimeline({
               </div>
 
               <div
-                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--source-audio${tracks.v2a1.hidden ? ' is-collapsed' : ''}${tracks.v2a1.muted ? ' is-muted' : ''}`}
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--source-audio${tracks.v2a1.hidden ? ' is-collapsed' : ''}${tracks.v2a1.muted ? ' is-muted' : ''}${linkV2Audio ? ' is-link-highlight' : ''}`}
                 aria-label="V2 Source Audio A1 Voice"
               >
                 {!tracks.v2a1.hidden ? (
@@ -1933,7 +1935,7 @@ export function CutTimeline({
               </div>
 
               <div
-                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music videon-cut-timeline__track--source-audio${tracks.v2a2.hidden ? ' is-collapsed' : ''}${tracks.v2a2.muted ? ' is-muted' : ''}`}
+                className={`videon-cut-timeline__track videon-cut-timeline__track--audio videon-cut-timeline__track--music videon-cut-timeline__track--source-audio${tracks.v2a2.hidden ? ' is-collapsed' : ''}${tracks.v2a2.muted ? ' is-muted' : ''}${linkV2Audio ? ' is-link-highlight' : ''}`}
                 aria-label="V2 Source Audio A2 Music"
               >
                 {!tracks.v2a2.hidden ? (

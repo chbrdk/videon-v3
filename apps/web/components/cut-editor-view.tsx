@@ -1993,21 +1993,27 @@ export function CutEditorView({
           </div>
           <ul>
             <li>
-              <kbd>Space</kbd> / <kbd>K</kbd> Play/Pause
+              <kbd>Space</kbd> / <kbd>K</kbd> Play/Pause · Hold <kbd>J</kbd>/<kbd>L</kbd> Shuttle
             </li>
             <li>
-              <kbd>J</kbd> / <kbd>L</kbd> ±1 s · <kbd>,</kbd> / <kbd>.</kbd> Frame
+              <kbd>,</kbd> / <kbd>.</kbd> Frame · <kbd>⇧←</kbd>/<kbd>⇧→</kbd> ±1 s · <kbd>Alt←</kbd>/<kbd>Alt→</kbd> Clip-Nudge
             </li>
             <li>
-              <kbd>S</kbd> Teilen · <kbd>⌫</kbd> Clip löschen
+              <kbd>A</kbd> Select · <kbd>T</kbd> Trim · <kbd>U</kbd> Slip/Resize/Roll · <kbd>R</kbd> Ripple
             </li>
             <li>
-              <kbd>⌘Z</kbd> Undo · <kbd>⌘⇧Z</kbd> Redo
+              <kbd>N</kbd> Snap · <kbd>⇧N</kbd> Snap-Filter · <kbd>\</kbd> Zoom-Anker · <kbd>Z</kbd>/<kbd>⇧Z</kbd> Fit
             </li>
             <li>
-              <kbd>F</kbd> Vollbild · <kbd>?</kbd> Hilfe · <kbd>Esc</kbd> schließen
+              <kbd>;</kbd> zur Selection · <kbd>'</kbd> Selection → Playhead · <kbd>⇧L</kbd> Lock · <kbd>⇧A</kbd> Link Audio
             </li>
-            <li>Mausrad Jog · Mediathek in Timeline ziehen · Rechtsklick Kontextmenü</li>
+            <li>
+              <kbd>I</kbd>/<kbd>O</kbd> Mark In/Out · <kbd>S</kbd> Teilen · <kbd>⌫</kbd> Löschen
+            </li>
+            <li>
+              <kbd>⌘Z</kbd> Undo · <kbd>⌘⇧Z</kbd> Redo · <kbd>F</kbd> Vollbild · <kbd>?</kbd> Hilfe · <kbd>Esc</kbd>
+            </li>
+            <li>Pinch Zoom · Zwei-Finger Pan · Alt+Wheel Jog · Minimap klicken · Marquee auf V1</li>
           </ul>
         </div>
       ) : null}
