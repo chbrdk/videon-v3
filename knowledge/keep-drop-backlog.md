@@ -32,3 +32,4 @@
 5. **Wave C (done):** Timeline DS shell — `TimelineRuler` / `TimelineClip` / `Waveform` without rewriting edit math  
 6. **Deferred:** Mediathek browse polish (Wave A) — not editor-critical  
 7. **Wave A (in progress):** Mediathek Browse — thumbs, duration, FilterRow, analysis status  
+8. **Next sprint:** Cut editor load performance — Frame posters, lazy Bin/Timeline thumbs, waveform defer, playback dedupe (`specs/domain/cut-editor-load-performance.md`) 

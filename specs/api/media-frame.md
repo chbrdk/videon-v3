@@ -1,13 +1,18 @@
-# Media frame (assistant poster)
+# Media frame (assistant poster + editor posters)
 
-**Status:** Accepted — 2026-09-08 (cache)  
+**Status:** Accepted — 2026-09-08 (cache); editor poster reuse Draft — see `specs/domain/cut-editor-load-performance.md`  
 **Route:** `GET /api/media/:mediaAssetId/frame`  
-**Companions:** `specs/domain/mcp-server.md` · `media-preview.md` · PLEXON `assistant-videon-mcp.md` · `assistant-videon-hit-chrome.md`  
+**Companions:** `specs/domain/mcp-server.md` · `media-preview.md` · `cut-editor-load-performance.md` · PLEXON `assistant-videon-mcp.md` · `assistant-videon-hit-chrome.md`  
 **Auth:** Access Model B via `requireSessionUserId` (session, Bearer token, or service secret + `X-Plexon-User-Id`)
 
 ## Purpose
 
-Return a single JPEG still from a media asset at timestamp `t` (ms) for Plexon assistant `video_hit_strip` posters. Not for streaming playback.
+Return a single JPEG still from a media asset at timestamp `t` (ms) for:
+
+1. Plexon assistant `video_hit_strip` posters  
+2. **Cut editor** Bin / timeline poster slots (primary source — NOT client video capture)
+
+Not for streaming playback.
 
 ## Query
 

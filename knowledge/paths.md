@@ -33,7 +33,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | MCP | Coolify `videon-mcp` `pjupngbkompeyfjqocgsi0jy` · FQDN `https://pjupngbkompeyfjqocgsi0jy.projects-a.plygrnd.tech` · port **3103**; Plexon `VIDEON_MCP_URL`; specs `mcp-server.md` / `assistant-videon-mcp.md` |
 | Platform Assistant FAB | `PlatformAssistantHost` in AppShell → `{NEXT_PUBLIC_PLEXON_URL}/assistant/embed?product=videon`; paths `pathAssistantEmbed` / `pathAssistantExpand`; spec `platform-assistant-host.md` |
 | `envPlexonPublicUrl` | `NEXT_PUBLIC_PLEXON_URL` (browser iframe origin; fallback `NEXT_PLEXON_BASE_URL` / `PLEXON_AUTH_URL`) |
-| Media frame (assistant poster) | `GET /api/media/:id/frame?platformProjectId=&t=` → `image/jpeg`; cache key `(workspaceId, mediaAssetId, tMs, maxWidth)`; spec `specs/api/media-frame.md` |
+| Media frame (assistant + Cut editor posters) | `GET /api/media/:id/frame?platformProjectId=&t=` → `image/jpeg`; cache key `(workspaceId, mediaAssetId, tMs, maxWidth)`; specs `specs/api/media-frame.md`, `specs/domain/cut-editor-load-performance.md` |
 | Media preview (assistant hover) | `GET /api/media/:id/preview?platformProjectId=&t=&durationMs=` → `video/mp4` ≤3s; spec `specs/api/media-preview.md` |
 | Scene hit model | `specs/domain/scene-hit-model.md` — shared Product `/chat` + Plexon `video_hit_strip` |
 | Knowledge facet `media_insights` | Publish via Plexon Collection Knowledge Pack; ownership VIDEON · `specs/domain/media-insights-publish.md` · `apps/web/lib/plexon-knowledge-pack.ts` |
