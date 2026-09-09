@@ -6,7 +6,7 @@ import {
   mediaFramePosterUrl,
   mediaFrameSeekMs,
 } from '@/lib/media-frame-poster'
-import { snapFrameWidth } from '@/lib/pipeline/poster-frames'
+import { snapFrameWidth } from '@/lib/frame-poster-tiers'
 import { mediaPosterStorageKey } from '@/lib/storage/object-store'
 
 describe('cut editor load performance — wave 4', () => {

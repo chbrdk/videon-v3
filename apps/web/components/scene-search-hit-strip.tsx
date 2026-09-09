@@ -19,7 +19,7 @@ import { useToast } from '@msqdx/ui-client'
 import { appendScenesToActiveCut } from '@/lib/active-cut-append'
 import { readStoredActiveCut, type ActiveCutContext } from '@/lib/active-cut'
 import { mediaFramePosterUrl } from '@/lib/media-frame-poster'
-import { FRAME_WIDTH_DEFAULT } from '@/lib/pipeline/poster-frames'
+import { FRAME_WIDTH_DEFAULT } from '@/lib/frame-poster-tiers'
 import { paths } from '@/lib/paths'
 import {
   sceneHitAtMs,

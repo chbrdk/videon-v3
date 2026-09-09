@@ -5,7 +5,7 @@ import {
   FRAME_WIDTH_TIMELINE,
   mediaFrameSeekMs,
   snapFrameWidth,
-} from '@/lib/pipeline/poster-frames'
+} from '@/lib/frame-poster-tiers'
 
 export {
   FRAME_WIDTH_BIN,
