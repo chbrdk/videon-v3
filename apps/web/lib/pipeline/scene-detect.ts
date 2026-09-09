@@ -9,9 +9,12 @@ export type DetectedScene = {
   endMs: number
 }
 
-const MAX_SCENE_MS = 30_000
-const MIN_SCENE_MS = 1_500
-const SCENE_THRESHOLD = 0.35
+/** Vision/window cap for long unbroken takes. */
+export const MAX_SCENE_MS = 30_000
+/** Drop only micro-flicker; keep rapid montage cuts. */
+export const MIN_SCENE_MS = 400
+/** ffmpeg scene score (0–1); lower = more sensitive. See specs/domain/scene-detect.md */
+export const SCENE_THRESHOLD = 0.22
 
 /** Deterministic fallback when ffmpeg scene detection is unavailable. */
 export function detectScenes(durationMs: number): DetectedScene[] {
@@ -38,27 +41,49 @@ function parseSceneCutPointsMs(stderr: string): number[] {
   return [...points].sort((a, b) => a - b)
 }
 
-function normalizeScenes(raw: Array<{ startMs: number; endMs: number }>, durationMs: number): DetectedScene[] {
+/**
+ * Turn cut boundaries into abutting scenes.
+ * Abutting scenes (gap 0) must stay separate — do not merge on small/zero gaps.
+ */
+export function normalizeScenes(
+  raw: Array<{ startMs: number; endMs: number }>,
+  durationMs: number,
+): DetectedScene[] {
   const safeDuration = Math.max(durationMs, 1_000)
   const bounded = raw
-    .map((scene) => ({
-      startMs: Math.max(0, Math.min(scene.startMs, safeDuration)),
-      endMs: Math.max(Math.min(scene.endMs, safeDuration), scene.startMs + MIN_SCENE_MS),
-    }))
-    .filter((scene) => scene.endMs - scene.startMs >= MIN_SCENE_MS)
+    .map((scene) => {
+      const startMs = Math.max(0, Math.min(scene.startMs, safeDuration))
+      const endMs = Math.max(startMs, Math.min(scene.endMs, safeDuration))
+      return { startMs, endMs }
+    })
+    .filter((scene) => scene.endMs > scene.startMs)
 
   const merged: Array<{ startMs: number; endMs: number }> = []
   for (const scene of bounded) {
     const last = merged[merged.length - 1]
     if (!last) {
-      merged.push(scene)
+      merged.push({ ...scene })
       continue
     }
-    if (scene.endMs - scene.startMs < MIN_SCENE_MS || scene.startMs - last.endMs < 250) {
+
+    // Overlap / duplicate boundary → absorb into previous.
+    if (scene.startMs < last.endMs) {
       last.endMs = Math.max(last.endMs, scene.endMs)
       continue
     }
-    merged.push(scene)
+
+    // Micro-scene → absorb into previous (keeps timeline continuous).
+    if (scene.endMs - scene.startMs < MIN_SCENE_MS) {
+      last.endMs = Math.max(last.endMs, scene.endMs)
+      continue
+    }
+
+    // Close a tiny positive hole so scenes always abut.
+    if (scene.startMs > last.endMs) {
+      last.endMs = scene.startMs
+    }
+
+    merged.push({ ...scene })
   }
 
   const split: Array<{ startMs: number; endMs: number }> = []
@@ -77,6 +102,21 @@ function normalizeScenes(raw: Array<{ startMs: number; endMs: number }>, duratio
     startMs: scene.startMs,
     endMs: scene.endMs,
   }))
+}
+
+export function scenesFromCutPointsMs(cutPoints: number[], durationMs: number): DetectedScene[] {
+  const safeDuration = Math.max(durationMs, 1_000)
+  const unique = [...new Set([0, ...cutPoints.filter((ms) => ms > 0 && ms < safeDuration), safeDuration])].sort(
+    (a, b) => a - b,
+  )
+  const boundaries =
+    unique.length > 1
+      ? unique.slice(0, -1).map((startMs, index) => ({
+          startMs,
+          endMs: unique[index + 1]!,
+        }))
+      : [{ startMs: 0, endMs: safeDuration }]
+  return normalizeScenes(boundaries, safeDuration)
 }
 
 export async function detectScenesFromFile(sourcePath: string, durationMs: number): Promise<DetectedScene[]> {
@@ -98,14 +138,7 @@ export async function detectScenesFromFile(sourcePath: string, durationMs: numbe
       { maxBuffer: 16 * 1024 * 1024 },
     )
     const cutPoints = parseSceneCutPointsMs(stderr)
-    const boundaries =
-      cutPoints.length > 1
-        ? cutPoints.map((startMs, index) => ({
-            startMs,
-            endMs: cutPoints[index + 1] ?? Math.max(durationMs, startMs + MIN_SCENE_MS),
-          }))
-        : [{ startMs: 0, endMs: Math.max(durationMs, MIN_SCENE_MS) }]
-    return normalizeScenes(boundaries, durationMs)
+    return scenesFromCutPointsMs(cutPoints, durationMs)
   } catch {
     return detectScenes(durationMs)
   }

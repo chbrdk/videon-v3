@@ -1,6 +1,6 @@
 import { SCENE_INSIGHT_SCHEMA_VERSION } from '@/lib/vision-schema'
 
-export const PIPELINE_VERSION = 'videon.pipeline.v1' as const
+export const PIPELINE_VERSION = 'videon.pipeline.v2' as const
 
 export const PIPELINE_STAGES = [
   'ingest',

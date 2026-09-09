@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectScenes } from '@/lib/pipeline/scene-detect'
+import { detectScenes, scenesFromCutPointsMs } from '@/lib/pipeline/scene-detect'
 import { analysisInputFingerprint, PIPELINE_VERSION } from '@/lib/pipeline/constants'
 import { parseSceneInsight, toSceneInsightView } from '@/lib/vision-schema'
 
@@ -11,6 +11,26 @@ describe('detectScenes', () => {
 
   it('creates at least one scene for short clips', () => {
     expect(detectScenes(4_000)).toEqual([{ key: 'scene-0', startMs: 0, endMs: 4_000 }])
+  })
+})
+
+describe('scenesFromCutPointsMs', () => {
+  it('keeps abutting montage cuts separate (does not merge on zero gap)', () => {
+    // ~30 shots in 60s at ~2s each
+    const cuts = Array.from({ length: 29 }, (_, i) => (i + 1) * 2_000)
+    const scenes = scenesFromCutPointsMs(cuts, 60_000)
+    expect(scenes).toHaveLength(30)
+    expect(scenes[0]).toEqual({ key: 'scene-0', startMs: 0, endMs: 2_000 })
+    expect(scenes[29]).toEqual({ key: 'scene-29', startMs: 58_000, endMs: 60_000 })
+  })
+
+  it('absorbs micro-scenes under MIN_SCENE_MS into the previous shot', () => {
+    const scenes = scenesFromCutPointsMs([2_000, 2_200, 4_000], 6_000)
+    expect(scenes.map((s) => [s.startMs, s.endMs])).toEqual([
+      [0, 2_200],
+      [2_200, 4_000],
+      [4_000, 6_000],
+    ])
   })
 })
 
