@@ -191,15 +191,17 @@ const MIN_CLIP_MS = 500
 export { MIN_CLIP_MS as MIN_CUT_CLIP_MS }
 
 /**
- * Collision-free upward shift for `cut_scenes.position` under UNIQUE (cut_id, position).
- * Direct `position = position + n` fails mid-update when intermediate values collide.
+ * Parking band above normal timeline indices.
+ * Must stay >= 0 to satisfy CHECK (position >= 0); used to avoid UNIQUE collisions mid-update.
  */
-export function tempPositionForShiftUp(position: number, delta: number): number {
-  return -(position + delta) - 1
+export const CUT_SCENE_POSITION_PARK = 1_000_000
+
+export function parkedPosition(position: number): number {
+  return position + CUT_SCENE_POSITION_PARK
 }
 
-export function finalizeTempPosition(tempPosition: number): number {
-  return -tempPosition - 1
+export function unparkShiftedPosition(parked: number, delta: number): number {
+  return parked - CUT_SCENE_POSITION_PARK + delta
 }
 
 async function shiftCutScenePositionsUp(
@@ -211,25 +213,31 @@ async function shiftCutScenePositionsUp(
   if (delta <= 0) return
   await client.query(
     `update cut_scenes
-        set position = -(position + $2) - 1
+        set position = position + $2
       where cut_id = $1
         and position >= $3`,
-    [cutId, delta, fromPosition],
+    [cutId, CUT_SCENE_POSITION_PARK, fromPosition],
   )
   await client.query(
     `update cut_scenes
-        set position = -position - 1
+        set position = position - $2 + $3
       where cut_id = $1
-        and position < 0`,
-    [cutId],
+        and position >= $2`,
+    [cutId, CUT_SCENE_POSITION_PARK, delta],
   )
 }
 
+async function parkAllCutScenePositions(client: PoolClient, cutId: string): Promise<void> {
+  await client.query(`update cut_scenes set position = position + $2 where cut_id = $1`, [
+    cutId,
+    CUT_SCENE_POSITION_PARK,
+  ])
+}
+
 async function renumberCutScenes(client: PoolClient, cutId: string): Promise<void> {
-  await client.query(`update cut_scenes set position = -position - 1 where cut_id = $1`, [cutId])
+  await parkAllCutScenePositions(client, cutId)
   const scenes = await client.query<{ id: string }>(
-    // After negation, original order is position DESC (-1, -2, -3, …).
-    `select id from cut_scenes where cut_id = $1 order by position desc`,
+    `select id from cut_scenes where cut_id = $1 order by position asc`,
     [cutId],
   )
   for (const [position, row] of scenes.rows.entries()) {
@@ -413,7 +421,7 @@ export async function reorderCutScenes(input: {
   const client = await databasePool().connect()
   try {
     await client.query('begin')
-    await client.query(`update cut_scenes set position = -position - 1 where cut_id = $1`, [input.cutId])
+    await parkAllCutScenePositions(client, input.cutId)
     for (const [position, sceneId] of input.sceneIds.entries()) {
       await client.query(`update cut_scenes set position = $2 where id = $1 and cut_id = $3`, [
         sceneId,
