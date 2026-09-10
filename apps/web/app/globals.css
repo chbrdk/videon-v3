@@ -1663,23 +1663,11 @@ main {
 }
 
 .videon-cut-timeline__track--audio {
-  min-height: 0.75rem;
   cursor: default;
 }
 
 .videon-cut-timeline__track--music .videon-cut-timeline__audio-canvas {
   opacity: 0.95;
-}
-
-.videon-cut-timeline__header-label--audio {
-  min-height: 0.75rem;
-  grid-template-rows: none;
-  grid-auto-flow: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.1rem;
-  padding: 0.05rem 0.1rem;
-  font-size: 0.55rem;
 }
 
 .videon-cut-timeline__header-label--audio .videon-cut-timeline__track-btn,
@@ -1691,7 +1679,8 @@ main {
 
 .videon-cut-timeline__audio-canvas {
   width: 100%;
-  height: 0.75rem;
+  height: 100%;
+  max-height: 0.75rem;
   display: block;
 }
 
@@ -2630,8 +2619,11 @@ main {
   overflow: visible;
 }
 
-.videon-cut-timeline__header-label--transcript {
+/* Must beat base header-label min-height (same single-class specificity otherwise loses). */
+.videon-cut-timeline__header-label.videon-cut-timeline__header-label--audio,
+.videon-cut-timeline__header-label.videon-cut-timeline__header-label--transcript {
   min-height: 0.75rem;
+  height: 0.75rem;
   grid-template-rows: none;
   grid-auto-flow: column;
   align-items: center;
@@ -2810,11 +2802,6 @@ a.videon-cut-timeline__track-btn--link {
   color: var(--nle-muted, var(--muted));
 }
 
-.videon-cut-timeline__audio-lane {
-  position: absolute;
-  inset: 0;
-}
-
 .videon-cut-timeline__clip.ds-timeline-clip {
   top: 0.35rem;
   bottom: 0.35rem;
@@ -2901,9 +2888,19 @@ a.videon-cut-timeline__track-btn--link {
   min-height: 3.85rem;
 }
 
-.videon-cut-timeline__track--transcript {
+/* Compound selectors: base .track min-height must not win over companions. */
+.videon-cut-timeline__track.videon-cut-timeline__track--audio,
+.videon-cut-timeline__track.videon-cut-timeline__track--transcript {
   min-height: 0.75rem;
+  height: 0.75rem;
   cursor: default;
+  overflow: hidden;
+}
+
+.videon-cut-timeline__audio-lane {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .videon-cut-timeline__clip {
