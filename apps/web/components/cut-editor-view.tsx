@@ -90,6 +90,8 @@ type Clip = {
     endMs: number
     mediaAssetId: string
     timelineStartMs: number
+    sceneKey?: string | null
+    premiereFiltersXml?: string | null
   }
   media: { id: string; originalFilename: string; mimeType: string; durationMs?: number | null } | null
 }
