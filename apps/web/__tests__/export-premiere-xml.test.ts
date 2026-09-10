@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import {
   assignPremiereZipMediaNames,
   buildPremiereXmeml,
+  premiereSequenceTotalMs,
   sanitizePremiereXmlFilename,
+  timelineSpanFullyCoveredByOverlays,
 } from '@/lib/pipeline/export-premiere-xml'
 import { writePremiereExportZip } from '@/lib/pipeline/export-premiere-zip'
 
@@ -103,6 +105,90 @@ describe('buildPremiereXmeml', () => {
     expect(xml).toContain('file://media/vo.wav')
     expect(xml).toContain('<start>13</start>')
     expect(xml).toContain('<end>38</end>')
+    expect(xml).toContain('<name>VO</name>')
+  })
+
+  it('emits V2 video track, named lanes, and disables V1 audio under full V2 cover', () => {
+    const xml = buildPremiereXmeml({
+      cut: { id: 'c', name: 'ML', width: 1920, height: 1080, frameRate: 25 },
+      scenes: [
+        {
+          id: 's1',
+          mediaAssetId: 'm1',
+          startMs: 0,
+          endMs: 2000,
+          timelineStartMs: 0,
+          originalFilename: 'v1.mp4',
+          zipMediaName: 'v1.mp4',
+        },
+      ],
+      overlayClips: [
+        {
+          id: 'o1',
+          mediaAssetId: 'm2',
+          timelineStartMs: 0,
+          startMs: 0,
+          endMs: 2000,
+          originalFilename: 'v2.mp4',
+          zipMediaName: 'v2.mp4',
+        },
+      ],
+    })
+    expect(xml).toMatch(/<track>\s*<name>V1<\/name>/)
+    expect(xml).toMatch(/<track>\s*<name>V2<\/name>/)
+    expect(xml).toContain('file://media/v2.mp4')
+    // V1 video stays enabled; V1 audio (clipitem-3 L / clipitem-5 R with n=1 o=1 → videoCount=2) disabled
+    expect(xml).toMatch(/<clipitem id="clipitem-1"[\s\S]*?<enabled>TRUE<\/enabled>/)
+    expect(xml).toMatch(/<clipitem id="clipitem-3"[\s\S]*?<enabled>FALSE<\/enabled>/)
+    expect(xml).toMatch(/<clipitem id="clipitem-5"[\s\S]*?<enabled>FALSE<\/enabled>/)
+  })
+})
+
+describe('premiereSequenceTotalMs + overlay cover', () => {
+  it('includes bus ends beyond video', () => {
+    expect(
+      premiereSequenceTotalMs({
+        scenes: [
+          {
+            id: 's1',
+            mediaAssetId: 'm1',
+            startMs: 0,
+            endMs: 1000,
+            timelineStartMs: 0,
+            originalFilename: 'a.mp4',
+          },
+        ],
+        busClips: [
+          {
+            id: 'b1',
+            mediaAssetId: 'a1',
+            timelineStartMs: 0,
+            startMs: 0,
+            endMs: 5000,
+            originalFilename: 'vo.wav',
+          },
+        ],
+      }),
+    ).toBe(5000)
+  })
+
+  it('detects full vs partial overlay cover', () => {
+    expect(
+      timelineSpanFullyCoveredByOverlays(0, 2000, [
+        { timelineStartMs: 0, startMs: 0, endMs: 2000 },
+      ]),
+    ).toBe(true)
+    expect(
+      timelineSpanFullyCoveredByOverlays(0, 2000, [
+        { timelineStartMs: 0, startMs: 0, endMs: 1000 },
+      ]),
+    ).toBe(false)
+    expect(
+      timelineSpanFullyCoveredByOverlays(0, 2000, [
+        { timelineStartMs: 0, startMs: 0, endMs: 1000 },
+        { timelineStartMs: 1000, startMs: 0, endMs: 1000 },
+      ]),
+    ).toBe(true)
   })
 })
 

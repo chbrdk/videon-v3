@@ -149,6 +149,51 @@ export function premiereTicksFromMs(ms: number): number {
   return Math.max(0, Math.round((ms / 1000) * PREMIERE_TICKS_PER_SECOND))
 }
 
+/** True when [spanStart, spanEnd) is covered by the union of overlay intervals (no mid-clip split). */
+export function timelineSpanFullyCoveredByOverlays(
+  spanStartMs: number,
+  spanEndMs: number,
+  overlays: Array<{ timelineStartMs: number; startMs: number; endMs: number }>,
+): boolean {
+  const spanStart = Math.max(0, Math.floor(spanStartMs))
+  const spanEnd = Math.max(spanStart, Math.floor(spanEndMs))
+  if (spanEnd <= spanStart) return false
+  const intervals = overlays
+    .map((clip) => {
+      const start = Math.max(0, Math.floor(clip.timelineStartMs))
+      const end = start + Math.max(0, Math.floor(clip.endMs - clip.startMs))
+      return { start, end }
+    })
+    .filter((interval) => interval.end > interval.start)
+    .sort((a, b) => a.start - b.start)
+  if (intervals.length === 0) return false
+
+  let coveredThrough = spanStart
+  for (const interval of intervals) {
+    if (interval.start > coveredThrough) return false
+    coveredThrough = Math.max(coveredThrough, interval.end)
+    if (coveredThrough >= spanEnd) return true
+  }
+  return coveredThrough >= spanEnd
+}
+
+export function premiereSequenceTotalMs(input: {
+  scenes: PremiereXmlScene[]
+  overlayClips?: PremiereXmlOverlayClip[]
+  busClips?: PremiereXmlBusClip[]
+}): number {
+  const sceneEnds = input.scenes.map(
+    (scene, index) => timelineStartMs(input.scenes, index) + Math.max(0, scene.endMs - scene.startMs),
+  )
+  const overlayEnds = (input.overlayClips ?? []).map(
+    (clip) => clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs),
+  )
+  const busEnds = (input.busClips ?? []).map(
+    (clip) => clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs),
+  )
+  return Math.max(0, ...sceneEnds, ...overlayEnds, ...busEnds, 0)
+}
+
 /** Build XMEML for Premiere; pathurl values point at ZIP-relative media/. */
 export function buildPremiereXmeml(input: {
   cut: PremiereXmlCut
@@ -164,9 +209,7 @@ export function buildPremiereXmeml(input: {
   const overlayClips = input.overlayClips ?? []
   const n = scenes.length
   const o = overlayClips.length
-  const sceneEnds = scenes.map((scene, index) => timelineStartMs(scenes, index) + Math.max(0, scene.endMs - scene.startMs))
-  const overlayEnds = overlayClips.map((clip) => clip.timelineStartMs + Math.max(0, clip.endMs - clip.startMs))
-  const totalMs = Math.max(0, ...sceneEnds, ...overlayEnds, 0)
+  const totalMs = premiereSequenceTotalMs({ scenes, overlayClips, busClips })
   const totalFrames = framesFromMs(totalMs, fps)
   const sequenceName = escapeXml(input.cut.name || 'Cut')
   const timebase = Math.round(fps)
@@ -179,6 +222,12 @@ export function buildPremiereXmeml(input: {
   const audioRFirstId = videoCount * 2 + 1
   const busLFirstId = videoCount * 3 + 1
   const busRFirstId = videoCount * 3 + 1 + Math.max(busClips.length, 1)
+
+  const v1AudioEnabled = scenes.map((scene, index) => {
+    const tlStart = timelineStartMs(scenes, index)
+    const tlEnd = tlStart + Math.max(0, scene.endMs - scene.startMs)
+    return !timelineSpanFullyCoveredByOverlays(tlStart, tlEnd, overlayClips)
+  })
 
   const videoLinkBlock = (index: number) => {
     const clipindex = index + 1
@@ -337,10 +386,11 @@ export function buildPremiereXmeml(input: {
         const sourceTrackIndex = explodedIndex + 1
         const inFrames = framesFromMs(scene.startMs, fps)
         const outFrames = framesFromMs(scene.endMs, fps)
+        const enabled = v1AudioEnabled[index] ? 'TRUE' : 'FALSE'
         return `
 					<clipitem id="${clipId}" premiereChannelType="stereo">
 						<name>${displayName}</name>
-						<enabled>TRUE</enabled>
+						<enabled>${enabled}</enabled>
 						<start>${framesFromMs(tlStart, fps)}</start>
 						<end>${framesFromMs(tlStart + clipDurMs, fps)}</end>
 						<in>${inFrames}</in>
@@ -416,10 +466,12 @@ export function buildPremiereXmeml(input: {
     busClips.length > 0
       ? `
 				<track currentExplodedTrackIndex="0" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					<name>VO</name>
 					${busTrackClips(0)}
 					<outputchannelindex>1</outputchannelindex>
 				</track>
 				<track currentExplodedTrackIndex="1" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					<name>VO</name>
 					${busTrackClips(1)}
 					<outputchannelindex>2</outputchannelindex>
 				</track>`
@@ -450,11 +502,13 @@ export function buildPremiereXmeml(input: {
 					</samplecharacteristics>
 				</format>
 				<track>
+					<name>V1</name>
 					${videoClips}
 				</track>
 				${
           overlayClips.length > 0
             ? `<track>
+					<name>V2</name>
 					${overlayVideoClips}
 				</track>`
             : ''
@@ -469,10 +523,12 @@ export function buildPremiereXmeml(input: {
 					</samplecharacteristics>
 				</format>
 				<track currentExplodedTrackIndex="0" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					<name>V1</name>
 					${audioTrackClips(0)}
 					<outputchannelindex>1</outputchannelindex>
 				</track>
 				<track currentExplodedTrackIndex="1" totalExplodedTrackCount="2" premiereTrackType="Stereo">
+					<name>V1</name>
 					${audioTrackClips(1)}
 					<outputchannelindex>2</outputchannelindex>
 				</track>

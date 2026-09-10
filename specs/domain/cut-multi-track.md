@@ -116,6 +116,7 @@ MP4 export / Premiere MAY continue to treat V2 as video-only for mux (stems stay
 
 - MP4 program slices MUST prefer unmuted V2 over V1 for covered intervals.
 - Premiere ZIP MUST place V2 clips on a second XMEML video track at `timeline_start_ms`.
+- Premiere multilayer polish (track names, sequence duration including VO, disable V1 linked audio under **full** V2 cover) MUST follow `cut-export-extras.md` § Multilayer XMEML.
 
 ## Requirements (EARS)
 
@@ -142,4 +143,4 @@ MP4 export / Premiere MAY continue to treat V2 as video-only for mux (stems stay
 - [ ] Program shows V2 over V1 when unmuted; mute V2 restores V1
 - [ ] Lane-aware stems: V2 cover → V2 stems; else V1 stems
 - [ ] MP4 export respects V2 overlay + bus audio
-- [ ] Premiere ZIP imports with V2 video track + bus audio
+- [ ] Premiere ZIP imports with V2 video track + bus audio (see `cut-export-extras.md` multilayer polish)
