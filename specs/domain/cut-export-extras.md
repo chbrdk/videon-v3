@@ -95,3 +95,4 @@ README.txt
 - [ ] MCP export_run with `format=premiere_xml` enqueues job
 - [x] Unit: V2 second video track + named tracks + duration includes bus + V1 audio disabled under full V2 cover
 - [ ] Staging smoke: multilayer ZIP imports in Premiere (V2 over V1, VO audible, no rogue V1 audio under full V2)
+- [x] Unit: MP4 program slices pad black through VO end when bus extends past picture
