@@ -155,7 +155,7 @@ export async function createCutWithScenes(input: {
          id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status
        ) values ($1, $2, $3, $4, $5, $6, $7, 'draft')
        returning id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status,
-                 created_at, updated_at`,
+                 premiere_v1_track_sidecar_xml, premiere_sequence_extras_xml, created_at, updated_at`,
       [
         cutId,
         input.workspaceId,
