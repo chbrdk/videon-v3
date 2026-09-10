@@ -17,7 +17,7 @@ import {
   formatUnmappedHint,
   mapClipsToMedia,
   mappedClipsToRestoreScenes,
-  mergeMediaCatalogs,
+  mergePushbackMediaCatalog,
   normalizeCutDetailScenes,
   parsePremiereTimelineXml,
 } from './xmeml-pushback.js'
@@ -51,7 +51,7 @@ export async function previewCutPushback(input) {
 
   const detail = await getCutDetail(settings, cut.id, platformProjectId, signal)
   const mediaItems = await listWorkspaceMedia(settings, platformProjectId, signal).catch(() => [])
-  const catalog = mergeMediaCatalogs(
+  const catalog = mergePushbackMediaCatalog(
     buildMediaCatalogFromCutDetail(detail),
     buildMediaCatalogFromMediaList(mediaItems),
   )

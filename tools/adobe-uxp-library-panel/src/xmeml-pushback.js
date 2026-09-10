@@ -16,6 +16,15 @@ export function framesToMs(frames, fps) {
   return Math.max(0, Math.round((f / rate) * 1000))
 }
 
+/** Premiere Pro ticks: 254_016_000_000 per second. */
+export const PPRO_TICKS_PER_SECOND = 254016000000
+
+export function ticksToMs(ticks) {
+  const t = Number(ticks)
+  if (!Number.isFinite(t) || t < 0) return null
+  return Math.max(0, Math.round((t / PPRO_TICKS_PER_SECOND) * 1000))
+}
+
 export function pathBasenameFromUrl(pathurl) {
   const raw = String(pathurl || '')
     .replace(/^file:\/+/i, '')
@@ -163,12 +172,16 @@ export function extractClipItems(trackBody) {
   return clips
 }
 
-function parseClipItem(body, fps, fileRegistry) {
+function parseClipItem(body, sequenceFps, fileRegistry) {
   const name = (firstMatch(body, /<name>([\s\S]*?)<\/name>/i) || '').trim()
   const start = Number(firstMatch(body, /<start>(-?\d+)<\/start>/i))
   const end = Number(firstMatch(body, /<end>(-?\d+)<\/end>/i))
   const inn = Number(firstMatch(body, /<in>(-?\d+)<\/in>/i))
   const out = Number(firstMatch(body, /<out>(-?\d+)<\/out>/i))
+  const ticksIn = firstMatch(body, /<pproTicksIn>(-?\d+)<\/pproTicksIn>/i)
+  const ticksOut = firstMatch(body, /<pproTicksOut>(-?\d+)<\/pproTicksOut>/i)
+  const clipTb = Number(firstMatch(body, /<rate>[\s\S]*?<timebase>(\d+)<\/timebase>/i))
+  const sourceFps = Number.isFinite(clipTb) && clipTb > 0 ? clipTb : sequenceFps
   const fileIdAttr =
     firstMatch(body, /<file\b[^>]*\bid="([^"]+)"/i) ||
     firstMatch(body, /<file\b[^>]*\bid='([^']+)'/i)
@@ -186,11 +199,25 @@ function parseClipItem(body, fps, fileRegistry) {
   const filename =
     pathBasenameFromUrl(pathurl) || fileNameTag || fileMeta?.filename || name || null
 
-  if (!Number.isFinite(inn) || !Number.isFinite(out) || out <= inn) return null
   if (!enabled) return { skipped: true, reason: 'disabled' }
 
   // Premiere uses -1 for empty/gap placeholders sometimes
   if (start < 0 || end < 0) return { skipped: true, reason: 'gap' }
+
+  let startMs = null
+  let endMs = null
+  if (Number.isFinite(inn) && Number.isFinite(out) && out > inn && inn >= 0) {
+    startMs = framesToMs(inn, sourceFps)
+    endMs = framesToMs(out, sourceFps)
+  } else {
+    const fromTicksIn = ticksToMs(ticksIn)
+    const fromTicksOut = ticksToMs(ticksOut)
+    if (fromTicksIn != null && fromTicksOut != null && fromTicksOut > fromTicksIn) {
+      startMs = fromTicksIn
+      endMs = fromTicksOut
+    }
+  }
+  if (startMs == null || endMs == null || endMs <= startMs) return null
 
   return {
     name,
@@ -198,10 +225,10 @@ function parseClipItem(body, fps, fileRegistry) {
     mediaAssetId,
     fileId: fileIdAttr,
     pathurl: pathurl || null,
-    startMs: framesToMs(inn, fps),
-    endMs: framesToMs(out, fps),
-    timelineStartMs: framesToMs(start, fps),
-    timelineEndMs: framesToMs(end, fps),
+    startMs,
+    endMs,
+    timelineStartMs: framesToMs(start, sequenceFps),
+    timelineEndMs: framesToMs(end, sequenceFps),
   }
 }
 
@@ -339,9 +366,11 @@ export function normalizeCutDetailScenes(detail) {
   return []
 }
 
-function indexFilename(byFilename, name, id) {
+function indexFilename(byFilename, name, id, { preferExisting = false } = {}) {
   const key = normalizeFilenameKey(name)
-  if (key) byFilename[key] = id
+  if (!key) return
+  if (preferExisting && byFilename[key]) return
+  byFilename[key] = id
 }
 
 export function buildMediaCatalogFromCutDetail(detail) {
@@ -367,17 +396,22 @@ export function buildMediaCatalogFromCutDetail(detail) {
 export function buildMediaCatalogFromMediaList(items) {
   const byId = {}
   const byFilename = {}
+  // Mediathek list is typically newest-first — keep first filename hit.
   for (const item of items || []) {
     const id = item?.id || item?.mediaAssetId
     if (!id) continue
     byId[id] = true
     for (const n of [item.originalFilename, item.filename, item.name]) {
-      indexFilename(byFilename, n, id)
+      indexFilename(byFilename, n, id, { preferExisting: true })
     }
   }
   return { byId, byFilename }
 }
 
+/**
+ * Later catalogs win for byId. For filenames, later catalogs win unless
+ * `preferEarlierFilenames` is set (Cut timeline should beat Mediathek duplicates).
+ */
 export function mergeMediaCatalogs(...catalogs) {
   const byId = {}
   const byFilename = {}
@@ -386,6 +420,17 @@ export function mergeMediaCatalogs(...catalogs) {
     Object.assign(byFilename, c?.byFilename || {})
   }
   return { byId, byFilename }
+}
+
+/** Cut detail filenames override Mediathek when the same basename exists twice. */
+export function mergePushbackMediaCatalog(cutDetailCatalog, mediaListCatalog) {
+  return {
+    byId: { ...(mediaListCatalog?.byId || {}), ...(cutDetailCatalog?.byId || {}) },
+    byFilename: {
+      ...(mediaListCatalog?.byFilename || {}),
+      ...(cutDetailCatalog?.byFilename || {}),
+    },
+  }
 }
 
 /**

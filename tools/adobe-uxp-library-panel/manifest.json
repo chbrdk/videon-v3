@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "videon.libraryPanel",
   "name": "VIDEON Library",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "main": "src/index.html",
   "host": {
     "app": "premierepro",

@@ -2,7 +2,7 @@
 
 **Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md`  
 **Updated:** 2026-09-10  
-**Panel:** ≥ **0.1.24**
+**Panel:** ≥ **0.1.25**
 
 ## Product ask
 
@@ -31,7 +31,7 @@ Mapping: `file-{mediaAssetId}` when preserved; after Premiere re-export resolve 
 
 ## Operator
 
-UDT Unload → Load → **v0.1.24** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → **Übernehmen** (stay on same sequence). Only use **Sequenz ersetzen** when the Cut editor is ahead.
+UDT Unload → Load → **v0.1.25** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → **Übernehmen** (stay on same sequence). Only use **Sequenz ersetzen** when the Cut editor is ahead.
 
 ## Restore constraints
 

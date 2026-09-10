@@ -3,6 +3,7 @@ import { hasDatabaseConfig } from '@/lib/db/client'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { resolveMediaInWorkspace } from '@/lib/media-access'
 import { requireSessionUserId } from '@/lib/session-user'
+import { resolveMediaSourceStorageKey } from '@/lib/storage/resolve-media-source'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { Readable } from 'node:stream'
 
@@ -52,9 +53,23 @@ export async function GET(request: Request, context: RouteContext) {
 
   const range = request.headers.get('range')
   const store = new S3ObjectStore()
+  const storageKey = await resolveMediaSourceStorageKey({
+    store,
+    workspaceId: resolved.workspace.id,
+    mediaAssetId: resolved.media.id,
+    storageKey: resolved.media.storageKey,
+  })
+  if (!storageKey) {
+    return apiError(
+      request,
+      404,
+      'not_found',
+      'Source media file missing in storage. Re-upload this media in the Collection library.',
+    )
+  }
   const object = await store.openObjectStream({
     workspaceId: resolved.workspace.id,
-    storageKey: resolved.media.storageKey,
+    storageKey,
     range,
   })
 

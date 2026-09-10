@@ -102,10 +102,20 @@ export function TimelineAudioTrack({
           peaksByMediaId[mediaAssetId] ??
           mixPeaksByMediaId[mediaAssetId] ??
           (url ? localPeaksByUrl[url] ?? peaksByUrl[url] : null)
-        if (!peaks?.length) return null
-
         const leftPx = timelineLeftPx(item.cutStartMs, msPerPixel)
         const widthPx = timelineWidthPx(item.durationMs, msPerPixel)
+        if (!peaks?.length) {
+          return (
+            <TimelineClip
+              key={`${item.scene.id}-audio-empty`}
+              leftPct={(leftPx / contentWidthPx) * 100}
+              widthPct={(widthPx / contentWidthPx) * 100}
+              tone="audio"
+              className="videon-cut-timeline__clip videon-cut-timeline__clip--audio is-empty-peaks"
+            />
+          )
+        }
+
         const sourceDuration = Math.max(sourceDurationMsByMediaId[mediaAssetId] ?? endMs, 1)
         const startIndex = Math.floor((startMs / sourceDuration) * peaks.length)
         const endIndex = Math.max(

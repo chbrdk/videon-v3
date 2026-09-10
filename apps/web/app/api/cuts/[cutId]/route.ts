@@ -37,7 +37,10 @@ import {
 } from '@/lib/db/cut-video'
 import { moveSceneToVideoOverlay, moveVideoOverlayToScene } from '@/lib/db/cut-lane-move'
 import { moveCutClipsBatch } from '@/lib/db/cut-batch-move'
-import { findMediaAsset } from '@/lib/db/media'
+import { findMediaAsset, findMediaAssetDetail } from '@/lib/db/media'
+import { objectStorageConfig } from '@/lib/runtime-config'
+import { resolveMediaSourceStorageKey } from '@/lib/storage/resolve-media-source'
+import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import { resolveCutSceneInputs } from '@/lib/cut-scene-resolve'
 import { CUT_CANVAS_DEFAULT_FPS, resolveCutCanvas } from '@/lib/cut-canvas'
 import { findLatestTranscriptForMedia } from '@/lib/db/transcript'
@@ -429,16 +432,56 @@ async function applyCutPatch(input: {
       if (!uuidRe.test(mediaId)) {
         return apiError(request, 400, 'invalid_payload', 'mediaAssetId must be a UUID')
       }
-      const media = await findMediaAsset(mediaId)
+      const media = await findMediaAssetDetail(mediaId)
       if (!media || media.workspaceId !== workspaceId) {
         return apiError(request, 404, 'not_found', 'Media asset not found')
+      }
+      let startMs = sceneStart
+      let endMs = sceneEnd
+      if (typeof media.durationMs === 'number' && media.durationMs > 0) {
+        if (startMs >= media.durationMs) {
+          return apiError(
+            request,
+            400,
+            'invalid_payload',
+            `Restore source window past media end for ${media.originalFilename} ` +
+              `(startMs ${startMs} ≥ duration ${media.durationMs}). Re-map clips in Premiere or replace media in the Cut.`,
+          )
+        }
+        endMs = Math.min(endMs, media.durationMs)
+        if (endMs - startMs < MIN_CUT_CLIP_MS) {
+          return apiError(
+            request,
+            400,
+            'invalid_payload',
+            `Restore clip too short after clamping to media duration for ${media.originalFilename}`,
+          )
+        }
+      }
+      if (objectStorageConfig()) {
+        const store = new S3ObjectStore()
+        const storageKey = await resolveMediaSourceStorageKey({
+          store,
+          workspaceId,
+          mediaAssetId: media.id,
+          storageKey: media.storageKey,
+        })
+        if (!storageKey) {
+          return apiError(
+            request,
+            409,
+            'invalid_payload',
+            `Source media missing in storage for ${media.originalFilename}. ` +
+              `Replace this clip in the Cut with a working Mediathek file before Cut aktualisieren.`,
+          )
+        }
       }
       restoreScenes.push({
         id,
         position,
         mediaAssetId: mediaId,
-        startMs: sceneStart,
-        endMs: sceneEnd,
+        startMs,
+        endMs,
         ...(timelineStartMs !== undefined ? { timelineStartMs } : {}),
         sceneKey,
       })

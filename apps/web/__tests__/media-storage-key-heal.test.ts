@@ -44,4 +44,23 @@ describe('media source storage key healing', () => {
     expect(route).toContain('resolveMediaSourceStorageKey')
     expect(route).toContain('Re-upload this media')
   })
+
+  it('stream and playback heal source keys', () => {
+    const stream = readFileSync(
+      join(__dirname, '../app/api/media/[mediaAssetId]/stream/route.ts'),
+      'utf8',
+    )
+    const playback = readFileSync(
+      join(__dirname, '../app/api/media/[mediaAssetId]/playback/route.ts'),
+      'utf8',
+    )
+    expect(stream).toContain('resolveMediaSourceStorageKey')
+    expect(playback).toContain('resolveMediaSourceStorageKey')
+  })
+
+  it('restore rejects missing source objects', () => {
+    const route = readFileSync(join(__dirname, '../app/api/cuts/[cutId]/route.ts'), 'utf8')
+    expect(route).toContain('Source media missing in storage')
+    expect(route).toContain('findMediaAssetDetail')
+  })
 })

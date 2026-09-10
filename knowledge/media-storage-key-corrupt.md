@@ -1,30 +1,21 @@
-# Corrupt media storage keys
+# Corrupt / stale media vs Open Cut
 
 **Updated:** 2026-09-10  
 
 ## Symptom
 
-Open Cut / export fails with:
+Open Cut fails with `Source media file missing in storage for fin 1.mp4` while Mediathek shows `fin 1.mp4` fine.
 
-`Source media file missing in storage for <filename> … key <workspaceId>/`
+## Why that happens
 
-That key is **corrupt**: it is only the workspace prefix, not  
-`<workspaceId>/media/<mediaAssetId>/source`.
+Cuts store **`media_asset_id`**, not the filename. Re-upload = **new UUID**. The Cut can still point at the old row (corrupt `storage_key` like `{workspaceId}/`, no S3 source). Export labels the error with `original_filename` from that old row — so it looks like the same file.
 
-## Cause
-
-DB `media_assets.storage_key` no longer points at an uploaded object (truncated/wrong value).  
-Canonical uploads always use `mediaSourceStorageKey()`.
-
-## Mitigation (code)
-
-Export download tries stored key (if sane) then canonical path; heals DB when canonical exists.
+Timeline thumbs can work from **poster** objects under `{ws}/media/{id}/posters/…` without a source file.
 
 ## Operator fix
 
-If heal still fails for **fin 1.mp4** (or any clip):
+1. In the Cut: remove clips that use the broken asset (or create a new Cut).
+2. Drag the **current** Mediathek `fin 1.mp4` onto the timeline again.
+3. Panel → **Premiere aktualisieren** (fresh export).
 
-1. Open Collection → Mediathek  
-2. Re-upload the file (or delete + upload)  
-3. Replace the broken clip in the Cut with the new media  
-4. **Premiere aktualisieren** again  
+Same filename ≠ same media id. Scene `mediaAssetId` must match the working library card `id`.

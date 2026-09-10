@@ -4,6 +4,7 @@ import { resolveMediaInWorkspace } from '@/lib/media-access'
 import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { requireSessionUserId } from '@/lib/session-user'
+import { resolveMediaSourceStorageKey } from '@/lib/storage/resolve-media-source'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 export const dynamic = 'force-dynamic'
@@ -46,9 +47,23 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const store = new S3ObjectStore()
+  const storageKey = await resolveMediaSourceStorageKey({
+    store,
+    workspaceId: resolved.workspace.id,
+    mediaAssetId: resolved.media.id,
+    storageKey: resolved.media.storageKey,
+  })
+  if (!storageKey) {
+    return apiError(
+      request,
+      404,
+      'not_found',
+      'Source media file missing in storage. Re-upload this media in the Collection library.',
+    )
+  }
   const target = await store.createDownloadTarget({
     workspaceId: resolved.workspace.id,
-    storageKey: resolved.media.storageKey,
+    storageKey,
     mediaAssetId: resolved.media.id,
     filename: resolved.media.originalFilename,
     disposition: 'inline',

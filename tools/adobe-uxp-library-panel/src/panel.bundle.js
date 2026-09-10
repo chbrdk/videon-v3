@@ -2789,6 +2789,12 @@ ${extracted.xmlNativePath}`
     if (!Number.isFinite(f)) return 0;
     return Math.max(0, Math.round(f / rate * 1e3));
   }
+  var PPRO_TICKS_PER_SECOND = 254016e6;
+  function ticksToMs(ticks) {
+    const t = Number(ticks);
+    if (!Number.isFinite(t) || t < 0) return null;
+    return Math.max(0, Math.round(t / PPRO_TICKS_PER_SECOND * 1e3));
+  }
   function pathBasenameFromUrl(pathurl) {
     const raw = String(pathurl || "").replace(/^file:\/+/i, "").replace(/^localhost\/+/i, "").replace(/\\/g, "/");
     const parts = raw.split("/").filter(Boolean);
@@ -2898,12 +2904,16 @@ ${extracted.xmlNativePath}`
     }
     return clips;
   }
-  function parseClipItem(body, fps, fileRegistry) {
+  function parseClipItem(body, sequenceFps, fileRegistry) {
     const name = (firstMatch(body, /<name>([\s\S]*?)<\/name>/i) || "").trim();
     const start = Number(firstMatch(body, /<start>(-?\d+)<\/start>/i));
     const end = Number(firstMatch(body, /<end>(-?\d+)<\/end>/i));
     const inn = Number(firstMatch(body, /<in>(-?\d+)<\/in>/i));
     const out = Number(firstMatch(body, /<out>(-?\d+)<\/out>/i));
+    const ticksIn = firstMatch(body, /<pproTicksIn>(-?\d+)<\/pproTicksIn>/i);
+    const ticksOut = firstMatch(body, /<pproTicksOut>(-?\d+)<\/pproTicksOut>/i);
+    const clipTb = Number(firstMatch(body, /<rate>[\s\S]*?<timebase>(\d+)<\/timebase>/i));
+    const sourceFps = Number.isFinite(clipTb) && clipTb > 0 ? clipTb : sequenceFps;
     const fileIdAttr = firstMatch(body, /<file\b[^>]*\bid="([^"]+)"/i) || firstMatch(body, /<file\b[^>]*\bid='([^']+)'/i);
     const inlinePathurl = firstMatch(body, /<pathurl>([\s\S]*?)<\/pathurl>/i);
     const inlineFileName = firstMatch(body, /<file\b[\s\S]*?<name>([\s\S]*?)<\/name>/i);
@@ -2914,19 +2924,32 @@ ${extracted.xmlNativePath}`
     const fileNameTag = (inlineFileName || "").trim() || fileMeta?.name || null;
     let mediaAssetId = mediaAssetIdFromFileId(fileIdAttr) || fileMeta?.mediaAssetId || null;
     const filename = pathBasenameFromUrl(pathurl) || fileNameTag || fileMeta?.filename || name || null;
-    if (!Number.isFinite(inn) || !Number.isFinite(out) || out <= inn) return null;
     if (!enabled) return { skipped: true, reason: "disabled" };
     if (start < 0 || end < 0) return { skipped: true, reason: "gap" };
+    let startMs = null;
+    let endMs = null;
+    if (Number.isFinite(inn) && Number.isFinite(out) && out > inn && inn >= 0) {
+      startMs = framesToMs(inn, sourceFps);
+      endMs = framesToMs(out, sourceFps);
+    } else {
+      const fromTicksIn = ticksToMs(ticksIn);
+      const fromTicksOut = ticksToMs(ticksOut);
+      if (fromTicksIn != null && fromTicksOut != null && fromTicksOut > fromTicksIn) {
+        startMs = fromTicksIn;
+        endMs = fromTicksOut;
+      }
+    }
+    if (startMs == null || endMs == null || endMs <= startMs) return null;
     return {
       name,
       filename,
       mediaAssetId,
       fileId: fileIdAttr,
       pathurl: pathurl || null,
-      startMs: framesToMs(inn, fps),
-      endMs: framesToMs(out, fps),
-      timelineStartMs: framesToMs(start, fps),
-      timelineEndMs: framesToMs(end, fps)
+      startMs,
+      endMs,
+      timelineStartMs: framesToMs(start, sequenceFps),
+      timelineEndMs: framesToMs(end, sequenceFps)
     };
   }
   function parsePremiereTimelineXml(xml) {
@@ -3041,9 +3064,11 @@ ${extracted.xmlNativePath}`
     }
     return [];
   }
-  function indexFilename(byFilename, name, id) {
+  function indexFilename(byFilename, name, id, { preferExisting = false } = {}) {
     const key = normalizeFilenameKey(name);
-    if (key) byFilename[key] = id;
+    if (!key) return;
+    if (preferExisting && byFilename[key]) return;
+    byFilename[key] = id;
   }
   function buildMediaCatalogFromCutDetail(detail) {
     const byId = {};
@@ -3072,19 +3097,19 @@ ${extracted.xmlNativePath}`
       if (!id) continue;
       byId[id] = true;
       for (const n of [item.originalFilename, item.filename, item.name]) {
-        indexFilename(byFilename, n, id);
+        indexFilename(byFilename, n, id, { preferExisting: true });
       }
     }
     return { byId, byFilename };
   }
-  function mergeMediaCatalogs(...catalogs) {
-    const byId = {};
-    const byFilename = {};
-    for (const c of catalogs) {
-      Object.assign(byId, c?.byId || {});
-      Object.assign(byFilename, c?.byFilename || {});
-    }
-    return { byId, byFilename };
+  function mergePushbackMediaCatalog(cutDetailCatalog, mediaListCatalog) {
+    return {
+      byId: { ...mediaListCatalog?.byId || {}, ...cutDetailCatalog?.byId || {} },
+      byFilename: {
+        ...mediaListCatalog?.byFilename || {},
+        ...cutDetailCatalog?.byFilename || {}
+      }
+    };
   }
   function diffV1Timelines(currentScenes, mappedClips) {
     const current = (currentScenes || []).map((s) => ({
@@ -3191,7 +3216,7 @@ ${extracted.xmlNativePath}`
     }
     const detail = await getCutDetail(settings, cut.id, platformProjectId, signal);
     const mediaItems = await listWorkspaceMedia(settings, platformProjectId, signal).catch(() => []);
-    const catalog = mergeMediaCatalogs(
+    const catalog = mergePushbackMediaCatalog(
       buildMediaCatalogFromCutDetail(detail),
       buildMediaCatalogFromMediaList(mediaItems)
     );
@@ -3386,7 +3411,7 @@ ${extracted.xmlNativePath}`
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.24";
+  var PANEL_VERSION = "0.1.25";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {

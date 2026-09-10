@@ -5,11 +5,13 @@ import { join } from 'node:path'
 import { buildPremiereXmeml } from '@/lib/pipeline/export-premiere-xml'
 import {
   buildMediaCatalogFromCutDetail,
+  buildMediaCatalogFromMediaList,
   diffV1Timelines,
   extractFileRegistry,
   mapClipsToMedia,
   mappedClipsToRestoreScenes,
   mediaAssetIdFromFileId,
+  mergePushbackMediaCatalog,
   normalizeCutDetailScenes,
   parsePremiereTimelineXml,
   pathBasenameFromUrl,
@@ -226,18 +228,82 @@ describe('xmeml pushback parser', () => {
     )
   })
 
-  it('panel ships pushback modules in 0.1.24', () => {
+  it('panel ships pushback modules in 0.1.25', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('previewCutPushback')
+    expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
     expect(readFileSync(join(root, 'src/premiere-capture.js'), 'utf8')).toContain(
       'exportAsFinalCutProXML',
     )
     expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('MIN_PUSHBACK_CLIP_MS')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('ticksToMs')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Cut aktualisieren')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('confirmPushback')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('withSequenceReplace')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.24'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.25'")
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('pushback-confirm')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Sequenz ersetzen')
+  })
+
+  it('prefers Cut media over Mediathek duplicates for the same filename', () => {
+    const cutCatalog = buildMediaCatalogFromCutDetail({
+      clips: [
+        {
+          scene: {
+            id: 's1',
+            mediaAssetId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            startMs: 0,
+            endMs: 1000,
+          },
+          media: {
+            id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            originalFilename: 'fin 1.mp4',
+          },
+        },
+      ],
+    })
+    const listCatalog = buildMediaCatalogFromMediaList([
+      { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', originalFilename: 'fin 1.mp4' },
+      { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', originalFilename: 'fin 1.mp4' },
+    ])
+    const merged = mergePushbackMediaCatalog(cutCatalog, listCatalog)
+    expect(merged.byFilename['fin 1.mp4']).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+  })
+  it('parses pproTicks when in/out are -1', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xmeml>
+<xmeml version="4">
+  <sequence>
+    <name>Ticks Cut</name>
+    <rate><timebase>25</timebase><ntsc>FALSE</ntsc></rate>
+    <media>
+      <video>
+        <track>
+          <clipitem id="clipitem-1">
+            <name>a.mp4</name>
+            <enabled>TRUE</enabled>
+            <start>0</start>
+            <end>50</end>
+            <in>-1</in>
+            <out>-1</out>
+            <pproTicksIn>0</pproTicksIn>
+            <pproTicksOut>508032000000</pproTicksOut>
+            <file id="file-11111111-1111-1111-1111-111111111111">
+              <name>a.mp4</name>
+              <pathurl>file://localhost/a.mp4</pathurl>
+            </file>
+            <sourcetrack><mediatype>video</mediatype><trackindex>1</trackindex></sourcetrack>
+          </clipitem>
+        </track>
+      </video>
+    </media>
+  </sequence>
+</xmeml>`
+    const parsed = parsePremiereTimelineXml(xml)
+    expect(parsed.v1).toHaveLength(1)
+    expect(parsed.v1[0].startMs).toBe(0)
+    expect(parsed.v1[0].endMs).toBe(2000)
+    expect(parsed.v1[0].timelineStartMs).toBe(0)
   })
 })
