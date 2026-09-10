@@ -144,6 +144,7 @@ export function parseProvisionWorkspaceRequest(input: unknown): ContractParseRes
   }
 }
 
+/** Includes `proxy_unavailable` for Adobe download kind=proxy — specs/api/media-adobe-download.md */
 export type ApiErrorCode =
   | 'contract_version_mismatch'
   | 'service_unauthorized'
@@ -152,6 +153,7 @@ export type ApiErrorCode =
   | 'not_found'
   | 'invalid_payload'
   | 'dependency_unavailable'
+  | 'proxy_unavailable'
 
 export type ApiError = {
   error: {

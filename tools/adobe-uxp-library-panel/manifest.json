@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 5,
+  "id": "videon.libraryPanel",
+  "name": "VIDEON Library",
+  "version": "0.1.0",
+  "main": "src/index.html",
+  "host": {
+    "app": "PPRO",
+    "minVersion": "25.6"
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "videonLibraryPanel",
+      "label": {
+        "default": "VIDEON Library"
+      },
+      "minimumSize": { "width": 320, "height": 280 },
+      "maximumSize": { "width": 2000, "height": 2000 },
+      "preferredDockedSize": { "width": 420, "height": 640 }
+    }
+  ],
+  "requiredPermissions": {
+    "network": {
+      "domains": "all"
+    },
+    "localFileSystem": "fullAccess",
+    "clipboard": "readAndWrite"
+  }
+}

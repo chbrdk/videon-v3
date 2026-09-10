@@ -68,6 +68,7 @@ Details: [`brand-compliance.md`](./brand-compliance.md).
 | `apiMediaAnalysis` | `POST` full analysis re-run |
 | `apiMediaBrandCheck` | `POST` brand compliance only |
 | `apiMediaSearch` | Search (project-scoped) |
+| `apiMediaAdobeDownload` | `GET /api/media/:id/adobe-download?platformProjectId=&kind=&mode=` — Adobe panel insert (`specs/api/media-adobe-download.md`) |
 
 UI routes: `/chat` scene search (Card grid + deep-link `?t=`/`?scene=`); `/projects` Projekte hub; `/library` global Mediathek; `/collections` → `/projects`.
 
@@ -76,9 +77,22 @@ UI routes: `/chat` scene search (Card grid + deep-link `?t=`/`?scene=`); `/proje
 | `mediaFor(id, projectId)` | `/media/:id?platformProjectId=` |
 | `mediaFor(id, projectId, { tMs, sceneKey })` | same + optional `t` (ms) and `scene` for editor seek |
 
-`GET /api/media/search?q=` — accessible scene search (optional `platformProjectId` scopes to one project).
+`GET /api/media/search?q=` — accessible scene search (optional `platformProjectId` scopes to one project; optional `limit` clamped 1…40, default 20).
 
 Writes, detail, stream, upload remain auth + `platformProjectId`.
+
+## Adobe UXP Library Panel
+
+| Key / path | Meaning |
+|------------|---------|
+| Domain spec | `specs/domain/adobe-uxp-library-panel.md` — Premiere Wave 1, AE Wave 1.5 |
+| Package | `tools/adobe-uxp-library-panel/` (UXP panel; Product API client; Premiere Wave 1) |
+| Auth | Settings API Bearer (`settings-api-tokens.md`); not MCP service-secret |
+| Search | Same `GET /api/media/search` + `scene-hit-model.md` as `/chat` |
+| Posters | `GET /api/media/:id/frame` (`apiMediaFrame`) |
+| Insert media | `GET /api/media/:id/adobe-download` — `specs/api/media-adobe-download.md`; helper `paths.routes.apiMediaAdobeDownload` |
+| Legacy reference | `videon/tools/ae-uxp-plugin` (PrismVid; localhost path — do not reuse) |
+| Panel prefs (illustrative) | `videon.adobe.productBaseUrl` · `videon.adobe.apiToken` · `videon.adobe.defaultPlatformProjectId` · `videon.adobe.cacheDir` |
 
 ## Jobs
 

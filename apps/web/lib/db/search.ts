@@ -129,7 +129,7 @@ export async function searchMediaInWorkspace(input: {
   query: string
   limit?: number
 }): Promise<SearchHit[]> {
-  const limit = Math.min(Math.max(input.limit ?? 20, 1), 50)
+  const limit = Math.min(Math.max(input.limit ?? 20, 1), 40)
   const plan = buildSceneSearchPlan(input.query)
   if (!plan.tsQuery && plan.likePatterns.length === 0) return []
 
@@ -164,7 +164,7 @@ export async function searchMediaForAccessibleProjects(input: {
   query: string
   limit?: number
 }): Promise<{ hits: SearchHit[]; planTerms: string[] }> {
-  const limit = Math.min(Math.max(input.limit ?? 20, 1), 50)
+  const limit = Math.min(Math.max(input.limit ?? 20, 1), 40)
   const plan = buildSceneSearchPlan(input.query)
   if (!plan.tsQuery && plan.likePatterns.length === 0) {
     return { hits: [], planTerms: [] }

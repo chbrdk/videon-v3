@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VIDEON Library — Browser Preview</title>
+    <!--
+      Host-free preview: search / collections / download check against staging.
+      Serve this folder over HTTP (ES modules + import maps), e.g.:
+        cd tools/adobe-uxp-library-panel && npx --yes serve -p 4173
+      Then open http://localhost:4173/preview.html
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "uxp": "./src/shims/uxp-browser.js",
+          "premierepro": "./src/shims/premierepro-browser.js"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="src/styles.css" />
+    <style>
+      body::before {
+        content: "Browser-Preview (ohne Premiere) — Token + Staging; Einfügen = Stub";
+        display: block;
+        padding: 8px 12px;
+        background: #333;
+        color: #ddd;
+        font: 12px/1.4 system-ui, sans-serif;
+        border-bottom: 1px solid #555;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app-root"></div>
+    <script type="module">
+      // Load the real panel HTML fragment into #app-root, then boot index.js
+      const res = await fetch('./src/index.html')
+      const html = await res.text()
+      const doc = new DOMParser().parseFromString(html, 'text/html')
+      const app = doc.querySelector('#app')
+      document.getElementById('app-root').append(app)
+      await import('./src/index.js')
+    </script>
+  </body>
+</html>

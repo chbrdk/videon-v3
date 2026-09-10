@@ -1,0 +1,556 @@
+import {
+  absoluteProductHref,
+  fetchFrameBlob,
+  listCollections,
+  loadLastQuery,
+  loadSettings,
+  requestAdobeDownload,
+  saveLastQuery,
+  saveSettings,
+  searchMedia,
+  testHealth,
+} from './api.js'
+import {
+  clearCache,
+  formatCacheBytes,
+  getCacheStats,
+  materializeDownload,
+  materializePoster,
+  posterCacheKey,
+  readCachedPosterBlob,
+  refreshCacheStats,
+} from './cache.js'
+import { normalizeCollections } from './collections.js'
+import {
+  dedupeSearchHits,
+  formatRank,
+  normalizeSearchHit,
+  sceneHitDurationLabel,
+  sceneHitTimingLabel,
+} from './hit-model.js'
+import { insertHitIntoPremiere } from './premiere.js'
+import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
+
+const els = {
+  settingsToggle: document.getElementById('settings-toggle'),
+  settingsPanel: document.getElementById('settings-panel'),
+  productBaseUrl: document.getElementById('product-base-url'),
+  apiToken: document.getElementById('api-token'),
+  collectionSelect: document.getElementById('collection-select'),
+  collectionSelectMain: document.getElementById('collection-select-main'),
+  defaultProjectId: document.getElementById('default-project-id'),
+  binName: document.getElementById('bin-name'),
+  settingsSave: document.getElementById('settings-save'),
+  testConnection: document.getElementById('test-connection'),
+  reloadCollections: document.getElementById('reload-collections'),
+  cacheStats: document.getElementById('cache-stats'),
+  cacheRefresh: document.getElementById('cache-refresh'),
+  cacheClear: document.getElementById('cache-clear'),
+  settingsStatus: document.getElementById('settings-status'),
+  searchInput: document.getElementById('search-input'),
+  searchBtn: document.getElementById('search-btn'),
+  banner: document.getElementById('banner'),
+  resultsList: document.getElementById('results-list'),
+  resultsCount: document.getElementById('results-count'),
+  selectAllBtn: document.getElementById('select-all-btn'),
+  selectNoneBtn: document.getElementById('select-none-btn'),
+  insertBar: document.getElementById('insert-bar'),
+  appendSequence: document.getElementById('append-sequence'),
+  dryRunBtn: document.getElementById('dry-run-btn'),
+  insertBtn: document.getElementById('insert-btn'),
+  selectedCount: document.getElementById('selected-count'),
+  progress: document.getElementById('progress'),
+  progressBar: document.getElementById('progress-bar'),
+}
+
+/** @type {ReturnType<typeof normalizeSearchHit>[]} */
+let hits = []
+/** @type {Set<string>} */
+const selected = new Set()
+/** @type {string[]} */
+const blobUrls = []
+/** @type {{ id: string, name: string, status: string }[]} */
+let collections = []
+/** @type {AbortController | null} */
+let searchAbort = null
+
+function showBanner(message, tone = '') {
+  els.banner.hidden = !message
+  els.banner.textContent = message || ''
+  els.banner.className = `banner${tone ? ` ${tone}` : ''}`
+}
+
+function updateCacheStatsLabel(stats) {
+  if (!els.cacheStats) return
+  const s = stats || getCacheStats()
+  els.cacheStats.textContent = `${s.count} Datei(en) · ${formatCacheBytes(s.bytes)}`
+}
+
+async function refreshCacheUi(showStatus = false) {
+  try {
+    const stats = await refreshCacheStats()
+    updateCacheStatsLabel(stats)
+    if (showStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = `Cache: ${stats.count} · ${formatCacheBytes(stats.bytes)}`
+    }
+  } catch (error) {
+    updateCacheStatsLabel(getCacheStats())
+    if (showStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+    }
+  }
+}
+
+async function loadPosterForHit(settings, hit, signal) {
+  const key = posterCacheKey(hit)
+  try {
+    const cached = await readCachedPosterBlob(key)
+    if (cached) return cached
+  } catch {
+    /* network */
+  }
+  const blob = await fetchFrameBlob(settings, hit, signal)
+  if (!blob) return null
+  void materializePoster({ cacheKey: key, blob, filename: 'poster.jpg' })
+  return blob
+}
+
+function revokeBlobs() {
+  while (blobUrls.length) {
+    const url = blobUrls.pop()
+    try {
+      URL.revokeObjectURL(url)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function openExternal(href) {
+  try {
+    const uxp = await import('uxp')
+    if (uxp?.shell?.openExternal) {
+      await uxp.shell.openExternal(href)
+      return
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    window.open(href, '_blank')
+  } catch {
+    showBanner(href, 'ok')
+  }
+}
+
+function fillCollectionSelect(select, selectedId) {
+  if (!select) return
+  const current = selectedId || ''
+  select.innerHTML = ''
+  const all = document.createElement('option')
+  all.value = ''
+  all.textContent = '— alle zugänglichen —'
+  select.append(all)
+  for (const item of collections) {
+    const opt = document.createElement('option')
+    opt.value = item.id
+    opt.textContent = item.status && item.status !== 'active' ? `${item.name} (${item.status})` : item.name
+    select.append(opt)
+  }
+  select.value = collections.some((c) => c.id === current) ? current : ''
+}
+
+function syncCollectionUi(selectedId) {
+  fillCollectionSelect(els.collectionSelect, selectedId)
+  fillCollectionSelect(els.collectionSelectMain, selectedId)
+  if (els.defaultProjectId) els.defaultProjectId.value = selectedId || ''
+}
+
+function applySettingsToForm(settings) {
+  els.productBaseUrl.value = settings.productBaseUrl || ''
+  els.apiToken.value = settings.apiToken || ''
+  els.binName.value = settings.binName || 'VIDEON'
+  syncCollectionUi(settings.defaultPlatformProjectId || '')
+}
+
+function readFormSettings() {
+  const fromSelect =
+    els.collectionSelectMain?.value?.trim() ||
+    els.collectionSelect?.value?.trim() ||
+    els.defaultProjectId.value.trim()
+  return {
+    productBaseUrl: els.productBaseUrl.value.trim(),
+    apiToken: els.apiToken.value.trim(),
+    defaultPlatformProjectId: fromSelect,
+    binName: els.binName.value.trim() || 'VIDEON',
+  }
+}
+
+function onCollectionChange(event) {
+  const id = event.target.value
+  if (els.collectionSelect) els.collectionSelect.value = id
+  if (els.collectionSelectMain) els.collectionSelectMain.value = id
+  if (els.defaultProjectId) els.defaultProjectId.value = id
+  saveSettings({ defaultPlatformProjectId: id })
+}
+
+function updateSelectionChrome() {
+  els.selectedCount.textContent = String(selected.size)
+  els.insertBar.classList.toggle('hidden', selected.size === 0)
+  const hasHits = hits.length > 0
+  els.selectAllBtn.hidden = !hasHits
+  els.selectNoneBtn.hidden = !hasHits
+}
+
+function setBusy(busy) {
+  els.searchBtn.disabled = busy
+  els.dryRunBtn.disabled = busy
+  els.insertBtn.disabled = busy
+}
+
+async function refreshCollections(showStatus = true) {
+  const settings = saveSettings(readFormSettings())
+  if (!settings.apiToken) {
+    if (showStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = 'Token setzen, dann Collections laden.'
+    }
+    return
+  }
+  if (showStatus) {
+    els.settingsStatus.hidden = false
+    els.settingsStatus.textContent = 'Collections…'
+  }
+  try {
+    const payload = await listCollections(settings)
+    collections = normalizeCollections(payload)
+    syncCollectionUi(settings.defaultPlatformProjectId)
+    if (showStatus) {
+      els.settingsStatus.textContent = `${collections.length} Collection(s)`
+    }
+  } catch (error) {
+    if (showStatus) {
+      els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+    }
+    showBanner(error instanceof Error ? error.message : String(error), 'error')
+  }
+}
+
+function buildHitRow(settings, hit, posterUrl) {
+  const row = document.createElement('article')
+  row.className = 'hit'
+
+  const check = document.createElement('input')
+  check.type = 'checkbox'
+  check.checked = selected.has(hit.id)
+  check.addEventListener('change', () => {
+    if (check.checked) selected.add(hit.id)
+    else selected.delete(hit.id)
+    updateSelectionChrome()
+  })
+
+  const img = document.createElement('img')
+  img.alt = ''
+  if (posterUrl) img.src = posterUrl
+  else img.classList.add('hit-ph')
+
+  const body = document.createElement('div')
+  const title = document.createElement('div')
+  title.className = 'hit-title'
+  title.textContent = hit.mediaFilename
+
+  const meta = document.createElement('div')
+  meta.className = 'hit-meta'
+  const timing = sceneHitTimingLabel(hit)
+  const duration = sceneHitDurationLabel(hit)
+  const rank = formatRank(hit.rank)
+  meta.textContent = [
+    hit.projectName,
+    timing,
+    duration ? `Δ ${duration}` : null,
+    hit.sceneKey,
+    rank ? `rank ${rank}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const snippet = document.createElement('div')
+  snippet.className = 'hit-meta'
+  snippet.textContent = hit.searchText
+
+  const actions = document.createElement('div')
+  actions.className = 'hit-actions'
+  const open = document.createElement('button')
+  open.type = 'button'
+  open.textContent = 'In VIDEON öffnen'
+  open.addEventListener('click', () => {
+    const href = absoluteProductHref(settings, hit.href)
+    if (!href) {
+      showBanner('Kein Deep Link am Treffer.', 'error')
+      return
+    }
+    void openExternal(href)
+  })
+  actions.append(open)
+
+  body.append(title, meta, snippet, actions)
+  row.append(check, img, body)
+  return row
+}
+
+async function renderHits(settings, signal) {
+  revokeBlobs()
+  els.resultsCount.textContent = String(hits.length)
+  if (!hits.length) {
+    els.resultsList.innerHTML = '<p class="empty">Keine Treffer.</p>'
+    updateSelectionChrome()
+    return
+  }
+
+  els.resultsList.innerHTML = ''
+  const posters = await Promise.all(
+    hits.map(async (hit) => {
+      try {
+        const blob = await loadPosterForHit(settings, hit, signal)
+        if (!blob) return null
+        const url = URL.createObjectURL(blob)
+        blobUrls.push(url)
+        return url
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  if (signal?.aborted) return
+
+  hits.forEach((hit, index) => {
+    els.resultsList.append(buildHitRow(settings, hit, posters[index]))
+  })
+  updateSelectionChrome()
+}
+
+async function runSearch() {
+  const settings = saveSettings(readFormSettings())
+  const q = els.searchInput.value.trim()
+  if (!q) {
+    showBanner('Suchbegriff eingeben.', 'error')
+    return
+  }
+  if (!settings.apiToken) {
+    showBanner('API Token in den Einstellungen setzen.', 'error')
+    els.settingsPanel.classList.remove('hidden')
+    return
+  }
+  if (!looksLikeApiToken(settings.apiToken)) {
+    showBanner('Token sieht ungültig aus (erwartet videon_…).', 'error')
+  }
+
+  searchAbort?.abort()
+  searchAbort = new AbortController()
+  const { signal } = searchAbort
+
+  showBanner('Suche…')
+  selected.clear()
+  setBusy(true)
+  saveLastQuery(q)
+  try {
+    const payload = await searchMedia(settings, q, 40, signal)
+    hits = dedupeSearchHits(
+      (payload.items || []).map(normalizeSearchHit).filter((h) => h.mediaAssetId),
+    )
+    await renderHits(settings, signal)
+    const scope = payload.scope ? ` · ${payload.scope}` : ''
+    showBanner(
+      hits.length ? `${hits.length} Treffer${scope}` : 'Keine Treffer',
+      hits.length ? 'ok' : '',
+    )
+  } catch (error) {
+    if (error?.name === 'AbortError') return
+    hits = []
+    await renderHits(settings, signal)
+    showBanner(error instanceof Error ? error.message : String(error), 'error')
+  } finally {
+    setBusy(false)
+  }
+}
+
+async function runDryDownload() {
+  const settings = saveSettings(readFormSettings())
+  const chosen = hits.filter((h) => selected.has(h.id))
+  if (!chosen.length) return
+
+  els.progress.classList.remove('hidden')
+  els.progressBar.style.width = '0%'
+  setBusy(true)
+
+  try {
+    for (let i = 0; i < chosen.length; i += 1) {
+      const hit = chosen[i]
+      showBanner(`Download-Check ${i + 1}/${chosen.length}: ${hit.mediaFilename}`)
+      const download = await requestAdobeDownload(settings, hit)
+      if (!download?.downloadUrl || !download?.cacheKey) {
+        throw new Error('Download-Response unvollständig')
+      }
+      try {
+        await materializeDownload({
+          cacheKey: download.cacheKey,
+          downloadUrl: download.downloadUrl,
+          filename: download.filename,
+        })
+        showBanner(`Download + Cache OK: ${download.filename}`, 'ok')
+        void refreshCacheUi(false)
+      } catch (cacheError) {
+        console.warn('[VIDEON] cache optional for dry-run', cacheError)
+        showBanner(
+          `Download OK (${download.kind}, ${download.bytes || '?'} B) — Cache: ${
+            cacheError instanceof Error ? cacheError.message : String(cacheError)
+          }`,
+          'ok',
+        )
+      }
+      els.progressBar.style.width = `${Math.round(((i + 1) / chosen.length) * 100)}%`
+    }
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), 'error')
+  } finally {
+    setBusy(false)
+    setTimeout(() => els.progress.classList.add('hidden'), 800)
+  }
+}
+
+async function runInsert() {
+  const settings = saveSettings(readFormSettings())
+  const chosen = hits.filter((h) => selected.has(h.id))
+  if (!chosen.length) return
+
+  els.progress.classList.remove('hidden')
+  els.progressBar.style.width = '0%'
+  setBusy(true)
+
+  const notes = []
+  try {
+    for (let i = 0; i < chosen.length; i += 1) {
+      const hit = chosen[i]
+      showBanner(`Lade ${i + 1}/${chosen.length}: ${hit.mediaFilename}`)
+      const download = await requestAdobeDownload(settings, hit)
+      const filePath = await materializeDownload({
+        cacheKey: download.cacheKey,
+        downloadUrl: download.downloadUrl,
+        filename: download.filename,
+      })
+      showBanner(`Import ${i + 1}/${chosen.length}: ${hit.mediaFilename}`)
+      const result = await insertHitIntoPremiere({
+        filePath,
+        binName: settings.binName,
+        hit,
+        appendToSequence: els.appendSequence.checked,
+      })
+      if (!result.ok) throw new Error(result.message)
+      notes.push(result.message)
+      els.progressBar.style.width = `${Math.round(((i + 1) / chosen.length) * 100)}%`
+    }
+    void refreshCacheUi(false)
+    showBanner(notes[notes.length - 1] || `${chosen.length} Clip(s) verarbeitet.`, 'ok')
+  } catch (error) {
+    showBanner(error instanceof Error ? error.message : String(error), 'error')
+  } finally {
+    setBusy(false)
+    setTimeout(() => els.progress.classList.add('hidden'), 800)
+  }
+}
+
+els.settingsToggle.addEventListener('click', () => {
+  els.settingsPanel.classList.toggle('hidden')
+  if (!els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
+})
+
+els.settingsSave.addEventListener('click', () => {
+  const draft = readFormSettings()
+  const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl)
+  if (!urlCheck.ok) {
+    els.settingsStatus.hidden = false
+    els.settingsStatus.textContent = urlCheck.error
+    return
+  }
+  const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value })
+  applySettingsToForm(settings)
+  els.settingsStatus.hidden = false
+  els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken)
+    ? 'Gespeichert.'
+    : 'Gespeichert — Token-Format prüfen (videon_…).'
+})
+
+els.testConnection.addEventListener('click', async () => {
+  const settings = saveSettings(readFormSettings())
+  els.settingsStatus.hidden = false
+  els.settingsStatus.textContent = 'Teste…'
+  try {
+    const ok = await testHealth(settings)
+    els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
+    if (ok) await refreshCollections(false)
+  } catch (error) {
+    els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+  }
+})
+
+els.reloadCollections.addEventListener('click', () => {
+  void refreshCollections(true)
+})
+
+els.cacheRefresh?.addEventListener('click', () => {
+  void refreshCacheUi(true)
+})
+
+els.cacheClear?.addEventListener('click', async () => {
+  els.settingsStatus.hidden = false
+  els.settingsStatus.textContent = 'Cache wird geleert…'
+  try {
+    const result = await clearCache()
+    updateCacheStatsLabel({ count: 0, bytes: 0 })
+    els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`
+  } catch (error) {
+    els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+  }
+})
+
+els.collectionSelect?.addEventListener('change', onCollectionChange)
+els.collectionSelectMain?.addEventListener('change', onCollectionChange)
+
+els.selectAllBtn.addEventListener('click', () => {
+  for (const hit of hits) selected.add(hit.id)
+  for (const input of els.resultsList.querySelectorAll('input[type="checkbox"]')) {
+    input.checked = true
+  }
+  updateSelectionChrome()
+})
+els.selectNoneBtn.addEventListener('click', () => {
+  selected.clear()
+  for (const input of els.resultsList.querySelectorAll('input[type="checkbox"]')) {
+    input.checked = false
+  }
+  updateSelectionChrome()
+})
+
+els.searchBtn.addEventListener('click', () => {
+  void runSearch()
+})
+els.searchInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') void runSearch()
+})
+els.dryRunBtn.addEventListener('click', () => {
+  void runDryDownload()
+})
+els.insertBtn.addEventListener('click', () => {
+  void runInsert()
+})
+
+applySettingsToForm(loadSettings())
+els.searchInput.value = loadLastQuery()
+updateCacheStatsLabel(getCacheStats())
+void refreshCacheUi(false)
+if (loadSettings().apiToken) {
+  void refreshCollections(false)
+}

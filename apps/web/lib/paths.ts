@@ -180,6 +180,17 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/reframes/${encodeURIComponent(reframeId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaReframeDownload: (mediaAssetId: string, reframeId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/reframes/${encodeURIComponent(reframeId)}/download?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    /** Adobe UXP panel insert download — specs/api/media-adobe-download.md */
+    apiMediaAdobeDownload: (
+      mediaAssetId: string,
+      platformProjectId: string,
+      opts?: { kind?: 'source' | 'proxy'; mode?: 'json' | 'redirect' },
+    ) => {
+      const params = new URLSearchParams({ platformProjectId })
+      if (opts?.kind) params.set('kind', opts.kind)
+      if (opts?.mode) params.set('mode', opts.mode)
+      return `/api/media/${encodeURIComponent(mediaAssetId)}/adobe-download?${params.toString()}`
+    },
     apiMediaSearch: (platformProjectId: string, query: string) =>
       `/api/media/search?platformProjectId=${encodeURIComponent(platformProjectId)}&q=${encodeURIComponent(query)}`,
     apiCuts: (platformProjectId: string) =>

@@ -2,7 +2,7 @@
 
 **Status:** Accepted — 2026-09-08  
 **Product:** VIDEON v3  
-**Consumers:** In-app `/chat` (`scene-chat.md`) · Plexon `video_hit_strip` (`assistant-videon-mcp.md`)  
+**Consumers:** In-app `/chat` (`scene-chat.md`) · Plexon `video_hit_strip` (`assistant-videon-mcp.md`) · Adobe UXP Library Panel (`adobe-uxp-library-panel.md`)  
 **Implements:** `apps/web/lib/scene-hit-model.ts`
 
 ## Purpose

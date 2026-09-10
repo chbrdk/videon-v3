@@ -47,7 +47,8 @@ export type ContractParseResult = {
 };
 /** Strict parser for PLEXON → VIDEON provisioning. Unknown fields are ignored by design. */
 export declare function parseProvisionWorkspaceRequest(input: unknown): ContractParseResult;
-export type ApiErrorCode = 'contract_version_mismatch' | 'service_unauthorized' | 'user_context_required' | 'collection_access_denied' | 'not_found' | 'invalid_payload' | 'dependency_unavailable';
+/** Includes `proxy_unavailable` for Adobe download kind=proxy — specs/api/media-adobe-download.md */
+export type ApiErrorCode = 'contract_version_mismatch' | 'service_unauthorized' | 'user_context_required' | 'collection_access_denied' | 'not_found' | 'invalid_payload' | 'dependency_unavailable' | 'proxy_unavailable';
 export type ApiError = {
     error: {
         code: ApiErrorCode;

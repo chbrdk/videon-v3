@@ -24,6 +24,9 @@ export async function GET(request: Request) {
     return apiError(request, 400, 'invalid_payload', 'q is required')
   }
 
+  const limitRaw = Number.parseInt(url.searchParams.get('limit') || '', 10)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 40) : 20
+
   const plan = buildSceneSearchPlan(query)
 
   try {
@@ -40,11 +43,16 @@ export async function GET(request: Request) {
         })
       }
 
-      const items = await searchMediaInWorkspace({ workspaceId: workspace.workspace.id, query })
+      const items = await searchMediaInWorkspace({
+        workspaceId: workspace.workspace.id,
+        query,
+        limit,
+      })
       return apiJson(request, {
         scope: 'project',
         query,
         terms: plan.terms,
+        limit,
         items: items.map((item) => ({ ...item, platformProjectId })),
       })
     }
@@ -60,6 +68,7 @@ export async function GET(request: Request) {
       platformProjectIds: directory.items.map((item) => item.id),
       plexonUserId: userId,
       query,
+      limit,
     })
     const nameById = new Map(directory.items.map((item) => [item.id, item.name]))
 
@@ -67,6 +76,7 @@ export async function GET(request: Request) {
       scope: 'accessible',
       query,
       terms: planTerms.length ? planTerms : plan.terms,
+      limit,
       truncated: directory.truncated,
       items: hits.map((item) => ({
         ...item,

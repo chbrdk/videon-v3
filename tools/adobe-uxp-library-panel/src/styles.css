@@ -1,0 +1,273 @@
+:root {
+  color-scheme: dark;
+  --bg: #1c1c1c;
+  --panel: #252525;
+  --stroke: #3a3a3a;
+  --text: #f2f2f2;
+  --muted: #a0a0a0;
+  --accent: #e8e8e8;
+  --danger: #c45c5c;
+  --ok: #6a9a6a;
+  font-family: "Adobe Clean", "Segoe UI", sans-serif;
+  font-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100vh;
+  padding: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.workspace-bar {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.workspace-bar label {
+  margin-bottom: 0;
+}
+
+.settings,
+.search,
+.results,
+.insert-bar {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+select {
+  width: 100%;
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+input[type="text"],
+input[type="url"],
+input[type="password"],
+input[type="search"] {
+  width: 100%;
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.row,
+.search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search input {
+  flex: 1;
+  margin: 0;
+}
+
+button {
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #111;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+button.ghost {
+  background: transparent;
+}
+
+.results-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.results-meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.tiny {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cache-box {
+  margin: 8px 0 12px;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.cache-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.hit.selected {
+  border-color: #666;
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.hit {
+  display: grid;
+  grid-template-columns: 18px 64px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.hit img {
+  width: 64px;
+  height: 36px;
+  object-fit: cover;
+  background: #111;
+  border-radius: 2px;
+}
+
+.hit-ph {
+  width: 64px;
+  height: 36px;
+  background: #111;
+  border-radius: 2px;
+}
+
+.hit-title {
+  font-weight: 600;
+}
+
+.hit-meta,
+.empty,
+.status,
+.banner {
+  color: var(--muted);
+}
+
+.banner {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--stroke);
+}
+
+.banner.error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.banner.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.insert-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress {
+  height: 4px;
+  background: var(--stroke);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+}
+
+.hit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.hit-actions a,
+.hit-actions button {
+  font-size: 11px;
+  padding: 2px 6px;
+}
