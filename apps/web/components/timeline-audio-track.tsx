@@ -124,7 +124,7 @@ export function TimelineAudioTrack({
             tone="audio"
             className="videon-cut-timeline__clip videon-cut-timeline__clip--audio"
           >
-            <Waveform peaks={sampled} height={12} className="videon-cut-timeline__audio-canvas" />
+            <Waveform peaks={sampled} height={36} className="videon-cut-timeline__audio-canvas" />
           </TimelineClip>
         )
       })}

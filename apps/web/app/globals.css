@@ -1680,7 +1680,7 @@ main {
 .videon-cut-timeline__audio-canvas {
   width: 100%;
   height: 100%;
-  max-height: 0.75rem;
+  max-height: 2.25rem;
   display: block;
 }
 
@@ -2622,15 +2622,15 @@ main {
 /* Must beat base header-label min-height (same single-class specificity otherwise loses). */
 .videon-cut-timeline__header-label.videon-cut-timeline__header-label--audio,
 .videon-cut-timeline__header-label.videon-cut-timeline__header-label--transcript {
-  min-height: 0.75rem;
-  height: 0.75rem;
+  min-height: 2.25rem;
+  height: 2.25rem;
   grid-template-rows: none;
   grid-auto-flow: column;
   align-items: center;
   justify-content: center;
   gap: 0.1rem;
-  padding: 0.05rem 0.1rem;
-  font-size: 0.55rem;
+  padding: 0.1rem 0.15rem;
+  font-size: 0.58rem;
 }
 
 .videon-cut-timeline__header-label--insight {
@@ -2828,8 +2828,8 @@ a.videon-cut-timeline__track-btn--link {
 
 .videon-cut-timeline__track--audio .videon-cut-timeline__clip,
 .videon-cut-timeline__track--audio .videon-cut-timeline__clip.ds-timeline-clip {
-  top: 0.05rem;
-  bottom: 0.05rem;
+  top: 0.15rem;
+  bottom: 0.15rem;
 }
 
 .videon-cut-timeline__track--music .videon-cut-timeline__clip.ds-timeline-clip--audio {
@@ -2843,14 +2843,14 @@ a.videon-cut-timeline__track-btn--link {
 }
 
 .videon-cut-timeline__transcript-segment.ds-timeline-clip {
-  top: 0.05rem;
-  bottom: 0.05rem;
+  top: 0.15rem;
+  bottom: 0.15rem;
   cursor: pointer;
   align-content: center;
   background: color-mix(in srgb, #3f5a3a 55%, transparent);
-  font-size: 0.55rem;
-  padding: 0 0.2rem;
-  line-height: 1;
+  font-size: 0.62rem;
+  padding: 0 0.25rem;
+  line-height: 1.15;
 }
 
 .videon-cut-timeline__ruler-tick {
@@ -2891,8 +2891,8 @@ a.videon-cut-timeline__track-btn--link {
 /* Compound selectors: base .track min-height must not win over companions. */
 .videon-cut-timeline__track.videon-cut-timeline__track--audio,
 .videon-cut-timeline__track.videon-cut-timeline__track--transcript {
-  min-height: 0.75rem;
-  height: 0.75rem;
+  min-height: 2.25rem;
+  height: 2.25rem;
   cursor: default;
   overflow: hidden;
 }
