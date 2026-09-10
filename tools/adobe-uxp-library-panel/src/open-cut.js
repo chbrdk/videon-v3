@@ -13,6 +13,7 @@ import { extractOpenCutZip } from './open-cut-cache.js'
 import {
   OPEN_CUT_PHASE,
   OPEN_CUT_POLL_TIMEOUT_MS,
+  isMissingStorageKeyError,
   nextPollDelayMs,
   openCutCacheKey,
   openCutIdempotencyKey,
@@ -44,17 +45,21 @@ function sleep(ms, signal) {
   })
 }
 
-async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase) {
+async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase, forceFresh) {
   onPhase?.(OPEN_CUT_PHASE.export)
-  const existing = await listCutExports(settings, cut.id, platformProjectId, signal)
-  const reusable = pickReusablePremiereExport(cut, existing)
-  if (reusable) return reusable
+  if (!forceFresh) {
+    const existing = await listCutExports(settings, cut.id, platformProjectId, signal)
+    const reusable = pickReusablePremiereExport(cut, existing)
+    if (reusable) return reusable
+  }
 
   const enqueued = await enqueuePremiereExport(
     settings,
     cut.id,
     platformProjectId,
-    openCutIdempotencyKey(cut),
+    forceFresh
+      ? `${openCutIdempotencyKey(cut)}:force:${Date.now()}`
+      : openCutIdempotencyKey(cut),
     signal,
   )
 
@@ -94,6 +99,9 @@ async function ensurePremiereExport(settings, cut, platformProjectId, signal, on
  *   hostInfo: object,
  *   signal?: AbortSignal,
  *   handoff?: boolean,
+ *   forceFreshExport?: boolean,
+ *   replaceLinked?: boolean,
+ *   link?: object|null,
  *   onPhase?: (phase: string, label: string) => void,
  * }} input
  */
@@ -105,6 +113,9 @@ export async function runOpenCut(input) {
     hostInfo,
     signal,
     handoff = true,
+    forceFreshExport = false,
+    replaceLinked = false,
+    link = null,
     onPhase,
   } = input
 
@@ -131,36 +142,60 @@ export async function runOpenCut(input) {
   }
 
   try {
-    let exportJob = await ensurePremiereExport(settings, cut, platformProjectId, signal, emit)
-    let downloadUrl = exportJob._downloadUrl
+    const resolvePackage = async (forceFresh) => {
+      let exportJob = await ensurePremiereExport(
+        settings,
+        cut,
+        platformProjectId,
+        signal,
+        emit,
+        forceFresh,
+      )
+      let downloadUrl = exportJob._downloadUrl
 
-    if (!downloadUrl) {
-      emit(OPEN_CUT_PHASE.export)
-      const detail = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal)
-      exportJob = detail?.export || exportJob
-      downloadUrl = detail?.downloadUrl
-      if (exportJob.status !== 'succeeded') {
-        // Still polling if we reused a queued job somehow
-        const started = Date.now()
-        let attempt = 0
-        while (exportJob.status !== 'succeeded') {
-          if (exportJob.status === 'failed' || exportJob.status === 'cancelled') {
-            throw new Error(exportJob.errorMessage || `Export ${exportJob.status}`)
+      if (!downloadUrl) {
+        emit(OPEN_CUT_PHASE.export)
+        const detail = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal)
+        exportJob = detail?.export || exportJob
+        downloadUrl = detail?.downloadUrl
+        if (exportJob.status !== 'succeeded') {
+          const started = Date.now()
+          let attempt = 0
+          while (exportJob.status !== 'succeeded') {
+            if (exportJob.status === 'failed' || exportJob.status === 'cancelled') {
+              throw new Error(exportJob.errorMessage || `Export ${exportJob.status}`)
+            }
+            if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error('Export Timeout')
+            await sleep(nextPollDelayMs(attempt), signal)
+            attempt += 1
+            const again = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal)
+            exportJob = again?.export || exportJob
+            downloadUrl = again?.downloadUrl
           }
-          if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error('Export Timeout')
-          await sleep(nextPollDelayMs(attempt), signal)
-          attempt += 1
-          const again = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal)
-          exportJob = again?.export || exportJob
-          downloadUrl = again?.downloadUrl
         }
+      }
+
+      if (!downloadUrl) throw new Error('downloadUrl nach Export fehlt')
+
+      emit(OPEN_CUT_PHASE.download)
+      const zipBuffer = await downloadExportZip(downloadUrl, signal)
+      return { exportJob, zipBuffer }
+    }
+
+    let packageResult
+    try {
+      packageResult = await resolvePackage(forceFreshExport)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (!forceFreshExport && isMissingStorageKeyError(msg)) {
+        emit(OPEN_CUT_PHASE.export, 'Export neu…')
+        packageResult = await resolvePackage(true)
+      } else {
+        throw error
       }
     }
 
-    if (!downloadUrl) throw new Error('downloadUrl nach Export fehlt')
-
-    emit(OPEN_CUT_PHASE.download)
-    const zipBuffer = await downloadExportZip(downloadUrl, signal)
+    const { exportJob, zipBuffer } = packageResult
     const cacheKey = openCutCacheKey(cut.id, exportJob.id, exportJob.bytes ?? zipBuffer.byteLength)
 
     emit(OPEN_CUT_PHASE.extract)
@@ -188,6 +223,8 @@ export async function runOpenCut(input) {
       hostInfo,
       binName: settings.binName || 'VIDEON',
       cutName: cut.name,
+      replaceLinked,
+      link,
     })
 
     if (!opened.ok) {
@@ -195,7 +232,6 @@ export async function runOpenCut(input) {
       return opened
     }
 
-    // If auto_import failed soft into reveal, phase label still reflects mode.
     if (opened.mode === 'reveal_and_prompt') {
       emit(OPEN_CUT_PHASE.handoff)
     }
@@ -210,7 +246,10 @@ export async function runOpenCut(input) {
       emit(OPEN_CUT_PHASE.error, 'abgebrochen')
       return { ok: false, mode: 'unsupported', message: 'Abgebrochen.' }
     }
-    emit(OPEN_CUT_PHASE.error, msg.slice(0, 80))
-    return { ok: false, mode: 'error', message: msg }
+    const friendly = isMissingStorageKeyError(msg)
+      ? `Export/Medien fehlen im Storage (${msg.slice(0, 120)}). Cut-Medien prüfen oder neu hochladen.`
+      : msg
+    emit(OPEN_CUT_PHASE.error, friendly.slice(0, 80))
+    return { ok: false, mode: 'error', message: friendly }
   }
 }

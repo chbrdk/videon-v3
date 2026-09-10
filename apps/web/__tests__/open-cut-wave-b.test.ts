@@ -32,6 +32,7 @@ describe('open-cut-model Wave B helpers', () => {
       shouldReusePremiereExport(cut, {
         format: 'premiere_xml',
         status: 'succeeded',
+        storageKey: 'ws/exports/a.zip',
         createdAt: '2026-09-10T11:00:00.000Z',
       }),
     ).toBe(true)
@@ -39,13 +40,22 @@ describe('open-cut-model Wave B helpers', () => {
       shouldReusePremiereExport(cut, {
         format: 'premiere_xml',
         status: 'succeeded',
+        storageKey: 'ws/exports/a.zip',
         createdAt: '2026-09-10T09:00:00.000Z',
+      }),
+    ).toBe(false)
+    expect(
+      shouldReusePremiereExport(cut, {
+        format: 'premiere_xml',
+        status: 'succeeded',
+        createdAt: '2026-09-10T11:00:00.000Z',
       }),
     ).toBe(false)
     expect(
       shouldReusePremiereExport(cut, {
         format: 'mp4',
         status: 'succeeded',
+        storageKey: 'ws/exports/a.mp4',
         createdAt: '2026-09-10T11:00:00.000Z',
       }),
     ).toBe(false)
@@ -56,10 +66,20 @@ describe('open-cut-model Wave B helpers', () => {
           id: 'e1',
           format: 'premiere_xml',
           status: 'succeeded',
+          storageKey: 'ws/exports/e1.zip',
           createdAt: '2026-09-10T11:00:00.000Z',
         },
       ])?.id,
     ).toBe('e1')
+  })
+
+  it('detects missing storage key errors for retry', async () => {
+    const { isMissingStorageKeyError } = await import(
+      '../../../tools/adobe-uxp-library-panel/src/open-cut-model.js'
+    )
+    expect(isMissingStorageKeyError('The specified key does not exist')).toBe(true)
+    expect(isMissingStorageKeyError('Export package missing in storage')).toBe(true)
+    expect(isMissingStorageKeyError('network timeout')).toBe(false)
   })
 
   it('builds cache + idempotency keys and poll backoff', () => {
@@ -90,15 +110,37 @@ describe('open-cut-model Wave B helpers', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
     expect(pkg.dependencies.fflate).toMatch(/^[\^~]?0\.8\./)
     expect(readFileSync(join(root, 'src/open-cut.js'), 'utf8')).toContain('runOpenCut')
+    expect(readFileSync(join(root, 'src/open-cut.js'), 'utf8')).toContain('forceFreshExport')
+    expect(readFileSync(join(root, 'src/open-cut.js'), 'utf8')).toContain('isMissingStorageKeyError')
     expect(readFileSync(join(root, 'src/cuts-api.js'), 'utf8')).toContain('premiere_xml')
     expect(readFileSync(join(root, 'src/open-cut-cache.js'), 'utf8')).toContain('unzipSync')
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('reveal_and_prompt')
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('openCutInPremiere')
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('autoImportOpenCutXml')
+    expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('replaceLinked')
+    expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('deleteSequenceBestEffort')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('mode-cuts-btn')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Sequenz ersetzen')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('In Premiere öffnen')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.22'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('replaceLinked: true')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toContain(
+      'withParityRefresh || preview.needsParityRefresh',
+    )
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.24'")
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('setPanelMode')
     expect(readFileSync(join(root, 'src/http.js'), 'utf8')).toContain('xhr.send(body)')
+  })
+
+  it('matches linked sequences by guid or name', async () => {
+    const { sequenceMatchesLink, sequenceKey } = await import(
+      '../../../tools/adobe-uxp-library-panel/src/premiere-open-cut.js'
+    )
+    expect(sequenceKey({ guid: 'g1', name: 'A' })).toBe('g1')
+    expect(sequenceMatchesLink({ guid: 'g1', name: 'Other' }, { sequenceGuid: 'g1' })).toBe(true)
+    expect(sequenceMatchesLink({ name: 'Sommer Final' }, { sequenceName: 'Sommer Final' })).toBe(true)
+    expect(sequenceMatchesLink({ name: 'Sommer Final 2' }, { sequenceName: 'Sommer Final' })).toBe(
+      true,
+    )
+    expect(sequenceMatchesLink({ name: 'Other' }, { sequenceName: 'Sommer Final' })).toBe(false)
   })
 })

@@ -90,9 +90,24 @@ export async function downloadExportZip(downloadUrl, signal) {
     signal,
     responseType: 'arraybuffer',
   })
-  if (!response.ok) throw new Error(`ZIP download ${response.status}`)
+  if (!response.ok) {
+    let detail = ''
+    try {
+      const text = await response.text()
+      detail = text ? ` ${text.slice(0, 180)}` : ''
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`ZIP download ${response.status}${detail}`.trim())
+  }
   const buffer = await response.arrayBuffer()
   if (!buffer?.byteLength) throw new Error('ZIP leer')
+  // MinIO/S3 sometimes returns 200 XML error bodies for missing keys on misconfigured gateways.
+  const head = new Uint8Array(buffer.slice(0, Math.min(64, buffer.byteLength)))
+  const ascii = String.fromCharCode(...head)
+  if (/NoSuchKey|specified key does not exist/i.test(ascii)) {
+    throw new Error('The specified key does not exist')
+  }
   return buffer
 }
 

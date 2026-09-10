@@ -27,7 +27,7 @@ Cuts tab → ensure `premiere_xml` ZIP → extract (`xml` + `media/`) → try `i
 
 ## Operator reload
 
-UDT Unload → Load repo folder; header **v0.1.22**. Pin Collection → Cuts → **In Premiere öffnen**.
+UDT Unload → Load repo folder; header **v0.1.24**. Pin Collection → Cuts → **In Premiere öffnen**.
 
 - Success `auto_import`: banner like `Sequenz importiert: …`
 - Fallback `reveal_and_prompt`: Import-Hinweis + XML-Pfad (+ Auto-Import reason)

@@ -31,7 +31,7 @@ import { clearOpenCutCache } from './open-cut-cache.js'
 import { listCuts } from './cuts-api.js'
 import { runOpenCut } from './open-cut.js'
 import { applyCutPushback, previewCutPushback } from './cut-pushback.js'
-import { saveCutSequenceLink } from './cut-link-store.js'
+import { getCutSequenceLink, saveCutSequenceLink } from './cut-link-store.js'
 import {
   canvasLabel,
   formatUpdatedAt,
@@ -49,7 +49,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.22'
+const PANEL_VERSION = '0.1.24'
 
 /** Max concurrent MP4 preview fetches (Product route ≤3s each). */
 const PREVIEW_CONCURRENCY = 2
@@ -375,7 +375,7 @@ function buildCutCard(cut) {
   openBtn.textContent = 'In Premiere öffnen'
   on(openBtn, 'click', (event) => {
     event.stopPropagation?.()
-    void startOpenCut(cut, true)
+    void startOpenCut(cut, { handoff: true, replaceLinked: false, forceFreshExport: false })
   })
 
   const refreshBtn = document.createElement('button')
@@ -384,7 +384,7 @@ function buildCutCard(cut) {
   refreshBtn.textContent = 'Premiere aktualisieren'
   on(refreshBtn, 'click', (event) => {
     event.stopPropagation?.()
-    void startOpenCut(cut, true)
+    void startOpenCut(cut, { handoff: true, replaceLinked: true, forceFreshExport: true })
   })
 
   const cacheBtn = document.createElement('button')
@@ -393,7 +393,7 @@ function buildCutCard(cut) {
   cacheBtn.textContent = 'ZIP cachen'
   on(cacheBtn, 'click', (event) => {
     event.stopPropagation?.()
-    void startOpenCut(cut, false)
+    void startOpenCut(cut, { handoff: false, replaceLinked: false, forceFreshExport: false })
   })
 
   const pushBtn = document.createElement('button')
@@ -455,7 +455,10 @@ async function refreshCutsList() {
   }
 }
 
-async function startOpenCut(cut, handoff) {
+async function startOpenCut(cut, options = {}) {
+  const handoff = options.handoff !== false
+  const replaceLinked = Boolean(options.replaceLinked)
+  const forceFreshExport = Boolean(options.forceFreshExport)
   if (openCutBusy) {
     showCutsBanner('Bitte warten — Open Cut läuft bereits.', 'error')
     return
@@ -475,6 +478,7 @@ async function startOpenCut(cut, handoff) {
   openCutAbort?.abort()
   openCutAbort = new AbortController()
   const { signal } = openCutAbort
+  const link = getCutSequenceLink(platformProjectId, cut.id)
 
   const result = await runOpenCut({
     settings,
@@ -483,6 +487,9 @@ async function startOpenCut(cut, handoff) {
     hostInfo,
     signal,
     handoff,
+    forceFreshExport,
+    replaceLinked: replaceLinked && Boolean(link || cut.name),
+    link: link || { sequenceName: cut.name },
     onPhase: (_phase, label) => {
       updateCutRowStatus(cut.id, label, false)
       showCutsBanner(`${cut.name}: ${label}`)
@@ -496,6 +503,7 @@ async function startOpenCut(cut, handoff) {
         cutId: cut.id,
         platformProjectId,
         sequenceName: result.sequenceName || cut.name,
+        sequenceGuid: result.sequenceGuid || null,
         exportId: result.exportId || null,
         openedAt: new Date().toISOString(),
       })
@@ -570,7 +578,7 @@ async function startCutPushback(cut) {
   }
 }
 
-async function confirmPushback(withParityRefresh) {
+async function confirmPushback(withSequenceReplace) {
   if (!pendingPushback?.restoreScenes?.length) {
     hidePushbackConfirm()
     return
@@ -593,18 +601,26 @@ async function confirmPushback(withParityRefresh) {
       return
     }
 
+    // Keep Cuts-list updatedAt in sync so a later refresh never reuses a pre-apply ZIP.
+    const nowIso = new Date().toISOString()
+    const idx = cuts.findIndex((c) => c.id === preview.cutId)
+    if (idx >= 0) cuts[idx] = { ...cuts[idx], updatedAt: nowIso }
     const cut = cuts.find((c) => c.id === preview.cutId) || {
       id: preview.cutId,
-      name: preview.cutId,
-      updatedAt: new Date().toISOString(),
+      name: preview.sequenceName || preview.cutId,
+      updatedAt: nowIso,
     }
 
-    if (withParityRefresh || preview.needsParityRefresh) {
-      showCutsBanner('Cut OK — Premiere wird neu geladen…', 'ok')
+    // Only replace Premiere when the operator explicitly asked — never auto-download.
+    if (withSequenceReplace) {
+      showCutsBanner('Cut OK — Sequenz wird ersetzt…', 'ok')
       openCutBusy = false
-      await startOpenCut({ ...cut, name: cut.name || preview.sequenceName || cut.id }, true)
+      await startOpenCut(
+        { ...cut, updatedAt: nowIso, name: cut.name || preview.sequenceName || cut.id },
+        { handoff: true, replaceLinked: true, forceFreshExport: true },
+      )
       showCutsBanner(
-        'Cut aktualisiert. Premiere neu geladen — beide Seiten gleich (Cut-Modell).',
+        'Cut aktualisiert. Sequenz ersetzt — beide Seiten gleich (Cut-Modell).',
         'ok',
       )
       return
@@ -612,7 +628,10 @@ async function confirmPushback(withParityRefresh) {
 
     openCutBusy = false
     updateCutRowStatus(preview.cutId, 'Cut aktualisiert', false)
-    showCutsBanner('Cut entspricht der Sequenz.', 'ok')
+    showCutsBanner(
+      'Cut entspricht der Sequenz. (Premiere bleibt — kein neuer Import.)',
+      'ok',
+    )
   } catch (error) {
     openCutBusy = false
     hidePushbackConfirm()

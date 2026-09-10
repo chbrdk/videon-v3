@@ -364,11 +364,18 @@ async function runPremiereXmlExport(input: {
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
-      await store.downloadObjectToFile({
-        workspaceId: media.workspaceId,
-        storageKey: media.storageKey,
-        destinationPath: sourcePath,
-      })
+      try {
+        await store.downloadObjectToFile({
+          workspaceId: media.workspaceId,
+          storageKey: media.storageKey,
+          destinationPath: sourcePath,
+        })
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        throw new Error(
+          `Source media file missing in storage for ${media.originalFilename || media.id} (${detail})`,
+        )
+      }
       sourceCache.set(media.id, sourcePath)
     }
 
@@ -380,11 +387,18 @@ async function runPremiereXmlExport(input: {
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
-      await store.downloadObjectToFile({
-        workspaceId: media.workspaceId,
-        storageKey: media.storageKey,
-        destinationPath: sourcePath,
-      })
+      try {
+        await store.downloadObjectToFile({
+          workspaceId: media.workspaceId,
+          storageKey: media.storageKey,
+          destinationPath: sourcePath,
+        })
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        throw new Error(
+          `Track media file missing in storage for ${media.originalFilename || media.id} (${detail})`,
+        )
+      }
       sourceCache.set(media.id, sourcePath)
     }
 

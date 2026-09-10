@@ -50,6 +50,24 @@ export async function GET(request: Request, context: RouteContext) {
   let downloadUrl: string | null = null
   if (exportJob.status === 'succeeded' && exportJob.storageKey) {
     const store = new S3ObjectStore()
+    const exists = await store.objectExists({
+      workspaceId: workspace.workspace.id,
+      storageKey: exportJob.storageKey,
+    })
+    if (!exists) {
+      const { markCutExportFailed } = await import('@/lib/db/cut-exports')
+      await markCutExportFailed(
+        exportJob.id,
+        'Export package missing in object storage (The specified key does not exist)',
+      )
+      return apiError(
+        request,
+        409,
+        'invalid_payload',
+        'Export package missing in storage — enqueue a fresh premiere_xml export',
+        { retryable: true },
+      )
+    }
     const ext = exportJob.format === 'premiere_xml' ? 'zip' : 'mp4'
     const target = await store.createDownloadTarget({
       workspaceId: workspace.workspace.id,

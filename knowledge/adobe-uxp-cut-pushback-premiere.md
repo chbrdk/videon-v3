@@ -2,7 +2,7 @@
 
 **Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md`  
 **Updated:** 2026-09-10  
-**Panel:** ≥ **0.1.22**
+**Panel:** ≥ **0.1.24**
 
 ## Product ask
 
@@ -12,9 +12,15 @@ Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.
 
 | Button | Direction |
 |--------|-----------|
-| **In Premiere öffnen** / **Premiere aktualisieren** | Cut → Premiere (Open Cut) |
-| **Cut aktualisieren** | Premiere → Cut (capture → diff → restore V1) |
-| **Übernehmen + Premiere neu laden** | Apply + Open Cut refresh |
+| **In Premiere öffnen** | Cut → Premiere (first import; keep link) |
+| **Premiere aktualisieren** | Fresh ZIP → import → **delete prior linked sequences** (no duplicates) |
+| **Cut aktualisieren → Übernehmen** | Premiere → Cut only (**no** ZIP / no new sequence) |
+| **Übernehmen + Sequenz ersetzen** | Apply Cut, then same as Premiere aktualisieren |
+
+## Why “alte Version” / zig Sequenzen happened
+
+1. After apply, Open Cut reused an export with `createdAt >= cut.updatedAt` while the Cuts-list still held the **pre-apply** `updatedAt` → old ZIP.
+2. Each import created another sequence; nothing deleted the previous link.
 
 ## Capture
 
@@ -25,11 +31,7 @@ Mapping: `file-{mediaAssetId}` when preserved; after Premiere re-export resolve 
 
 ## Operator
 
-UDT Unload → Load → **v0.1.22** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → Diff → übernehmen.
-
-## Still open
-
-Staging smoke; V2/VO apply; skip-unmapped policy.
+UDT Unload → Load → **v0.1.24** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → **Übernehmen** (stay on same sequence). Only use **Sequenz ersetzen** when the Cut editor is ahead.
 
 ## Restore constraints
 

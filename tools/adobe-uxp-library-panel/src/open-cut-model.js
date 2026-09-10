@@ -66,13 +66,18 @@ export function shouldReusePremiereExport(cut, exportJob) {
   if (!cut || !exportJob) return false
   if (exportJob.format !== 'premiere_xml') return false
   if (exportJob.status !== 'succeeded') return false
-  if (!exportJob.storageKey && exportJob.bytes == null) {
-    /* still allow if status succeeded — downloadUrl issued separately */
-  }
+  // Orphan DB rows without a stored package must not be reused (S3 NoSuchKey).
+  if (!exportJob.storageKey) return false
   const cutAt = Date.parse(cut.updatedAt || '')
   const expAt = Date.parse(exportJob.createdAt || '')
   if (!Number.isFinite(cutAt) || !Number.isFinite(expAt)) return false
   return expAt >= cutAt
+}
+
+export function isMissingStorageKeyError(message) {
+  return /specified key does not exist|NoSuchKey|NotFound|missing in (object )?storage|Export package missing/i.test(
+    String(message || ''),
+  )
 }
 
 export function pickReusablePremiereExport(cut, exportsList) {

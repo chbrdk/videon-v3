@@ -1473,12 +1473,16 @@
     if (!cut || !exportJob) return false;
     if (exportJob.format !== "premiere_xml") return false;
     if (exportJob.status !== "succeeded") return false;
-    if (!exportJob.storageKey && exportJob.bytes == null) {
-    }
+    if (!exportJob.storageKey) return false;
     const cutAt = Date.parse(cut.updatedAt || "");
     const expAt = Date.parse(exportJob.createdAt || "");
     if (!Number.isFinite(cutAt) || !Number.isFinite(expAt)) return false;
     return expAt >= cutAt;
+  }
+  function isMissingStorageKeyError(message) {
+    return /specified key does not exist|NoSuchKey|NotFound|missing in (object )?storage|Export package missing/i.test(
+      String(message || "")
+    );
   }
   function pickReusablePremiereExport(cut, exportsList) {
     const list = Array.isArray(exportsList) ? exportsList : [];
@@ -1810,9 +1814,22 @@
       signal,
       responseType: "arraybuffer"
     });
-    if (!response.ok) throw new Error(`ZIP download ${response.status}`);
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const text = await response.text();
+        detail = text ? ` ${text.slice(0, 180)}` : "";
+      } catch {
+      }
+      throw new Error(`ZIP download ${response.status}${detail}`.trim());
+    }
     const buffer = await response.arrayBuffer();
     if (!buffer?.byteLength) throw new Error("ZIP leer");
+    const head = new Uint8Array(buffer.slice(0, Math.min(64, buffer.byteLength)));
+    const ascii = String.fromCharCode(...head);
+    if (/NoSuchKey|specified key does not exist/i.test(ascii)) {
+      throw new Error("The specified key does not exist");
+    }
     return buffer;
   }
   async function getCutDetail(settings, cutId, platformProjectId, signal) {
@@ -2170,6 +2187,21 @@
     }
     return String(seq.name || "");
   }
+  function sequenceMatchesLink(seq, link) {
+    if (!seq || !link) return false;
+    const guid = link.sequenceGuid || link.guid;
+    if (guid) {
+      try {
+        if (seq.guid != null && String(seq.guid) === String(guid)) return true;
+      } catch {
+      }
+    }
+    const want = String(link.sequenceName || "").trim().toLowerCase();
+    if (!want) return false;
+    const name = String(seq.name || "").trim().toLowerCase();
+    if (!name) return false;
+    return name === want || name.startsWith(`${want} `) || name.includes(want);
+  }
   async function listSequenceSnapshot(project) {
     if (typeof project.getSequences !== "function") return [];
     try {
@@ -2178,6 +2210,104 @@
     } catch {
       return [];
     }
+  }
+  async function executeProjectActions(project, buildActions, label) {
+    if (!project || typeof project.executeTransaction !== "function") return false;
+    const run = async () => {
+      await project.executeTransaction(async (compAction) => {
+        for (const build of buildActions) {
+          const action = typeof build === "function" ? build() : null;
+          if (!action) continue;
+          if (compAction && typeof compAction.addAction === "function") {
+            compAction.addAction(action);
+          } else if (typeof action === "function") {
+            action();
+          }
+        }
+      }, label || "VIDEON");
+    };
+    try {
+      if (typeof project.lockedAccess === "function") {
+        await project.lockedAccess(() => run());
+      } else {
+        await run();
+      }
+      return true;
+    } catch (error) {
+      console.warn("[VIDEON] executeTransaction failed", label, error);
+      return false;
+    }
+  }
+  async function deleteSequenceBestEffort(project, sequence) {
+    if (!project || !sequence) return false;
+    if (typeof project.deleteSequence === "function") {
+      try {
+        await project.deleteSequence(sequence);
+        return true;
+      } catch (error) {
+        console.warn("[VIDEON] project.deleteSequence failed", error);
+      }
+    }
+    try {
+      const item = typeof sequence.getProjectItem === "function" ? await sequence.getProjectItem() : null;
+      if (!item) return false;
+      const parent = typeof item.getParentBin === "function" ? item.getParentBin() : typeof item.parent === "object" ? item.parent : null;
+      if (parent && typeof parent.createRemoveItemAction === "function") {
+        const ok = await executeProjectActions(
+          project,
+          [() => parent.createRemoveItemAction(item)],
+          "VIDEON remove sequence"
+        );
+        if (ok) return true;
+      }
+      if (typeof project.deleteAsset === "function") {
+        await project.deleteAsset(item);
+        return true;
+      }
+    } catch (error) {
+      console.warn("[VIDEON] deleteSequenceBestEffort failed", error);
+    }
+    return false;
+  }
+  async function activateSequence(project, sequence) {
+    if (!sequence) return;
+    if (typeof project.openSequence === "function") {
+      try {
+        await project.openSequence(sequence);
+      } catch (error) {
+        console.warn("[VIDEON] openSequence failed", error);
+      }
+    }
+    if (typeof project.setActiveSequence === "function") {
+      try {
+        await project.setActiveSequence(sequence);
+      } catch {
+      }
+    }
+  }
+  async function renameSequenceBestEffort(project, sequence, name) {
+    if (!sequence || !name) return false;
+    try {
+      if (typeof sequence.name === "string" && sequence.name === name) return true;
+    } catch {
+    }
+    try {
+      const item = typeof sequence.getProjectItem === "function" ? await sequence.getProjectItem() : null;
+      if (item && typeof item.createSetNameAction === "function") {
+        return executeProjectActions(
+          project,
+          [() => item.createSetNameAction(name)],
+          "VIDEON rename sequence"
+        );
+      }
+      if (item && "name" in item) {
+        item.name = name;
+        return true;
+      }
+    } catch (error) {
+      console.warn("[VIDEON] renameSequenceBestEffort failed", error);
+    }
+    return false;
   }
   async function revealAndPromptOpenCut(input) {
     const hostInfo2 = input.hostInfo || { id: "PPRO" };
@@ -2211,7 +2341,7 @@ ${xmlPath}${reason}`
     };
   }
   async function autoImportOpenCutXml(input) {
-    const { xmlPath, binName, cutName } = input;
+    const { xmlPath, binName, cutName, replaceLinked, link } = input;
     let localPath;
     try {
       localPath = assertLocalImportPath(xmlPath);
@@ -2244,12 +2374,13 @@ ${xmlPath}${reason}`
       }
       const before = await listSequenceSnapshot(project);
       const beforeKeys = new Set(before.map(sequenceKey).filter(Boolean));
+      const priorLinked = replaceLinked ? before.filter((seq) => sequenceMatchesLink(seq, link || { sequenceName: cutName })) : [];
       const bin = await ensureBin(ppro, project, binName || "VIDEON");
       const imported = await project.importFiles([localPath], true, bin || null, false);
       if (imported === false) {
         return { ok: false, mode: "unavailable", message: "importFiles hat false zur\xFCckgegeben" };
       }
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 250));
       const after = await listSequenceSnapshot(project);
       let created = after.find((seq) => {
         const key = sequenceKey(seq);
@@ -2262,25 +2393,33 @@ ${xmlPath}${reason}`
       if (!created && after.length > before.length) {
         created = after[after.length - 1];
       }
-      if (created && typeof project.openSequence === "function") {
-        try {
-          await project.openSequence(created);
-        } catch (error) {
-          console.warn("[VIDEON] openSequence after Open Cut failed", error);
+      let removed = 0;
+      if (replaceLinked && priorLinked.length) {
+        const createdKey = sequenceKey(created);
+        for (const seq of priorLinked) {
+          if (createdKey && sequenceKey(seq) === createdKey) continue;
+          const ok = await deleteSequenceBestEffort(project, seq);
+          if (ok) removed += 1;
         }
       }
-      if (created && typeof project.setActiveSequence === "function") {
-        try {
-          await project.setActiveSequence(created);
-        } catch {
-        }
+      if (created && cutName) {
+        await renameSequenceBestEffort(project, created, cutName);
+      }
+      await activateSequence(project, created);
+      let sequenceGuid = null;
+      try {
+        if (created?.guid != null) sequenceGuid = String(created.guid);
+      } catch {
       }
       const sequenceName = created?.name || pathBasename(localPath).replace(/\.xml$/i, "") || cutName || null;
+      const replaceNote = replaceLinked && removed ? ` \xB7 ${removed} alte Sequenz(en) entfernt` : replaceLinked ? " \xB7 ersetzt (keine alte Sequenz gefunden)" : "";
       return {
         ok: true,
         mode: "auto_import",
         sequenceName,
-        message: sequenceName ? `Sequenz importiert: ${sequenceName}` : `XMEML importiert (${pathBasename(localPath)}) \u2014 Sequenz in Projekt pr\xFCfen`
+        sequenceGuid,
+        removedPrior: removed,
+        message: sequenceName ? `Sequenz importiert: ${sequenceName}${replaceNote}` : `XMEML importiert (${pathBasename(localPath)}) \u2014 Sequenz in Projekt pr\xFCfen${replaceNote}`
       };
     } catch (error) {
       return {
@@ -2302,7 +2441,9 @@ ${xmlPath}${reason}`
     const auto = await autoImportOpenCutXml({
       xmlPath: input.xmlPath,
       binName: input.binName || "VIDEON",
-      cutName: input.cutName
+      cutName: input.cutName,
+      replaceLinked: Boolean(input.replaceLinked),
+      link: input.link || null
     });
     if (auto.ok) {
       return {
@@ -2313,6 +2454,8 @@ ${xmlPath}${reason}`
         cutId: input.cutId,
         exportId: input.exportId,
         sequenceName: auto.sequenceName || null,
+        sequenceGuid: auto.sequenceGuid || null,
+        removedPrior: auto.removedPrior || 0,
         message: auto.message
       };
     }
@@ -2344,16 +2487,18 @@ ${xmlPath}${reason}`
       }
     });
   }
-  async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase) {
+  async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase, forceFresh) {
     onPhase?.(OPEN_CUT_PHASE.export);
-    const existing = await listCutExports(settings, cut.id, platformProjectId, signal);
-    const reusable = pickReusablePremiereExport(cut, existing);
-    if (reusable) return reusable;
+    if (!forceFresh) {
+      const existing = await listCutExports(settings, cut.id, platformProjectId, signal);
+      const reusable = pickReusablePremiereExport(cut, existing);
+      if (reusable) return reusable;
+    }
     const enqueued = await enqueuePremiereExport(
       settings,
       cut.id,
       platformProjectId,
-      openCutIdempotencyKey(cut),
+      forceFresh ? `${openCutIdempotencyKey(cut)}:force:${Date.now()}` : openCutIdempotencyKey(cut),
       signal
     );
     const started = Date.now();
@@ -2389,6 +2534,9 @@ ${xmlPath}${reason}`
       hostInfo: hostInfo2,
       signal,
       handoff = true,
+      forceFreshExport = false,
+      replaceLinked = false,
+      link = null,
       onPhase
     } = input;
     const emit = (phase, extra) => {
@@ -2411,32 +2559,55 @@ ${xmlPath}${reason}`
       return { ok: false, mode: "unsupported", message: "Kein Cut gew\xE4hlt." };
     }
     try {
-      let exportJob = await ensurePremiereExport(settings, cut, platformProjectId, signal, emit);
-      let downloadUrl = exportJob._downloadUrl;
-      if (!downloadUrl) {
-        emit(OPEN_CUT_PHASE.export);
-        const detail = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal);
-        exportJob = detail?.export || exportJob;
-        downloadUrl = detail?.downloadUrl;
-        if (exportJob.status !== "succeeded") {
-          const started = Date.now();
-          let attempt = 0;
-          while (exportJob.status !== "succeeded") {
-            if (exportJob.status === "failed" || exportJob.status === "cancelled") {
-              throw new Error(exportJob.errorMessage || `Export ${exportJob.status}`);
+      const resolvePackage = async (forceFresh) => {
+        let exportJob2 = await ensurePremiereExport(
+          settings,
+          cut,
+          platformProjectId,
+          signal,
+          emit,
+          forceFresh
+        );
+        let downloadUrl = exportJob2._downloadUrl;
+        if (!downloadUrl) {
+          emit(OPEN_CUT_PHASE.export);
+          const detail = await getCutExport(settings, cut.id, exportJob2.id, platformProjectId, signal);
+          exportJob2 = detail?.export || exportJob2;
+          downloadUrl = detail?.downloadUrl;
+          if (exportJob2.status !== "succeeded") {
+            const started = Date.now();
+            let attempt = 0;
+            while (exportJob2.status !== "succeeded") {
+              if (exportJob2.status === "failed" || exportJob2.status === "cancelled") {
+                throw new Error(exportJob2.errorMessage || `Export ${exportJob2.status}`);
+              }
+              if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error("Export Timeout");
+              await sleep(nextPollDelayMs(attempt), signal);
+              attempt += 1;
+              const again = await getCutExport(settings, cut.id, exportJob2.id, platformProjectId, signal);
+              exportJob2 = again?.export || exportJob2;
+              downloadUrl = again?.downloadUrl;
             }
-            if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error("Export Timeout");
-            await sleep(nextPollDelayMs(attempt), signal);
-            attempt += 1;
-            const again = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal);
-            exportJob = again?.export || exportJob;
-            downloadUrl = again?.downloadUrl;
           }
         }
+        if (!downloadUrl) throw new Error("downloadUrl nach Export fehlt");
+        emit(OPEN_CUT_PHASE.download);
+        const zipBuffer2 = await downloadExportZip(downloadUrl, signal);
+        return { exportJob: exportJob2, zipBuffer: zipBuffer2 };
+      };
+      let packageResult;
+      try {
+        packageResult = await resolvePackage(forceFreshExport);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!forceFreshExport && isMissingStorageKeyError(msg)) {
+          emit(OPEN_CUT_PHASE.export, "Export neu\u2026");
+          packageResult = await resolvePackage(true);
+        } else {
+          throw error;
+        }
       }
-      if (!downloadUrl) throw new Error("downloadUrl nach Export fehlt");
-      emit(OPEN_CUT_PHASE.download);
-      const zipBuffer = await downloadExportZip(downloadUrl, signal);
+      const { exportJob, zipBuffer } = packageResult;
       const cacheKey = openCutCacheKey(cut.id, exportJob.id, exportJob.bytes ?? zipBuffer.byteLength);
       emit(OPEN_CUT_PHASE.extract);
       const extracted = await extractOpenCutZip(cacheKey, zipBuffer);
@@ -2461,7 +2632,9 @@ ${extracted.xmlNativePath}`
         exportId: exportJob.id,
         hostInfo: hostInfo2,
         binName: settings.binName || "VIDEON",
-        cutName: cut.name
+        cutName: cut.name,
+        replaceLinked,
+        link
       });
       if (!opened.ok) {
         emit(OPEN_CUT_PHASE.error, opened.message || "import");
@@ -2481,8 +2654,9 @@ ${extracted.xmlNativePath}`
         emit(OPEN_CUT_PHASE.error, "abgebrochen");
         return { ok: false, mode: "unsupported", message: "Abgebrochen." };
       }
-      emit(OPEN_CUT_PHASE.error, msg.slice(0, 80));
-      return { ok: false, mode: "error", message: msg };
+      const friendly = isMissingStorageKeyError(msg) ? `Export/Medien fehlen im Storage (${msg.slice(0, 120)}). Cut-Medien pr\xFCfen oder neu hochladen.` : msg;
+      emit(OPEN_CUT_PHASE.error, friendly.slice(0, 80));
+      return { ok: false, mode: "error", message: friendly };
     }
   }
 
@@ -3111,15 +3285,22 @@ ${extracted.xmlNativePath}`
     if (!link?.cutId || !link?.platformProjectId) return null;
     const map = readCutLinks();
     const key = `${link.platformProjectId}:${link.cutId}`;
+    const prev = map[key] || {};
     map[key] = {
       cutId: link.cutId,
       platformProjectId: link.platformProjectId,
-      sequenceName: link.sequenceName || null,
-      exportId: link.exportId || null,
+      sequenceName: link.sequenceName ?? prev.sequenceName ?? null,
+      sequenceGuid: link.sequenceGuid ?? prev.sequenceGuid ?? null,
+      exportId: link.exportId ?? prev.exportId ?? null,
       openedAt: link.openedAt || (/* @__PURE__ */ new Date()).toISOString()
     };
     writeCutLinks(map);
     return map[key];
+  }
+  function getCutSequenceLink(platformProjectId, cutId) {
+    if (!platformProjectId || !cutId) return null;
+    const map = readCutLinks();
+    return map[`${platformProjectId}:${cutId}`] || null;
   }
 
   // src/collections.js
@@ -3205,7 +3386,7 @@ ${extracted.xmlNativePath}`
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.22";
+  var PANEL_VERSION = "0.1.24";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
@@ -3481,7 +3662,7 @@ ${extracted.xmlNativePath}`
     openBtn.textContent = "In Premiere \xF6ffnen";
     on(openBtn, "click", (event) => {
       event.stopPropagation?.();
-      void startOpenCut(cut, true);
+      void startOpenCut(cut, { handoff: true, replaceLinked: false, forceFreshExport: false });
     });
     const refreshBtn = document.createElement("button");
     refreshBtn.type = "button";
@@ -3489,7 +3670,7 @@ ${extracted.xmlNativePath}`
     refreshBtn.textContent = "Premiere aktualisieren";
     on(refreshBtn, "click", (event) => {
       event.stopPropagation?.();
-      void startOpenCut(cut, true);
+      void startOpenCut(cut, { handoff: true, replaceLinked: true, forceFreshExport: true });
     });
     const cacheBtn = document.createElement("button");
     cacheBtn.type = "button";
@@ -3497,7 +3678,7 @@ ${extracted.xmlNativePath}`
     cacheBtn.textContent = "ZIP cachen";
     on(cacheBtn, "click", (event) => {
       event.stopPropagation?.();
-      void startOpenCut(cut, false);
+      void startOpenCut(cut, { handoff: false, replaceLinked: false, forceFreshExport: false });
     });
     const pushBtn = document.createElement("button");
     pushBtn.type = "button";
@@ -3552,7 +3733,10 @@ ${extracted.xmlNativePath}`
       showCutsBanner(msg, "error");
     }
   }
-  async function startOpenCut(cut, handoff) {
+  async function startOpenCut(cut, options = {}) {
+    const handoff = options.handoff !== false;
+    const replaceLinked = Boolean(options.replaceLinked);
+    const forceFreshExport = Boolean(options.forceFreshExport);
     if (openCutBusy) {
       showCutsBanner("Bitte warten \u2014 Open Cut l\xE4uft bereits.", "error");
       return;
@@ -3571,6 +3755,7 @@ ${extracted.xmlNativePath}`
     openCutAbort?.abort();
     openCutAbort = new AbortController();
     const { signal } = openCutAbort;
+    const link = getCutSequenceLink(platformProjectId, cut.id);
     const result = await runOpenCut({
       settings,
       cut,
@@ -3578,6 +3763,9 @@ ${extracted.xmlNativePath}`
       hostInfo,
       signal,
       handoff,
+      forceFreshExport,
+      replaceLinked: replaceLinked && Boolean(link || cut.name),
+      link: link || { sequenceName: cut.name },
       onPhase: (_phase, label) => {
         updateCutRowStatus(cut.id, label, false);
         showCutsBanner(`${cut.name}: ${label}`);
@@ -3590,6 +3778,7 @@ ${extracted.xmlNativePath}`
           cutId: cut.id,
           platformProjectId,
           sequenceName: result.sequenceName || cut.name,
+          sequenceGuid: result.sequenceGuid || null,
           exportId: result.exportId || null,
           openedAt: (/* @__PURE__ */ new Date()).toISOString()
         });
@@ -3658,7 +3847,7 @@ ${extracted.xmlNativePath}`
       showCutsBanner(msg, "error");
     }
   }
-  async function confirmPushback(withParityRefresh) {
+  async function confirmPushback(withSequenceReplace) {
     if (!pendingPushback?.restoreScenes?.length) {
       hidePushbackConfirm();
       return;
@@ -3680,24 +3869,33 @@ ${extracted.xmlNativePath}`
         showCutsBanner(applied.message || "Apply fehlgeschlagen", "error");
         return;
       }
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      const idx = cuts.findIndex((c) => c.id === preview.cutId);
+      if (idx >= 0) cuts[idx] = { ...cuts[idx], updatedAt: nowIso };
       const cut = cuts.find((c) => c.id === preview.cutId) || {
         id: preview.cutId,
-        name: preview.cutId,
-        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        name: preview.sequenceName || preview.cutId,
+        updatedAt: nowIso
       };
-      if (withParityRefresh || preview.needsParityRefresh) {
-        showCutsBanner("Cut OK \u2014 Premiere wird neu geladen\u2026", "ok");
+      if (withSequenceReplace) {
+        showCutsBanner("Cut OK \u2014 Sequenz wird ersetzt\u2026", "ok");
         openCutBusy = false;
-        await startOpenCut({ ...cut, name: cut.name || preview.sequenceName || cut.id }, true);
+        await startOpenCut(
+          { ...cut, updatedAt: nowIso, name: cut.name || preview.sequenceName || cut.id },
+          { handoff: true, replaceLinked: true, forceFreshExport: true }
+        );
         showCutsBanner(
-          "Cut aktualisiert. Premiere neu geladen \u2014 beide Seiten gleich (Cut-Modell).",
+          "Cut aktualisiert. Sequenz ersetzt \u2014 beide Seiten gleich (Cut-Modell).",
           "ok"
         );
         return;
       }
       openCutBusy = false;
       updateCutRowStatus(preview.cutId, "Cut aktualisiert", false);
-      showCutsBanner("Cut entspricht der Sequenz.", "ok");
+      showCutsBanner(
+        "Cut entspricht der Sequenz. (Premiere bleibt \u2014 kein neuer Import.)",
+        "ok"
+      );
     } catch (error) {
       openCutBusy = false;
       hidePushbackConfirm();

@@ -301,17 +301,43 @@ export class S3ObjectStore implements ObjectStore {
     )
   }
 
+  async objectExists(input: { workspaceId: string; storageKey: string }): Promise<boolean> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    try {
+      await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
+      )
+      return true
+    } catch (error) {
+      const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : ''
+      const status =
+        error && typeof error === 'object' && '$metadata' in error
+          ? Number((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode)
+          : 0
+      if (name === 'NotFound' || name === 'NoSuchKey' || status === 404) return false
+      throw error
+    }
+  }
+
   async downloadObjectToFile(input: {
     workspaceId: string
     storageKey: string
     destinationPath: string
   }): Promise<void> {
     assertWorkspaceKey(input.workspaceId, input.storageKey)
-    const object = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
-    )
-    if (!object.Body) throw new Error('Stored object body is missing')
-    await pipeline(object.Body as Readable, createWriteStream(input.destinationPath))
+    try {
+      const object = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: input.storageKey }),
+      )
+      if (!object.Body) throw new Error('Stored object body is missing')
+      await pipeline(object.Body as Readable, createWriteStream(input.destinationPath))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (/NoSuchKey|NotFound|specified key does not exist/i.test(message)) {
+        throw new Error(`Storage object missing for key ${input.storageKey}`)
+      }
+      throw error
+    }
   }
 
   async downloadObjectBytes(input: {

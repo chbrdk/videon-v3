@@ -226,7 +226,7 @@ describe('xmeml pushback parser', () => {
     )
   })
 
-  it('panel ships pushback modules in 0.1.22', () => {
+  it('panel ships pushback modules in 0.1.24', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('previewCutPushback')
     expect(readFileSync(join(root, 'src/premiere-capture.js'), 'utf8')).toContain(
@@ -235,7 +235,9 @@ describe('xmeml pushback parser', () => {
     expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('MIN_PUSHBACK_CLIP_MS')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Cut aktualisieren')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('confirmPushback')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.22'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('withSequenceReplace')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.24'")
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('pushback-confirm')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Sequenz ersetzen')
   })
 })

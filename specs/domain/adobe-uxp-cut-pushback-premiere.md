@@ -1,6 +1,6 @@
 # Adobe UXP — Update Cut from Premiere (pushback sketch)
 
-**Status:** Draft — 2026-09-10 (manual parity **P1/P2 panel MVP ≥ 0.1.22** — V1 restore; host XML export ≥ 26.2 or file pick; V2/VO apply later)  
+**Status:** Draft — 2026-09-10 (manual parity **P1/P2 panel MVP ≥ 0.1.24** — V1 restore; linked-sequence replace; host XML export ≥ 26.2 or file pick; V2/VO apply later)  
 **Product:** VIDEON v3  
 **Federation:** `2026-05-plexon-federation-v3`  
 **Companions:**  
@@ -9,7 +9,7 @@
 - `specs/domain/cut-multi-track.md` (V1 / V2 / VO model)  
 - `specs/domain/cut-multi-source-compose.md` · `specs/api/cuts.md`  
 **Knowledge:** `knowledge/paths.md` · `knowledge/adobe-uxp-cut-pushback-premiere.md`  
-**Implements:** `tools/adobe-uxp-library-panel/` — `cut-pushback.js` · `xmeml-pushback.js` · `premiere-capture.js` · `cut-link-store.js` (panel ≥ 0.1.22)
+**Implements:** `tools/adobe-uxp-library-panel/` — `cut-pushback.js` · `xmeml-pushback.js` · `premiere-capture.js` · `cut-link-store.js` · `premiere-open-cut.js` replace-linked (panel ≥ 0.1.24)
 
 ## Purpose
 
@@ -93,9 +93,15 @@ Without a stable link, pushback is guesswork.
 **Wave P0 (required before apply):**
 
 1. When Open Cut succeeds, panel stores a local link record:  
-   `{ cutId, platformProjectId, sequenceName?, openedAt, exportId? }` in UXP prefs / data folder.
+   `{ cutId, platformProjectId, sequenceName?, sequenceGuid?, openedAt, exportId? }` in UXP prefs / data folder.
 2. Pushback prefers the **active sequence** only if it matches the linked name (or operator picks from a short list of sequences).
 3. If no link / mismatch → operator must **choose Cut** + confirm “active sequence → this Cut” (extra friction, allowed).
+
+**Replace (Cut → Premiere refresh, locked ≥ 0.1.24):**
+
+1. **Cut aktualisieren → Übernehmen** MUST write Cut only — MUST NOT download ZIP / import a new sequence.
+2. **Premiere aktualisieren** / **Übernehmen + Sequenz ersetzen** MUST enqueue a **fresh** `premiere_xml` (no reuse of exports older than Cut `updatedAt`) and import it, then **remove prior linked sequences** for that Cut so the project does not accumulate duplicates.
+3. In-place clip rewrite of an open timeline is out of scope; “replace” = import new + delete previous linked sequence(s).
 
 **Out of scope P0:** writing custom metadata into the Premiere project file; cloud-side link table (MAY add later under Collection).
 
