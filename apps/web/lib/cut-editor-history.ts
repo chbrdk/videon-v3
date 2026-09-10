@@ -6,6 +6,7 @@ export type CutTimelineSnapshotScene = {
   endMs: number
   timelineStartMs?: number
   sceneKey?: string | null
+  premiereFiltersXml?: string | null
 }
 
 export type CutTimelineSnapshotClip = {
@@ -58,6 +59,7 @@ export function snapshotCutEditor(input: {
       endMs: number
       timelineStartMs?: number
       sceneKey?: string | null
+      premiereFiltersXml?: string | null
     }
   }>
   videoClips?: Array<{
@@ -90,6 +92,7 @@ export function snapshotCutEditor(input: {
       endMs: clip.scene.endMs,
       timelineStartMs: clip.scene.timelineStartMs ?? 0,
       sceneKey: clip.scene.sceneKey ?? null,
+      premiereFiltersXml: clip.scene.premiereFiltersXml ?? null,
     })),
     videoClips: mapOverlayClips(input.videoClips ?? []),
     audioClips: mapOverlayClips(input.audioClips ?? []),

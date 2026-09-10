@@ -99,7 +99,14 @@ export async function previewCutPushback(input) {
   const scenes = normalizeCutDetailScenes(detail)
   const diff = diffV1Timelines(scenes, mapped)
   const { scenes: restoreScenes, clampedCount } = mappedClipsToRestoreScenes(mapped)
-  const message = formatPushbackDiffMessage(diff, parsed.ignored, 0, clampedCount)
+  const effectsStoredCount = restoreScenes.filter((s) => s.premiereFiltersXml).length
+  const message = formatPushbackDiffMessage(
+    diff,
+    parsed.ignored,
+    0,
+    clampedCount,
+    effectsStoredCount,
+  )
 
   return {
     ok: true,

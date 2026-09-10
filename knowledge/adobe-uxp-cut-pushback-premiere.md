@@ -2,12 +2,12 @@
 
 **Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md`  
 **Updated:** 2026-09-10  
-**Panel:** ≥ **0.1.26**
+**Panel:** ≥ **0.1.27**
 
 ## Product ask
 
-Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.  
-**Effects/transitions round-trip = Wave P3 product-required** — see `knowledge/adobe-uxp-pushback-effects-backlog.md`.
+Manual buttons; after sync, **Cut-Modell** gleich (V1). Not live sync.  
+**Clip effects** persist as opaque XMEML filters in Cut data (no Videon UI) — see `knowledge/adobe-uxp-pushback-effects-backlog.md`.
 
 ## Buttons (Cuts tab)
 
@@ -18,28 +18,17 @@ Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.
 | **Cut aktualisieren → Übernehmen** | Premiere → Cut only (**no** ZIP / no new sequence) |
 | **Übernehmen + Sequenz ersetzen** | Apply Cut, then same as Premiere aktualisieren |
 
-## Effects (until P3)
+## Effects
 
-Diff lists `Ignoriert: effects`. Panel warns. Do **not** Sequenz ersetzen if you still need Premiere FX on that sequence.
-
-## Why “alte Version” / zig Sequenzen happened
-
-1. After apply, Open Cut reused an export with `createdAt >= cut.updatedAt` while the Cuts-list still held the **pre-apply** `updatedAt` → old ZIP.
-2. Each import created another sequence; nothing deleted the previous link.
+Stored on `cut_scenes.premiere_filters_xml`, re-injected on export. Transitions not yet. No loss banner for clip filters.
 
 ## Capture
 
 1. `ProjectConverter.exportAsFinalCutProXML` (Premiere ≥ 26.2)  
 2. Else file picker for exported XML  
 
-Mapping: `file-{mediaAssetId}` when preserved; after Premiere re-export resolve `<file>` registry + filename vs Cut/Collection media (`file-1` is not a media id). Prefer **Cut** media over Mediathek duplicates (`mergePushbackMediaCatalog`).
+Mapping prefers Cut media over Mediathek duplicates (`mergePushbackMediaCatalog`).
 
 ## Operator
 
-UDT Unload → Load → **v0.1.26** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → **Übernehmen** (stay on same sequence). Only use **Sequenz ersetzen** when the Cut editor is ahead **and** you accept dropping unsupported Premiere-only FX.
-
-## Restore constraints
-
-- `cut_scenes.id` / `media_asset_id` are UUIDs (panel emits UUID v4; server replaces invalid ids).
-- Min clip duration **500ms** (`MIN_CUT_CLIP_MS`); pushback clamps shorter Premiere clips before apply.
-- Restore rejects media whose source object is missing in storage.
+UDT Unload → Load → **v0.1.27** → Collection pin → Cuts → edit in Premiere (incl. clip FX) → **Cut aktualisieren** → **Übernehmen** → **Premiere aktualisieren** / Sequenz ersetzen to verify FX return.

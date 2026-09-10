@@ -8,7 +8,6 @@ import {
   buildMediaCatalogFromMediaList,
   diffV1Timelines,
   extractFileRegistry,
-  formatEffectsLossWarning,
   formatPushbackDiffMessage,
   mapClipsToMedia,
   mappedClipsToRestoreScenes,
@@ -230,40 +229,75 @@ describe('xmeml pushback parser', () => {
     )
   })
 
-  it('panel ships pushback modules in 0.1.26', () => {
+  it('panel ships pushback modules in 0.1.27', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('previewCutPushback')
     expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
-    expect(readFileSync(join(root, 'src/premiere-capture.js'), 'utf8')).toContain(
-      'exportAsFinalCutProXML',
-    )
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('MIN_PUSHBACK_CLIP_MS')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('ticksToMs')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('formatEffectsLossWarning')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Cut aktualisieren')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('confirmPushback')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('withSequenceReplace')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.26'")
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Wave P3')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('premiereFiltersXml')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereFilterBlocks')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.27'")
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('pushback-confirm')
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Sequenz ersetzen')
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Wave P3')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).not.toContain('Wave P3')
   })
 
-  it('warns when effects or transitions would be dropped', () => {
-    expect(formatEffectsLossWarning(['effects'])).toMatch(/Effekte/)
-    expect(formatEffectsLossWarning(['transitions'])).toMatch(/Transitions/)
-    expect(formatEffectsLossWarning(['effects', 'transitions'])).toMatch(/Wave P3/)
-    expect(formatEffectsLossWarning([])).toBe('')
-    const msg = formatPushbackDiffMessage(
-      { summary: 'V1: 1 → 1 Clips · 1 geändert' },
-      ['effects'],
-      0,
-      0,
-    )
-    expect(msg).toContain('Ignoriert: effects')
-    expect(msg).toContain('Wave P3')
+  it('stores clip filter XML on restore scenes and re-exports them', () => {
+    const filter = `<filter>
+			<effect>
+				<name>Opacity</name>
+				<effectid>opacity</effectid>
+				<effectcategory>motion</effectcategory>
+				<effecttype>motion</effecttype>
+				<mediatype>video</mediatype>
+				<pproBypass>false</pproBypass>
+			</effect>
+		</filter>`
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xmeml>
+<xmeml version="4">
+  <sequence>
+    <name>FX Cut</name>
+    <rate><timebase>25</timebase><ntsc>FALSE</ntsc></rate>
+    <media>
+      <video>
+        <track>
+          <clipitem id="clipitem-1">
+            <name>a.mp4</name>
+            <enabled>TRUE</enabled>
+            <start>0</start>
+            <end>50</end>
+            <in>0</in>
+            <out>50</out>
+            <file id="file-11111111-1111-1111-1111-111111111111">
+              <name>a.mp4</name>
+              <pathurl>file://localhost/a.mp4</pathurl>
+            </file>
+            <sourcetrack><mediatype>video</mediatype><trackindex>1</trackindex></sourcetrack>
+            ${filter}
+          </clipitem>
+        </track>
+      </video>
+    </media>
+  </sequence>
+</xmeml>`
+    const parsed = parsePremiereTimelineXml(xml)
+    expect(parsed.ignored).not.toContain('effects')
+    expect(parsed.v1[0].premiereFiltersXml).toContain('<filter')
+    expect(parsed.v1[0].premiereFiltersXml).toContain('Opacity')
+    const { scenes } = mappedClipsToRestoreScenes([
+      {
+        ...parsed.v1[0],
+        mediaAssetId: '11111111-1111-1111-1111-111111111111',
+      },
+    ])
+    expect(scenes[0].premiereFiltersXml).toContain('Opacity')
+    const msg = formatPushbackDiffMessage({ summary: 'V1: 1 → 1' }, [], 0, 0, 1)
+    expect(msg).toContain('Effekte: 1 Clip(s) im Cut gespeichert')
+  })
+
+  it('warns only for transitions that are not stored yet', () => {
+    const msg = formatPushbackDiffMessage({ summary: 'V1: 1 → 1' }, ['transitions'], 0, 0, 0)
+    expect(msg).toContain('Transitions: noch nicht im Cut gespeichert')
+    expect(msg).not.toMatch(/Achtung: Effekte/)
   })
 
   it('prefers Cut media over Mediathek duplicates for the same filename', () => {

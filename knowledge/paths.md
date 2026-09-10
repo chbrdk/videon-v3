@@ -91,7 +91,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Open Cut wave | `specs/domain/adobe-uxp-open-cut-premiere.md` — Cut → Premiere sequence via `premiere_xml` ZIP |
 | Package | `tools/adobe-uxp-library-panel/` (UXP dual-host: Premiere Wave 1 + AE Wave 1.5) |
 | UDT External copy (macOS) | `~/Library/Application Support/Adobe/UXP/Plugins/External/videon.libraryPanel_<version>/` — frozen after Load; must Unload + Load / re-sync after every build |
-| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`); current **0.1.26** |
+| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`); current **0.1.27** |
 | Preview playback notes | `knowledge/adobe-uxp-panel-preview-playback.md` |
 | Auth | Settings API Bearer (`settings-api-tokens.md`); owner via `POST /api/tokens/verify`; table `api_tokens` |
 | Search | Same `GET /api/media/search` + `scene-hit-model.md` as `/chat` |
@@ -117,7 +117,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Open Cut in Premiere (panel wave) | `specs/domain/adobe-uxp-open-cut-premiere.md` · `knowledge/adobe-uxp-open-cut-premiere.md` |
 | Cut pushback from Premiere (sketch) | `specs/domain/adobe-uxp-cut-pushback-premiere.md` · `knowledge/adobe-uxp-cut-pushback-premiere.md` — **manual parity** both directions; not live sync |
 | Pushback → dead playback | `knowledge/adobe-uxp-pushback-restore-playback.md` — duplicate filename / ticks / peaks |
-| Pushback effects Wave P3 | `knowledge/adobe-uxp-pushback-effects-backlog.md` — **product-required** FX round-trip |
+| Pushback effects Wave P3 | `knowledge/adobe-uxp-pushback-effects-backlog.md` — clip `<filter>` sidecar (no Videon UI) |
 | Cut multi-track | `specs/domain/cut-multi-track.md` — extra `audio_bus` / Voice-Over spur |
 
 ## V7 production rollout

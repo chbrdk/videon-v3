@@ -2940,6 +2940,7 @@ ${extracted.xmlNativePath}`
       }
     }
     if (startMs == null || endMs == null || endMs <= startMs) return null;
+    const premiereFiltersXml = extractPremiereFilterBlocks(body);
     return {
       name,
       filename,
@@ -2949,8 +2950,22 @@ ${extracted.xmlNativePath}`
       startMs,
       endMs,
       timelineStartMs: framesToMs(start, sequenceFps),
-      timelineEndMs: framesToMs(end, sequenceFps)
+      timelineEndMs: framesToMs(end, sequenceFps),
+      premiereFiltersXml
     };
+  }
+  function extractPremiereFilterBlocks(clipItemBody) {
+    const blocks = [];
+    const re = /<filter\b[\s\S]*?<\/filter>/gi;
+    let m;
+    while (m = re.exec(String(clipItemBody || ""))) {
+      const block = m[0].trim();
+      if (block) blocks.push(block);
+    }
+    const joined = blocks.join("\n").trim();
+    if (!joined) return null;
+    if (joined.length > 512e3) return joined.slice(0, 512e3);
+    return joined;
   }
   function parsePremiereTimelineXml(xml) {
     const ignored = [];
@@ -2958,7 +2973,6 @@ ${extracted.xmlNativePath}`
       return { fps: 25, v1: [], ignored: ["not_xml_timeline"], trackName: null, fileCount: 0 };
     }
     if (/transitionitem/i.test(xml)) ignored.push("transitions");
-    if (/effect\b/i.test(xml) && /<effect/i.test(xml)) ignored.push("effects");
     const fps = parseSequenceTimebase(xml);
     const fileRegistry = extractFileRegistry(xml);
     const tracks = extractVideoTracks(xml);
@@ -3174,27 +3188,24 @@ ${extracted.xmlNativePath}`
         mediaAssetId: clip.mediaAssetId,
         startMs,
         endMs,
-        timelineStartMs
+        timelineStartMs,
+        ...clip.premiereFiltersXml ? { premiereFiltersXml: String(clip.premiereFiltersXml) } : {}
       };
     });
     return { scenes, clampedCount };
   }
-  function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedCount = 0) {
+  function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedCount = 0, effectsStoredCount = 0) {
     const lines = [diff.summary];
     if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`);
     if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf \u2265${MIN_PUSHBACK_CLIP_MS}ms angehoben`);
+    if (effectsStoredCount > 0) {
+      lines.push(`Effekte: ${effectsStoredCount} Clip(s) im Cut gespeichert (kein Videon-UI)`);
+    }
     if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(", ")}`);
-    const effectsWarning = formatEffectsLossWarning(ignored);
-    if (effectsWarning) lines.push(effectsWarning);
+    if ((ignored || []).some((x) => /transition/i.test(String(x)))) {
+      lines.push("Transitions: noch nicht im Cut gespeichert");
+    }
     return lines.join("\n");
-  }
-  function formatEffectsLossWarning(ignored) {
-    const set = new Set((ignored || []).map((x) => String(x).toLowerCase()));
-    const hasEffects = set.has("effects");
-    const hasTransitions = set.has("transitions");
-    if (!hasEffects && !hasTransitions) return "";
-    const what = [hasEffects ? "Effekte" : null, hasTransitions ? "Transitions" : null].filter(Boolean).join("/");
-    return `Achtung: ${what} bleiben nur in Premiere \u2014 Cut speichert sie (noch) nicht. \u201E\xDCbernehmen\u201C = nur Clips/Zeiten. \u201ESequenz ersetzen\u201C / zur\xFCck nach Premiere entfernt ${what}. (Wave P3: Effekte-Roundtrip \u2014 product-required.)`;
   }
   function formatUnmappedHint(unmapped) {
     if (!unmapped?.length) return "";
@@ -3266,7 +3277,14 @@ ${extracted.xmlNativePath}`
     const scenes = normalizeCutDetailScenes(detail);
     const diff = diffV1Timelines(scenes, mapped);
     const { scenes: restoreScenes, clampedCount } = mappedClipsToRestoreScenes(mapped);
-    const message = formatPushbackDiffMessage(diff, parsed.ignored, 0, clampedCount);
+    const effectsStoredCount = restoreScenes.filter((s) => s.premiereFiltersXml).length;
+    const message = formatPushbackDiffMessage(
+      diff,
+      parsed.ignored,
+      0,
+      clampedCount,
+      effectsStoredCount
+    );
     return {
       ok: true,
       mode: "preview_diff",
@@ -3421,7 +3439,7 @@ ${extracted.xmlNativePath}`
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.26";
+  var PANEL_VERSION = "0.1.27";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
@@ -3834,14 +3852,6 @@ ${extracted.xmlNativePath}`
     pendingPushback = preview;
     if (els.pushbackDiff) els.pushbackDiff.textContent = preview.message || "";
     els.pushbackConfirm?.classList.remove("hidden");
-    const ignored = preview.ignored || [];
-    const effectsRisk = ignored.some((x) => /effect|transition/i.test(String(x)));
-    if (effectsRisk) {
-      showCutsBanner(
-        "Diff enth\xE4lt Effekte/Transitions \u2014 bleiben nur in Premiere bis Wave P3.",
-        "error"
-      );
-    }
   }
   async function startCutPushback(cut) {
     if (openCutBusy) {
@@ -3927,19 +3937,17 @@ ${extracted.xmlNativePath}`
           { ...cut, updatedAt: nowIso, name: cut.name || preview.sequenceName || cut.id },
           { handoff: true, replaceLinked: true, forceFreshExport: true }
         );
-        const droppedFx2 = (preview.ignored || []).some((x) => /effect|transition/i.test(String(x)));
         showCutsBanner(
-          droppedFx2 ? "Cut aktualisiert + Sequenz ersetzt (Cut-Modell). Premiere-Effekte/Transitions sind dabei entfernt \u2014 Wave P3 folgt." : "Cut aktualisiert. Sequenz ersetzt \u2014 beide Seiten gleich (Cut-Modell).",
-          droppedFx2 ? "error" : "ok"
+          "Cut aktualisiert. Sequenz ersetzt \u2014 beide Seiten gleich (Cut-Modell inkl. gespeicherter Clip-Effekte).",
+          "ok"
         );
         return;
       }
       openCutBusy = false;
       updateCutRowStatus(preview.cutId, "Cut aktualisiert", false);
-      const droppedFx = (preview.ignored || []).some((x) => /effect|transition/i.test(String(x)));
       showCutsBanner(
-        droppedFx ? "Cut entspricht der Sequenz (V1). Premiere beh\xE4lt Effekte \u2014 bis Wave P3 nicht zur\xFCcksyncen wenn du sie behalten willst." : "Cut entspricht der Sequenz. (Premiere bleibt \u2014 kein neuer Import.)",
-        droppedFx ? "error" : "ok"
+        "Cut entspricht der Sequenz. (Premiere bleibt \u2014 kein neuer Import.)",
+        "ok"
       );
     } catch (error) {
       openCutBusy = false;

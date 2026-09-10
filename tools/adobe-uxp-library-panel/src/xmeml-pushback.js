@@ -219,6 +219,8 @@ function parseClipItem(body, sequenceFps, fileRegistry) {
   }
   if (startMs == null || endMs == null || endMs <= startMs) return null
 
+  const premiereFiltersXml = extractPremiereFilterBlocks(body)
+
   return {
     name,
     filename,
@@ -229,7 +231,22 @@ function parseClipItem(body, sequenceFps, fileRegistry) {
     endMs,
     timelineStartMs: framesToMs(start, sequenceFps),
     timelineEndMs: framesToMs(end, sequenceFps),
+    premiereFiltersXml,
   }
+}
+
+function extractPremiereFilterBlocks(clipItemBody) {
+  const blocks = []
+  const re = /<filter\b[\s\S]*?<\/filter>/gi
+  let m
+  while ((m = re.exec(String(clipItemBody || '')))) {
+    const block = m[0].trim()
+    if (block) blocks.push(block)
+  }
+  const joined = blocks.join('\n').trim()
+  if (!joined) return null
+  if (joined.length > 512000) return joined.slice(0, 512000)
+  return joined
 }
 
 /**
@@ -242,7 +259,7 @@ export function parsePremiereTimelineXml(xml) {
     return { fps: 25, v1: [], ignored: ['not_xml_timeline'], trackName: null, fileCount: 0 }
   }
   if (/transitionitem/i.test(xml)) ignored.push('transitions')
-  if (/effect\b/i.test(xml) && /<effect/i.test(xml)) ignored.push('effects')
+  // Clip <filter>/<effect> blocks are stored as opaque sidecar (not ignored as lost).
 
   const fps = parseSequenceTimebase(xml)
   const fileRegistry = extractFileRegistry(xml)
@@ -518,38 +535,32 @@ export function mappedClipsToRestoreScenes(mappedClips, newId = newSceneId) {
       startMs,
       endMs,
       timelineStartMs,
+      ...(clip.premiereFiltersXml
+        ? { premiereFiltersXml: String(clip.premiereFiltersXml) }
+        : {}),
     }
   })
   return { scenes, clampedCount }
 }
 
-export function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedCount = 0) {
+export function formatPushbackDiffMessage(
+  diff,
+  ignored,
+  unmappedCount,
+  clampedCount = 0,
+  effectsStoredCount = 0,
+) {
   const lines = [diff.summary]
   if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`)
   if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf ≥${MIN_PUSHBACK_CLIP_MS}ms angehoben`)
+  if (effectsStoredCount > 0) {
+    lines.push(`Effekte: ${effectsStoredCount} Clip(s) im Cut gespeichert (kein Videon-UI)`)
+  }
   if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(', ')}`)
-  const effectsWarning = formatEffectsLossWarning(ignored)
-  if (effectsWarning) lines.push(effectsWarning)
+  if ((ignored || []).some((x) => /transition/i.test(String(x)))) {
+    lines.push('Transitions: noch nicht im Cut gespeichert')
+  }
   return lines.join('\n')
-}
-
-/**
- * Product-required Wave P3 will round-trip effects; until then warn operators.
- * @param {string[]|undefined} ignored
- */
-export function formatEffectsLossWarning(ignored) {
-  const set = new Set((ignored || []).map((x) => String(x).toLowerCase()))
-  const hasEffects = set.has('effects')
-  const hasTransitions = set.has('transitions')
-  if (!hasEffects && !hasTransitions) return ''
-  const what = [hasEffects ? 'Effekte' : null, hasTransitions ? 'Transitions' : null]
-    .filter(Boolean)
-    .join('/')
-  return (
-    `Achtung: ${what} bleiben nur in Premiere — Cut speichert sie (noch) nicht. ` +
-    `„Übernehmen“ = nur Clips/Zeiten. „Sequenz ersetzen“ / zurück nach Premiere entfernt ${what}. ` +
-    `(Wave P3: Effekte-Roundtrip — product-required.)`
-  )
 }
 
 export function formatUnmappedHint(unmapped) {

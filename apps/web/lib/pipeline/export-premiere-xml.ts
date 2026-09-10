@@ -18,6 +18,8 @@ export type PremiereXmlScene = {
   zipMediaName?: string
   /** Full source media duration in ms (file duration); falls back to endMs. */
   mediaDurationMs?: number | null
+  /** Opaque Premiere <filter> blocks; re-injected into clipitem on export. */
+  premiereFiltersXml?: string | null
 }
 
 /** Independent Cut audio-bus clips (Voice-Over) — specs/domain/cut-multi-track.md */
@@ -316,6 +318,7 @@ export function buildPremiereXmeml(input: {
 							<mediatype>video</mediatype>
 							<trackindex>1</trackindex>
 						</sourcetrack>
+						${scene.premiereFiltersXml?.trim() ? `\n\t\t\t\t\t\t${scene.premiereFiltersXml.trim()}` : ''}
 						${videoLinkBlock(index)}
 					</clipitem>`
     })

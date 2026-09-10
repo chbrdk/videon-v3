@@ -1,35 +1,29 @@
-# Pushback — Effects / transitions round-trip (Wave P3)
+# Pushback — Clip effects sidecar (Wave P3.0)
 
-**Status:** Product-required backlog (not shipped)  
+**Status:** Shipped panel ≥ **0.1.27** + migration `0018_cut_scenes_premiere_filters.sql`  
 **Updated:** 2026-09-10  
-**Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md` § Wave P3  
-**Panel today:** ≥ **0.1.26** warns; does **not** preserve effects
+**Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md` § Wave P3
 
-## Operator reality (now)
+## Product rule
 
-1. Apply effect in Premiere on a linked sequence.  
-2. **Cut aktualisieren → Übernehmen** → Cut gets clips/times only (`ignored: effects`).  
-3. **Premiere aktualisieren** / **Sequenz ersetzen** → fresh Cut ZIP → **effects gone**.
+Clip effects MUST stay in Cut **data** through round-trip. They are **not** shown in the Videon Cut UI.
 
-Until P3: keep finishing effects in Premiere **after** last Cut sync, or avoid round-trip once effects are on.
+## Flow
 
-## Required outcome (P3)
+1. Premiere → Cut: parse each V1 `clipitem`’s `<filter>…</filter>` → `cut_scenes.premiere_filters_xml`  
+2. Cut → Premiere: `buildPremiereXmeml` re-injects that XML into the matching clipitem  
+3. No loss warnings in the panel for clip effects
 
-Effects/transitions on mapped V1 clips MUST survive:
+## Limits
 
-`Premiere (with FX) → Cut aktualisieren → Premiere aktualisieren`
+- **Clip filters** only (what Premiere puts under `<filter>` in XMEML).  
+- **Transitions** between clips: not stored yet.  
+- Third-party / non-XML effects may not appear in XMEML capture — then nothing to store.  
+- Premiere must re-accept the re-injected filters on import (native Premiere FX usually do).
 
-without the operator re-applying FX.
+## Files
 
-## Spike questions
-
-1. Which Premiere effect classes survive XMEML export/import vs need host API?  
-2. Sidecar on `cut_scenes` vs opaque blob in export package?  
-3. How to re-attach when clip `id`s are rewritten on restore?  
-4. Transitions between clips vs clip effects — same store or separate?
-
-## Related
-
-- Diff already flags `effects` / `transitions` (`xmeml-pushback.js`)  
-- Warning copy: `formatEffectsLossWarning`  
-- Playback/mapping harden: `knowledge/adobe-uxp-pushback-restore-playback.md`
+- Migration: `migrations/0018_cut_scenes_premiere_filters.sql`  
+- Sanitize: `apps/web/lib/pipeline/premiere-filters-xml.ts`  
+- Panel: `xmeml-pushback.js` `extractPremiereFilterBlocks`  
+- Export: `export-premiere-xml.ts` injects `premiereFiltersXml`

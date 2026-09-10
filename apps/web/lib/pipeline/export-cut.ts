@@ -428,6 +428,7 @@ async function runPremiereXmlExport(input: {
           originalFilename: media.originalFilename,
           zipMediaName: zipNames.get(scene.mediaAssetId),
           mediaDurationMs: media.durationMs,
+          premiereFiltersXml: scene.premiereFiltersXml,
         }
       }),
       overlayClips: overlayClips.map((clip) => {

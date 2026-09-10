@@ -38,6 +38,7 @@ import {
 import { moveSceneToVideoOverlay, moveVideoOverlayToScene } from '@/lib/db/cut-lane-move'
 import { moveCutClipsBatch } from '@/lib/db/cut-batch-move'
 import { findMediaAsset, findMediaAssetDetail } from '@/lib/db/media'
+import { sanitizePremiereFiltersXml } from '@/lib/pipeline/premiere-filters-xml'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { resolveMediaSourceStorageKey } from '@/lib/storage/resolve-media-source'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
@@ -390,6 +391,7 @@ async function applyCutPatch(input: {
       endMs: number
       timelineStartMs?: number
       sceneKey?: string | null
+      premiereFiltersXml?: string | null
     }> = []
     for (const entry of rawRestoreScenes) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
@@ -412,6 +414,10 @@ async function applyCutPatch(input: {
         typeof scene.timelineStartMs === 'number' && Number.isFinite(scene.timelineStartMs)
           ? Math.max(0, Math.floor(scene.timelineStartMs))
           : undefined
+      const premiereFiltersXml =
+        typeof scene.premiereFiltersXml === 'string' && scene.premiereFiltersXml.trim()
+          ? sanitizePremiereFiltersXml(scene.premiereFiltersXml)
+          : null
       if (!mediaId || sceneStart === null || sceneEnd === null) continue
       if (sceneEnd <= sceneStart) {
         return apiError(
@@ -484,6 +490,7 @@ async function applyCutPatch(input: {
         endMs,
         ...(timelineStartMs !== undefined ? { timelineStartMs } : {}),
         sceneKey,
+        premiereFiltersXml,
       })
     }
     if (restoreScenes.length === 0) {

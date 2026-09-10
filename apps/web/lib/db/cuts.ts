@@ -26,6 +26,8 @@ export type CutScene = {
   endMs: number
   timelineStartMs: number
   sceneKey: string | null
+  /** Opaque Premiere <filter> XML; not shown in Videon UI. */
+  premiereFiltersXml: string | null
   createdAt: string
 }
 
@@ -51,11 +53,12 @@ type CutSceneRow = {
   end_ms: number
   timeline_start_ms: number
   scene_key: string | null
+  premiere_filters_xml: string | null
   created_at: Date | string
 }
 
 const CUT_SCENE_SELECT =
-  'id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key, created_at'
+  'id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key, premiere_filters_xml, created_at'
 
 function mapCut(row: CutRow): Cut {
   return {
@@ -82,6 +85,7 @@ function mapCutScene(row: CutSceneRow): CutScene {
     endMs: row.end_ms,
     timelineStartMs: row.timeline_start_ms ?? 0,
     sceneKey: row.scene_key,
+    premiereFiltersXml: row.premiere_filters_xml ?? null,
     createdAt: new Date(row.created_at).toISOString(),
   }
 }
@@ -692,6 +696,7 @@ export async function restoreCutTimeline(input: {
     endMs: number
     timelineStartMs?: number
     sceneKey?: string | null
+    premiereFiltersXml?: string | null
   }>
   videoClips?: CutRestoreClip[]
   audioClips?: CutRestoreClip[]
@@ -726,8 +731,9 @@ export async function restoreCutTimeline(input: {
           ? Math.max(0, Math.floor(scene.timelineStartMs))
           : timelineCursor
       await client.query(
-        `insert into cut_scenes (id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        `insert into cut_scenes (
+           id, cut_id, position, media_asset_id, start_ms, end_ms, timeline_start_ms, scene_key, premiere_filters_xml
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           scene.id,
           input.cutId,
@@ -737,6 +743,7 @@ export async function restoreCutTimeline(input: {
           scene.endMs,
           timelineStartMs,
           scene.sceneKey?.trim() || null,
+          scene.premiereFiltersXml?.trim() || null,
         ],
       )
       timelineCursor = timelineStartMs + duration
