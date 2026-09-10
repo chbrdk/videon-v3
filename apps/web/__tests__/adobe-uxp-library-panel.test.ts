@@ -93,8 +93,10 @@ describe('adobe uxp library panel contracts', () => {
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('require("uxp")')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/await import\("uxp"\)/)
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('scheduleBoot')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('testConnection?.addEventListener')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('function on(el, eventName, handler)')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toMatch(/document\.addEventListener\(\s*['"]DOMContentLoaded['"]/)
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('scheduleBoot')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/document\.addEventListener\(\s*['"]DOMContentLoaded['"]/)
   })
 
   it('premiere path helpers reject signed URLs for import', () => {

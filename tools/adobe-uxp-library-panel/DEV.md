@@ -14,7 +14,7 @@ Reload the plugin in UDT (or re-sync the External sideload folder) after every b
 
 **UXP path quirk:** `main` is `src/index.html`, but CSS/JS hrefs resolve from the **plugin root**. Use `src/styles.css` and `src/panel.bundle.js` (not bare `styles.css`).
 
-Panel JS MUST defer DOM binding (`DOMContentLoaded` / retry) — UXP can evaluate the IIFE before nodes exist (`null.addEventListener` on „Verbindung testen“ / settings).
+Panel JS MUST poll for DOM nodes via `setTimeout` — never `document.addEventListener('DOMContentLoaded')` (UXP domjs throws). Element listeners go through a small `on()` helper with `onclick` fallback.
 
 ## Browser preview
 

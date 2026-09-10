@@ -540,13 +540,29 @@ async function runInsert() {
   }
 }
 
+function on(el, eventName, handler) {
+  if (!el) return
+  try {
+    el.addEventListener(eventName, handler)
+    return
+  } catch {
+    /* UXP DOM sometimes rejects addEventListener options / document events */
+  }
+  const key = `on${eventName}`
+  const previous = typeof el[key] === 'function' ? el[key] : null
+  el[key] = (event) => {
+    if (previous) previous.call(el, event)
+    handler(event)
+  }
+}
+
 function bindPanel() {
-  els.settingsToggle?.addEventListener('click', () => {
+  on(els.settingsToggle, 'click', () => {
     els.settingsPanel?.classList.toggle('hidden')
     if (els.settingsPanel && !els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
   })
 
-  els.settingsSave?.addEventListener('click', () => {
+  on(els.settingsSave, 'click', () => {
     const draft = readFormSettings()
     const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl)
     if (!urlCheck.ok) {
@@ -566,7 +582,7 @@ function bindPanel() {
     }
   })
 
-  els.testConnection?.addEventListener('click', async () => {
+  on(els.testConnection, 'click', async () => {
     const settings = saveSettings(readFormSettings())
     if (els.settingsStatus) {
       els.settingsStatus.hidden = false
@@ -585,15 +601,15 @@ function bindPanel() {
     }
   })
 
-  els.reloadCollections?.addEventListener('click', () => {
+  on(els.reloadCollections, 'click', () => {
     void refreshCollections(true)
   })
 
-  els.cacheRefresh?.addEventListener('click', () => {
+  on(els.cacheRefresh, 'click', () => {
     void refreshCacheUi(true)
   })
 
-  els.cacheClear?.addEventListener('click', async () => {
+  on(els.cacheClear, 'click', async () => {
     if (els.settingsStatus) {
       els.settingsStatus.hidden = false
       els.settingsStatus.textContent = 'Cache wird geleert…'
@@ -611,17 +627,17 @@ function bindPanel() {
     }
   })
 
-  els.collectionSelect?.addEventListener('change', onCollectionChange)
-  els.collectionSelectMain?.addEventListener('change', onCollectionChange)
+  on(els.collectionSelect, 'change', onCollectionChange)
+  on(els.collectionSelectMain, 'change', onCollectionChange)
 
-  els.selectAllBtn?.addEventListener('click', () => {
+  on(els.selectAllBtn, 'click', () => {
     for (const hit of hits) selected.add(hit.id)
     for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
       input.checked = true
     }
     updateSelectionChrome()
   })
-  els.selectNoneBtn?.addEventListener('click', () => {
+  on(els.selectNoneBtn, 'click', () => {
     selected.clear()
     for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
       input.checked = false
@@ -629,16 +645,16 @@ function bindPanel() {
     updateSelectionChrome()
   })
 
-  els.searchBtn?.addEventListener('click', () => {
+  on(els.searchBtn, 'click', () => {
     void runSearch()
   })
-  els.searchInput?.addEventListener('keydown', (event) => {
+  on(els.searchInput, 'keydown', (event) => {
     if (event.key === 'Enter') void runSearch()
   })
-  els.dryRunBtn?.addEventListener('click', () => {
+  on(els.dryRunBtn, 'click', () => {
     void runDryDownload()
   })
-  els.insertBtn?.addEventListener('click', () => {
+  on(els.insertBtn, 'click', () => {
     void runInsert()
   })
 }
@@ -675,16 +691,13 @@ function bootPanel() {
   return true
 }
 
+/** UXP: never use document.addEventListener(DOMContentLoaded) — it throws in domjs. */
 function scheduleBoot(attempt = 0) {
-  const ready =
-    typeof document !== 'undefined' &&
-    (document.readyState === 'interactive' || document.readyState === 'complete')
-  if (!ready) {
-    document.addEventListener('DOMContentLoaded', () => scheduleBoot(0), { once: true })
+  if (bootPanel()) return
+  if (attempt >= 40) {
+    console.error('[VIDEON] Panel boot failed after retries')
     return
   }
-  if (bootPanel()) return
-  if (attempt >= 20) return
   setTimeout(() => scheduleBoot(attempt + 1), 50)
 }
 
