@@ -1,6 +1,6 @@
 # Adobe UXP — Update Cut from Premiere (pushback sketch)
 
-**Status:** Draft — 2026-09-10 (manual parity **P1/P2 panel MVP ≥ 0.1.26** — V1 restore; linked-sequence replace; effects/transitions **Wave P3 product-required**; V2/VO apply later)  
+**Status:** Draft — 2026-09-10 (manual parity **P1/P2 panel MVP ≥ 0.1.27** — V1 restore; clip-effect filter sidecar; linked-sequence replace; V2/VO apply later)  
 **Product:** VIDEON v3  
 **Federation:** `2026-05-plexon-federation-v3`  
 **Companions:**  
