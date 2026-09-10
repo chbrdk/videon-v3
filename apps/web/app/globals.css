@@ -1663,7 +1663,7 @@ main {
 }
 
 .videon-cut-timeline__track--audio {
-  min-height: 2.2rem;
+  min-height: 1.5rem;
   cursor: default;
 }
 
@@ -1672,13 +1672,13 @@ main {
 }
 
 .videon-cut-timeline__header-label--audio {
-  min-height: 2.2rem;
-  font-size: 0.68rem;
+  min-height: 1.5rem;
+  font-size: 0.62rem;
 }
 
 .videon-cut-timeline__audio-canvas {
   width: 100%;
-  height: 2.2rem;
+  height: 1.5rem;
   display: block;
 }
 
@@ -1958,11 +1958,14 @@ main {
   background: var(--nle-panel);
   min-height: 0;
   max-height: min(42vh, 28rem);
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .videon-nle__timeline-dock .videon-cut-timeline {
   min-height: 0;
+  flex: 1 1 auto;
 }
 
 .videon-nle__shortcuts {
@@ -2543,8 +2546,10 @@ main {
 
 .videon-cut-timeline {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   height: 100%;
+  min-height: 0;
 }
 
 .videon-cut-timeline__meta {
@@ -2571,9 +2576,8 @@ main {
 }
 
 .videon-cut-timeline__viewport {
-  /* Horizontal scrub/zoom only — all tracks stay fully visible vertically. */
-  overflow-x: auto;
-  overflow-y: visible;
+  /* Time pan (x) + track-stack scroll (y). Plain vertical wheel is native scroll. */
+  overflow: auto;
   background: var(--nle-track, color-mix(in srgb, var(--bg0) 88%, var(--fg)));
   min-height: 0;
 }
@@ -2603,7 +2607,7 @@ main {
   align-content: center;
   justify-items: center;
   gap: 0.2rem;
-  min-height: 3.6rem;
+  min-height: 3.85rem;
   padding: 0.25rem 0.2rem;
   font-size: 0.62rem;
   letter-spacing: 0.06em;
@@ -2614,7 +2618,7 @@ main {
 }
 
 .videon-cut-timeline__header-label--transcript {
-  min-height: 2.4rem;
+  min-height: 1.5rem;
 }
 
 .videon-cut-timeline__header-label--insight {
@@ -2815,6 +2819,12 @@ a.videon-cut-timeline__track-btn--link {
   cursor: default;
 }
 
+.videon-cut-timeline__track--audio .videon-cut-timeline__clip,
+.videon-cut-timeline__track--audio .videon-cut-timeline__clip.ds-timeline-clip {
+  top: 0.1rem;
+  bottom: 0.1rem;
+}
+
 .videon-cut-timeline__track--music .videon-cut-timeline__clip.ds-timeline-clip--audio {
   background: color-mix(in srgb, #8a6a2d 40%, transparent);
   border-color: color-mix(in srgb, #8a6a2d 55%, var(--nle-border, var(--line)));
@@ -2826,11 +2836,13 @@ a.videon-cut-timeline__track-btn--link {
 }
 
 .videon-cut-timeline__transcript-segment.ds-timeline-clip {
-  top: 0.25rem;
-  bottom: 0.25rem;
+  top: 0.1rem;
+  bottom: 0.1rem;
   cursor: pointer;
   align-content: center;
   background: color-mix(in srgb, #3f5a3a 55%, transparent);
+  font-size: 0.62rem;
+  padding: 0.05rem 0.25rem;
 }
 
 .videon-cut-timeline__ruler-tick {
@@ -2864,8 +2876,12 @@ a.videon-cut-timeline__track-btn--link {
   z-index: 1;
 }
 
+.videon-cut-timeline__track--video {
+  min-height: 3.85rem;
+}
+
 .videon-cut-timeline__track--transcript {
-  min-height: 2.4rem;
+  min-height: 1.5rem;
   cursor: default;
 }
 

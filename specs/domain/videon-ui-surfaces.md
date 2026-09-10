@@ -95,7 +95,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 ## Editor layout
 
 1. WHEN the NLE shell renders THEN it MUST use exactly three grid rows (top chrome · program · timeline). Drawer/shortcuts MUST NOT participate in the grid (overlay layer).
-2. WHEN the timeline dock renders THEN it MUST size to its track stack (`auto`) and MUST NOT clip with a vertical scrollbar; horizontal overflow for zoom/scrub is allowed.
+2. WHEN the timeline dock renders THEN it MUST cap its height (`max-height`) and MUST allow **vertical** scrolling when the track stack exceeds the dock. Horizontal overflow for zoom/scrub remains on the timeline viewport.
 3. WHEN scene/transcript clips render on a source timeline THEN visible labels MUST be truncated; full text stays in `title` / Inspect.
 4. WHEN V1 or A1 mute is toggled AND no stem streams are available THEN the program `<video>` MUST set `muted` (`programAudioMuted`); mute MUST NOT be visual-only.
 5. WHEN voice/music stems exist THEN the program monitor MUST play stem streams (`/stems/{voice|music}/stream`) synced to the video clock; the `<video>` audio bus MUST stay muted (split-out original). Active-lane A1/A2 (or V2-A1/V2-A2) mute MUST mute only the matching stem — never silence sibling stems via `video.muted`.
@@ -120,11 +120,13 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 10. WHEN the operator moves or edge-trims a V1/V2 clip THEN the edit edge MUST magnet-snap to nearby foreign clip edges (V1 + V2) and the playhead within a small **pixel** threshold (~10 px); the active clip’s own edges MUST be excluded. WHILE snapped, the timeline MUST show a snap guide at that time.
 11. WHEN the operator uses trackpad/wheel on the Cut timeline viewport THEN:
     - pinch / `ctrl`/`meta`+wheel MUST zoom toward the cursor (stepped zoom levels; scroll keeps time-under-cursor stable);
-    - two-finger horizontal pan / Shift+wheel / plain vertical wheel MUST scroll the timeline horizontally;
+    - **horizontal** two-finger swipe / mouse horizontal wheel / Shift+wheel MUST pan the timeline in time (`scrollLeft`);
+    - **plain vertical** wheel / trackpad MUST scroll the track stack vertically (`scrollTop`) — it MUST NOT pan time;
     - Alt+wheel MUST jog the playhead (frame/coarse seek). Plain wheel MUST NOT steal pan for jog.
-12. Extended Cut timeline edit UX (audio-bus snap, snap toggle `N`, marks, fit, inertia, nudge, multi-select, trim precue) MUST follow `cut-timeline-edit-ux.md`.
-13. Wave 2 Cut timeline edit UX (ripple, tools, snap filter, minimap, shuttle, marquee, lock, link, `moveClips`, cull) MUST follow `cut-timeline-edit-ux-wave2.md`.
-14. Cut keyboard help MUST follow `cut-editor-shortcuts.md`. Wave 3 polish (V2/VO marquee, minimap window drag, localStorage clip locks) extends Wave 2.
+12. Companion lanes (A1/A2/TX, V2 companions, VO) MUST render **shorter** than V1/V2 video tracks so video reads as the primary lane.
+13. Extended Cut timeline edit UX (audio-bus snap, snap toggle `N`, marks, fit, inertia, nudge, multi-select, trim precue) MUST follow `cut-timeline-edit-ux.md`.
+14. Wave 2 Cut timeline edit UX (ripple, tools, snap filter, minimap, shuttle, marquee, lock, link, `moveClips`, cull) MUST follow `cut-timeline-edit-ux-wave2.md`.
+15. Cut keyboard help MUST follow `cut-editor-shortcuts.md`. Wave 3 polish (V2/VO marquee, minimap window drag, localStorage clip locks) extends Wave 2.
 
 ## Acceptance
 

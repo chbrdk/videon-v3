@@ -31,7 +31,7 @@ export const CUT_EDITOR_SHORTCUTS: readonly CutEditorShortcut[] = [
   { keys: 'F', action: 'Fullscreen monitor' },
   { keys: '?', action: 'Toggle this help' },
   { keys: 'Esc', action: 'Close menus / overlay' },
-  { keys: '', action: 'Pinch zoom · two-finger pan · Alt+wheel jog' },
+  { keys: '', action: 'Pinch zoom · horizontal swipe/Shift+wheel pans time · vertical scroll moves tracks · Alt+wheel jog' },
   { keys: '', action: 'Minimap: click seek · drag window pan · Marquee on V1/V2/VO' },
 ]
 

@@ -29,7 +29,8 @@ Editor-grade Cut timeline interaction: magnet snap with toggle, trackpad pan ine
 
 ## Viewport gestures
 
-8. WHEN the operator pans with wheel / trackpad (plain, shift, or deltaX) THEN after the gesture ends the viewport MAY continue with decaying momentum; pinch/ctrl zoom and Alt+jog MUST cancel inertia and MUST NOT add momentum.
+8. WHEN the operator pans **horizontally** (trackpad deltaX dominant, mouse horizontal wheel, or Shift+wheel) THEN after the gesture ends the viewport MAY continue with decaying momentum on `scrollLeft`; pinch/ctrl zoom and Alt+jog MUST cancel inertia and MUST NOT add momentum.
+8a. WHEN the operator uses **plain vertical** wheel / trackpad THEN the viewport MUST scroll the track stack (`scrollTop`) and MUST NOT convert that gesture into time pan.
 9. WHEN the operator double-clicks the ruler OR presses `Shift+Z` THEN zoom MUST Fit All (largest stepped zoom that fits `totalDurationMs` in the viewport width; else minimum zoom).
 10. WHEN the operator presses `Z` THEN zoom MUST Fit Selection span when a selection exists; otherwise Fit All. After fit, scroll SHOULD keep the fitted range in view.
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction }
 import { scrollLeftAfterZoom } from '@/lib/timeline-snap'
 import { applyInertiaScrollLeft, nextInertiaVelocity } from '@/lib/timeline-pan-inertia'
 import { timelineMsPerPixel, type TimelineZoomLevel } from '@/lib/timeline-layout'
+import { classifyTimelineWheel, timelineWheelPanDelta } from '@/lib/timeline-wheel-intent'
 
 export type TimelineZoomAnchor = 'cursor' | 'playhead'
 
@@ -91,9 +92,17 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
     }
 
     const onWheel = (event: WheelEvent) => {
+      const intent = classifyTimelineWheel(event)
+
+      // Let the browser scroll the track stack; do not hijack plain vertical wheel.
+      if (intent === 'scroll-y') {
+        cancelInertia()
+        return
+      }
+
       event.preventDefault()
 
-      if (event.altKey) {
+      if (intent === 'jog') {
         cancelInertia()
         const magnitude = Math.min(Math.abs(event.deltaY) || Math.abs(event.deltaX), 120)
         const steps = Math.max(1, Math.round(magnitude / 40))
@@ -104,7 +113,7 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
         return
       }
 
-      if (event.ctrlKey || event.metaKey) {
+      if (intent === 'zoom') {
         cancelInertia()
         zoomAccum += event.deltaY
         if (Math.abs(zoomAccum) < 20) return
@@ -133,24 +142,19 @@ export function useTimelineViewportGestures(options: TimelineViewportGesturesOpt
         return
       }
 
+      // pan-x
       if (inertiaRaf) {
         cancelAnimationFrame(inertiaRaf)
         inertiaRaf = 0
       }
 
-      const useShiftAsHorizontal = event.shiftKey
-      const dx =
-        Math.abs(event.deltaX) >= Math.abs(event.deltaY) || useShiftAsHorizontal
-          ? useShiftAsHorizontal && Math.abs(event.deltaX) < 0.5
-            ? event.deltaY
-            : event.deltaX || event.deltaY
-          : event.deltaY
+      const dx = timelineWheelPanDelta(event)
       element.scrollLeft += dx
 
       const now = performance.now()
       const dt = Math.max(1, now - lastPanAt)
       lastPanAt = now
-      panVelocity = panVelocity * 0.35 + (dx * (16 / dt)) * 0.65
+      panVelocity = panVelocity * 0.35 + dx * (16 / dt) * 0.65
       scheduleInertia()
     }
 
