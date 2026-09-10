@@ -1,5 +1,21 @@
 # Host-free development (no UXP Developer Tool / Premiere)
 
+## Build for Premiere (required)
+
+Adobe UXP does **not** support `<script type="module">`. Always ship the IIFE bundle:
+
+```bash
+cd tools/adobe-uxp-library-panel
+npm install
+npm run build   # → src/panel.bundle.js
+```
+
+Reload the plugin in UDT (or re-sync the External sideload folder) after every build.
+
+**UXP path quirk:** `main` is `src/index.html`, but CSS/JS hrefs resolve from the **plugin root**. Use `src/styles.css` and `src/panel.bundle.js` (not bare `styles.css`).
+
+Panel JS MUST defer DOM binding (`DOMContentLoaded` / retry) — UXP can evaluate the IIFE before nodes exist (`null.addEventListener` on „Verbindung testen“ / settings).
+
 ## Browser preview
 
 ```bash
@@ -8,6 +24,8 @@ npx --yes serve -p 4173
 ```
 
 Open `http://localhost:4173/preview.html`
+
+Preview still loads ESM sources via import maps (not the UXP bundle).
 
 1. Einstellungen → Staging base URL + Settings API token (`videon_…`)
 2. **Collections laden**

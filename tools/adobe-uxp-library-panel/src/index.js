@@ -11,6 +11,7 @@ import {
   searchMedia,
   testHealth,
 } from './api.js'
+import { loadNativeModule } from './native.js'
 import {
   clearCache,
   formatCacheBytes,
@@ -33,44 +34,66 @@ import { detectHostApp, isAfterEffectsHost } from './host.js'
 import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
-const els = {
-  settingsToggle: document.getElementById('settings-toggle'),
-  settingsPanel: document.getElementById('settings-panel'),
-  productBaseUrl: document.getElementById('product-base-url'),
-  apiToken: document.getElementById('api-token'),
-  collectionSelect: document.getElementById('collection-select'),
-  collectionSelectMain: document.getElementById('collection-select-main'),
-  defaultProjectId: document.getElementById('default-project-id'),
-  binName: document.getElementById('bin-name'),
-  compName: document.getElementById('comp-name'),
-  premiereBinLabel: document.getElementById('premiere-bin-label'),
-  aeCompLabel: document.getElementById('ae-comp-label'),
-  settingsSave: document.getElementById('settings-save'),
-  testConnection: document.getElementById('test-connection'),
-  reloadCollections: document.getElementById('reload-collections'),
-  cacheStats: document.getElementById('cache-stats'),
-  cacheRefresh: document.getElementById('cache-refresh'),
-  cacheClear: document.getElementById('cache-clear'),
-  settingsStatus: document.getElementById('settings-status'),
-  searchInput: document.getElementById('search-input'),
-  searchBtn: document.getElementById('search-btn'),
-  banner: document.getElementById('banner'),
-  resultsList: document.getElementById('results-list'),
-  resultsCount: document.getElementById('results-count'),
-  selectAllBtn: document.getElementById('select-all-btn'),
-  selectNoneBtn: document.getElementById('select-none-btn'),
-  insertBar: document.getElementById('insert-bar'),
-  hostBadge: document.getElementById('host-badge'),
-  premiereInsertOpts: document.getElementById('premiere-insert-opts'),
-  aeInsertOpts: document.getElementById('ae-insert-opts'),
-  appendSequence: document.getElementById('append-sequence'),
-  aeSequential: document.getElementById('ae-sequential'),
-  aeGapFrames: document.getElementById('ae-gap-frames'),
-  dryRunBtn: document.getElementById('dry-run-btn'),
-  insertBtn: document.getElementById('insert-btn'),
-  selectedCount: document.getElementById('selected-count'),
-  progress: document.getElementById('progress'),
-  progressBar: document.getElementById('progress-bar'),
+/** @type {Record<string, HTMLElement | null>} */
+let els = {}
+
+function queryEls() {
+  return {
+    settingsToggle: document.getElementById('settings-toggle'),
+    settingsPanel: document.getElementById('settings-panel'),
+    productBaseUrl: document.getElementById('product-base-url'),
+    apiToken: document.getElementById('api-token'),
+    collectionSelect: document.getElementById('collection-select'),
+    collectionSelectMain: document.getElementById('collection-select-main'),
+    defaultProjectId: document.getElementById('default-project-id'),
+    binName: document.getElementById('bin-name'),
+    compName: document.getElementById('comp-name'),
+    premiereBinLabel: document.getElementById('premiere-bin-label'),
+    aeCompLabel: document.getElementById('ae-comp-label'),
+    settingsSave: document.getElementById('settings-save'),
+    testConnection: document.getElementById('test-connection'),
+    reloadCollections: document.getElementById('reload-collections'),
+    cacheStats: document.getElementById('cache-stats'),
+    cacheRefresh: document.getElementById('cache-refresh'),
+    cacheClear: document.getElementById('cache-clear'),
+    settingsStatus: document.getElementById('settings-status'),
+    bootStatus: document.getElementById('boot-status'),
+    searchInput: document.getElementById('search-input'),
+    searchBtn: document.getElementById('search-btn'),
+    banner: document.getElementById('banner'),
+    resultsList: document.getElementById('results-list'),
+    resultsCount: document.getElementById('results-count'),
+    selectAllBtn: document.getElementById('select-all-btn'),
+    selectNoneBtn: document.getElementById('select-none-btn'),
+    insertBar: document.getElementById('insert-bar'),
+    hostBadge: document.getElementById('host-badge'),
+    premiereInsertOpts: document.getElementById('premiere-insert-opts'),
+    aeInsertOpts: document.getElementById('ae-insert-opts'),
+    appendSequence: document.getElementById('append-sequence'),
+    aeSequential: document.getElementById('ae-sequential'),
+    aeGapFrames: document.getElementById('ae-gap-frames'),
+    dryRunBtn: document.getElementById('dry-run-btn'),
+    insertBtn: document.getElementById('insert-btn'),
+    selectedCount: document.getElementById('selected-count'),
+    progress: document.getElementById('progress'),
+    progressBar: document.getElementById('progress-bar'),
+  }
+}
+
+const REQUIRED_EL_IDS = [
+  'settings-toggle',
+  'settings-panel',
+  'settings-save',
+  'test-connection',
+  'settings-status',
+  'product-base-url',
+  'api-token',
+  'search-input',
+  'search-btn',
+]
+
+function missingRequiredEls() {
+  return REQUIRED_EL_IDS.filter((id) => !document.getElementById(id))
 }
 
 /** @type {ReturnType<typeof normalizeSearchHit>[]} */
@@ -158,7 +181,7 @@ function revokeBlobs() {
 
 async function openExternal(href) {
   try {
-    const uxp = await import('uxp')
+    const uxp = await loadNativeModule('uxp')
     if (uxp?.shell?.openExternal) {
       await uxp.shell.openExternal(href)
       return
@@ -517,99 +540,152 @@ async function runInsert() {
   }
 }
 
-els.settingsToggle.addEventListener('click', () => {
-  els.settingsPanel.classList.toggle('hidden')
-  if (!els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
-})
+function bindPanel() {
+  els.settingsToggle?.addEventListener('click', () => {
+    els.settingsPanel?.classList.toggle('hidden')
+    if (els.settingsPanel && !els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
+  })
 
-els.settingsSave.addEventListener('click', () => {
-  const draft = readFormSettings()
-  const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl)
-  if (!urlCheck.ok) {
-    els.settingsStatus.hidden = false
-    els.settingsStatus.textContent = urlCheck.error
+  els.settingsSave?.addEventListener('click', () => {
+    const draft = readFormSettings()
+    const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl)
+    if (!urlCheck.ok) {
+      if (els.settingsStatus) {
+        els.settingsStatus.hidden = false
+        els.settingsStatus.textContent = urlCheck.error
+      }
+      return
+    }
+    const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value })
+    applySettingsToForm(settings)
+    if (els.settingsStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken)
+        ? 'Gespeichert.'
+        : 'Gespeichert — Token-Format prüfen (videon_…).'
+    }
+  })
+
+  els.testConnection?.addEventListener('click', async () => {
+    const settings = saveSettings(readFormSettings())
+    if (els.settingsStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = 'Teste…'
+    }
+    try {
+      const ok = await testHealth(settings)
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
+      }
+      if (ok) await refreshCollections(false)
+    } catch (error) {
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+
+  els.reloadCollections?.addEventListener('click', () => {
+    void refreshCollections(true)
+  })
+
+  els.cacheRefresh?.addEventListener('click', () => {
+    void refreshCacheUi(true)
+  })
+
+  els.cacheClear?.addEventListener('click', async () => {
+    if (els.settingsStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = 'Cache wird geleert…'
+    }
+    try {
+      const result = await clearCache()
+      updateCacheStatsLabel({ count: 0, bytes: 0 })
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`
+      }
+    } catch (error) {
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+
+  els.collectionSelect?.addEventListener('change', onCollectionChange)
+  els.collectionSelectMain?.addEventListener('change', onCollectionChange)
+
+  els.selectAllBtn?.addEventListener('click', () => {
+    for (const hit of hits) selected.add(hit.id)
+    for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
+      input.checked = true
+    }
+    updateSelectionChrome()
+  })
+  els.selectNoneBtn?.addEventListener('click', () => {
+    selected.clear()
+    for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
+      input.checked = false
+    }
+    updateSelectionChrome()
+  })
+
+  els.searchBtn?.addEventListener('click', () => {
+    void runSearch()
+  })
+  els.searchInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') void runSearch()
+  })
+  els.dryRunBtn?.addEventListener('click', () => {
+    void runDryDownload()
+  })
+  els.insertBtn?.addEventListener('click', () => {
+    void runInsert()
+  })
+}
+
+function bootPanel() {
+  els = queryEls()
+  const missing = missingRequiredEls()
+  if (missing.length) {
+    const msg = `Panel-DOM unvollständig (${missing.join(', ')}). Bundle neu bauen / Plugin neu laden.`
+    console.error('[VIDEON]', msg)
+    if (els.bootStatus) {
+      els.bootStatus.hidden = false
+      els.bootStatus.textContent = msg
+    }
+    return false
+  }
+
+  bindPanel()
+  applySettingsToForm(loadSettings())
+  if (els.searchInput) els.searchInput.value = loadLastQuery()
+  updateCacheStatsLabel(getCacheStats())
+  void refreshCacheUi(false)
+  void detectHostApp().then((info) => {
+    hostInfo = info
+    applyHostChrome()
+  })
+  if (loadSettings().apiToken) {
+    void refreshCollections(false)
+  }
+  if (els.bootStatus) {
+    els.bootStatus.hidden = true
+    els.bootStatus.textContent = ''
+  }
+  return true
+}
+
+function scheduleBoot(attempt = 0) {
+  const ready =
+    typeof document !== 'undefined' &&
+    (document.readyState === 'interactive' || document.readyState === 'complete')
+  if (!ready) {
+    document.addEventListener('DOMContentLoaded', () => scheduleBoot(0), { once: true })
     return
   }
-  const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value })
-  applySettingsToForm(settings)
-  els.settingsStatus.hidden = false
-  els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken)
-    ? 'Gespeichert.'
-    : 'Gespeichert — Token-Format prüfen (videon_…).'
-})
-
-els.testConnection.addEventListener('click', async () => {
-  const settings = saveSettings(readFormSettings())
-  els.settingsStatus.hidden = false
-  els.settingsStatus.textContent = 'Teste…'
-  try {
-    const ok = await testHealth(settings)
-    els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
-    if (ok) await refreshCollections(false)
-  } catch (error) {
-    els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
-  }
-})
-
-els.reloadCollections.addEventListener('click', () => {
-  void refreshCollections(true)
-})
-
-els.cacheRefresh?.addEventListener('click', () => {
-  void refreshCacheUi(true)
-})
-
-els.cacheClear?.addEventListener('click', async () => {
-  els.settingsStatus.hidden = false
-  els.settingsStatus.textContent = 'Cache wird geleert…'
-  try {
-    const result = await clearCache()
-    updateCacheStatsLabel({ count: 0, bytes: 0 })
-    els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`
-  } catch (error) {
-    els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
-  }
-})
-
-els.collectionSelect?.addEventListener('change', onCollectionChange)
-els.collectionSelectMain?.addEventListener('change', onCollectionChange)
-
-els.selectAllBtn.addEventListener('click', () => {
-  for (const hit of hits) selected.add(hit.id)
-  for (const input of els.resultsList.querySelectorAll('input[type="checkbox"]')) {
-    input.checked = true
-  }
-  updateSelectionChrome()
-})
-els.selectNoneBtn.addEventListener('click', () => {
-  selected.clear()
-  for (const input of els.resultsList.querySelectorAll('input[type="checkbox"]')) {
-    input.checked = false
-  }
-  updateSelectionChrome()
-})
-
-els.searchBtn.addEventListener('click', () => {
-  void runSearch()
-})
-els.searchInput.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') void runSearch()
-})
-els.dryRunBtn.addEventListener('click', () => {
-  void runDryDownload()
-})
-els.insertBtn.addEventListener('click', () => {
-  void runInsert()
-})
-
-applySettingsToForm(loadSettings())
-els.searchInput.value = loadLastQuery()
-updateCacheStatsLabel(getCacheStats())
-void refreshCacheUi(false)
-void detectHostApp().then((info) => {
-  hostInfo = info
-  applyHostChrome()
-})
-if (loadSettings().apiToken) {
-  void refreshCollections(false)
+  if (bootPanel()) return
+  if (attempt >= 20) return
+  setTimeout(() => scheduleBoot(attempt + 1), 50)
 }
+
+scheduleBoot()

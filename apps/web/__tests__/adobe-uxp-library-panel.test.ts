@@ -77,24 +77,24 @@ describe('adobe uxp library panel contracts', () => {
     expect(source).toMatch(/searchMediaForAccessibleProjects\(\{[\s\S]*limit/)
   })
 
-  it('panel scaffold ships dual-host UXP manifest (PPRO ≥ 25.6 + AEFT) + browser preview', () => {
+  it('panel scaffold ships Premiere UXP manifest (host premierepro)', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'))
     expect(manifest.id).toBe('videon.libraryPanel')
-    expect(Array.isArray(manifest.host)).toBe(true)
-    expect(manifest.host).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ app: 'PPRO', minVersion: '25.6' }),
-        expect.objectContaining({ app: 'AEFT' }),
-      ]),
-    )
+    expect(manifest.host.app).toBe('premierepro')
+    expect(manifest.host.minVersion).toBe('25.6.0')
     expect(manifest.entrypoints?.[0]?.type).toBe('panel')
     expect(readFileSync(join(root, 'preview.html'), 'utf8')).toContain('importmap')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('collection-select')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('select-all-btn')
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('ae-sequential')
-    expect(readFileSync(join(root, 'src/aftereffects.js'), 'utf8')).toContain('insertHitIntoAfterEffects')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('insertHitIntoAfterEffects')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('src/panel.bundle.js')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('src/styles.css')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).not.toContain('type="module"')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('require("uxp")')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/await import\("uxp"\)/)
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('scheduleBoot')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('testConnection?.addEventListener')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('scheduleBoot')
   })
 
   it('premiere path helpers reject signed URLs for import', () => {
