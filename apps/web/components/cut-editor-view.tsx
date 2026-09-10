@@ -18,7 +18,7 @@ import {
   nudgeTimelineStartMs,
   type SnapFilter,
 } from '@/lib/timeline-snap'
-import { expandGroupMoveWithRipple, rippleCloseGapAfterDelete } from '@/lib/timeline-ripple'
+import { expandGroupMoveWithRipple, rippleCloseGapAfterDelete, rippleMovesAfterResize } from '@/lib/timeline-ripple'
 import { useJklShuttle } from '@/lib/use-jkl-shuttle'
 import type { TimelineZoomAnchor } from '@/lib/use-timeline-viewport-gestures'
 import { CutEditorRail } from '@/components/cut-editor-rail'
@@ -1044,6 +1044,84 @@ export function CutEditorView({
     void patchTimeline({ action: 'moveClips', moves, ripple: rippleEdit })
   }
 
+  const applyResizeTrimWithRipple = async (input: {
+    lane: 'v1' | 'v2'
+    id: string
+    startMs: number
+    endMs: number
+    timelineStartMs?: number
+  }) => {
+    const origin =
+      input.lane === 'v1'
+        ? clips.find((clip) => clip.scene.id === input.id)?.scene
+        : videoClips.find((clip) => clip.id === input.id)
+    if (!origin) return
+
+    const trimPayload =
+      input.lane === 'v1'
+        ? {
+            action: 'trim',
+            sceneId: input.id,
+            startMs: input.startMs,
+            endMs: input.endMs,
+            ...(typeof input.timelineStartMs === 'number' ? { timelineStartMs: input.timelineStartMs } : {}),
+          }
+        : {
+            action: 'trimVideoClip',
+            videoClipId: input.id,
+            startMs: input.startMs,
+            endMs: input.endMs,
+            ...(typeof input.timelineStartMs === 'number' ? { timelineStartMs: input.timelineStartMs } : {}),
+          }
+
+    const shouldRipple = rippleEdit && trimMode === 'ripple'
+    if (!shouldRipple) {
+      await patchTimeline(trimPayload)
+      return
+    }
+
+    const originTimelineStartMs =
+      'timelineStartMs' in origin ? (origin.timelineStartMs ?? 0) : 0
+    const originDurationMs = Math.max(0, origin.endMs - origin.startMs)
+    const newTimelineStartMs =
+      typeof input.timelineStartMs === 'number' ? input.timelineStartMs : originTimelineStartMs
+    const newDurationMs = Math.max(0, input.endMs - input.startMs)
+    const laneClips =
+      input.lane === 'v1'
+        ? clips.map((clip) => ({
+            id: clip.scene.id,
+            timelineStartMs: clip.scene.timelineStartMs ?? 0,
+            durationMs: Math.max(0, clip.scene.endMs - clip.scene.startMs),
+          }))
+        : videoClips.map((clip) => ({
+            id: clip.id,
+            timelineStartMs: clip.timelineStartMs,
+            durationMs: Math.max(0, clip.endMs - clip.startMs),
+          }))
+    const neighborMoves = rippleMovesAfterResize(laneClips, {
+      id: input.id,
+      originTimelineStartMs,
+      originDurationMs,
+      newTimelineStartMs,
+      newDurationMs,
+    })
+
+    await patchTimeline(trimPayload)
+    if (neighborMoves.length === 0) return
+    await patchTimeline(
+      {
+        action: 'moveClips',
+        ripple: false,
+        moves: neighborMoves.map((move) => ({
+          lane: input.lane,
+          id: move.id,
+          timelineStartMs: move.timelineStartMs,
+        })),
+      },
+      { skipSnapshot: true },
+    )
+  }
+
   const deleteCut = async () => {
     if (!window.confirm('Cut archivieren?')) return
     setBusy(true)
@@ -1808,7 +1886,7 @@ export function CutEditorView({
             clip={selectedAudioClipId ? null : activeClip ?? null}
             busy={busy}
             onApplyTrim={(sceneId, startMs, endMs) =>
-              void patchTimeline({ action: 'trim', sceneId, startMs, endMs })
+              void applyResizeTrimWithRipple({ lane: 'v1', id: sceneId, startMs, endMs })
             }
           />
           {selectedAudioClipId ? (
@@ -1934,12 +2012,12 @@ export function CutEditorView({
             }
           }}
           onTrim={(sceneId, startMs, endMs, timelineStartMs) =>
-            void patchTimeline({
-              action: 'trim',
-              sceneId,
+            void applyResizeTrimWithRipple({
+              lane: 'v1',
+              id: sceneId,
               startMs,
               endMs,
-              ...(typeof timelineStartMs === 'number' ? { timelineStartMs } : {}),
+              timelineStartMs,
             })
           }
           onRollTrim={(leftSceneId, boundaryMs) =>
@@ -1985,12 +2063,12 @@ export function CutEditorView({
             void patchTimeline({ action: 'moveVideoClip', videoClipId: clipId, timelineStartMs })
           }
           onTrimVideoClip={(clipId, startMs, endMs, timelineStartMs) =>
-            void patchTimeline({
-              action: 'trimVideoClip',
-              videoClipId: clipId,
+            void applyResizeTrimWithRipple({
+              lane: 'v2',
+              id: clipId,
               startMs,
               endMs,
-              ...(typeof timelineStartMs === 'number' ? { timelineStartMs } : {}),
+              timelineStartMs,
             })
           }
           onDeleteAudioClip={(clipId) => void patchTimeline({ action: 'deleteAudioClip', audioClipId: clipId })}

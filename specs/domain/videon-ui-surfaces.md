@@ -128,6 +128,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 14. Wave 2 Cut timeline edit UX (ripple, tools, snap filter, minimap, shuttle, marquee, lock, link, `moveClips`, cull) MUST follow `cut-timeline-edit-ux-wave2.md`.
 15. Cut keyboard help MUST follow `cut-editor-shortcuts.md`. Wave 3 polish (V2/VO marquee, minimap window drag, localStorage clip locks) extends Wave 2.
 16. Wave 4 Slip + multilayer undo MUST follow `cut-timeline-edit-ux-wave4.md`.
+17. Wave 5 ripple Resize trim MUST follow `cut-timeline-edit-ux-wave5.md`.
 
 ## Acceptance
 

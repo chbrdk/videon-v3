@@ -42,6 +42,32 @@ export function rippleCloseGapAfterDelete(
   return moves
 }
 
+/** After a Resize trim, shift later clips by how much the trimmed clip's end moved. */
+export function rippleMovesAfterResize(
+  clips: RippleClip[],
+  trimmed: {
+    id: string
+    originTimelineStartMs: number
+    originDurationMs: number
+    newTimelineStartMs: number
+    newDurationMs: number
+  },
+): Array<{ id: string; timelineStartMs: number }> {
+  const oldEnd = trimmed.originTimelineStartMs + Math.max(0, trimmed.originDurationMs)
+  const newEnd = trimmed.newTimelineStartMs + Math.max(0, trimmed.newDurationMs)
+  const deltaEnd = newEnd - oldEnd
+  if (deltaEnd === 0) return []
+
+  const moves: Array<{ id: string; timelineStartMs: number }> = []
+  for (const clip of clips) {
+    if (clip.id === trimmed.id) continue
+    if (clip.timelineStartMs + 1 >= oldEnd) {
+      moves.push({ id: clip.id, timelineStartMs: Math.max(0, clip.timelineStartMs + deltaEnd) })
+    }
+  }
+  return moves
+}
+
 export function expandGroupMoveWithRipple(
   clips: RippleClip[],
   group: Array<{ id: string; originStartMs: number; newStartMs: number }>,

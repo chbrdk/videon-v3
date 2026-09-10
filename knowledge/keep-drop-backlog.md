@@ -34,3 +34,4 @@
 7. **Wave A (in progress):** Mediathek Browse — thumbs, duration, FilterRow, analysis status  
 8. **Done (Wave 1–4):** Cut editor load performance — Frame posters, eager S3 warm, direct img cache, mixPeaks + idle backfill, monitor poster-first (`specs/domain/cut-editor-load-performance.md`). Remaining: staging smoke / Bin regression.
 9. **Done (Wave 4 edit fidelity):** Slip commit + multilayer undo (`specs/domain/cut-timeline-edit-ux-wave4.md`).
+10. **Done (Wave 5):** Ripple Resize trim (`specs/domain/cut-timeline-edit-ux-wave5.md`).

@@ -10,7 +10,7 @@ export const TRIM_MODE_LABELS: Record<TrimMode, string> = {
 
 export const TRIM_MODE_HELP: Record<TrimMode, string> = {
   trim: 'Slip: Quellfenster verschieben — Clip-Länge auf der Timeline bleibt gleich',
-  ripple: 'Resize: Kante ändert die Clip-Länge (Free-Timeline, Nachbarn bleiben)',
+  ripple: 'Resize: Kante ändert die Clip-Länge; mit Ripple (R) rücken Nachbarn nach',
   roll: 'Roll: gemeinsame Schnittgrenze zweier Clips derselben Quelle',
 }
 

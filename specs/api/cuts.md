@@ -115,6 +115,7 @@ Create a Cut.
 
 - Applies all moves in **one** DB transaction. `timelineStartMs` MUST be ≥ 0.
 - WHEN `ripple` is true THEN for each moved clip the server MUST also shift later same-lane clips by the same Δt as that clip (primary moves listed explicitly; client SHOULD expand ripple into the `moves` array for determinism — server MAY re-apply per-lane delta from each primary).
+- WHEN Resize trim runs with client-side ripple edit THEN the client MUST expand neighbor `moveClips` by Δend after `trim` / `trimVideoClip` (`cut-timeline-edit-ux-wave5.md`); the server `moveClips` path is unchanged.
 - Returns `{ scenes, videoClips, audioClips }` (full lists for touched lanes).
 
 ### New: `addScenes`

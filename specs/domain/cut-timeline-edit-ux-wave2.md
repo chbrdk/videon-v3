@@ -15,7 +15,8 @@ Second edit-UX wave: ripple edit, tool/mode hotkeys, snap filter, playhead navig
 3. WHEN the operator presses **`U`** THEN `TrimMode` MUST cycle `trim` → `ripple` → `roll`.
 4. WHEN the operator presses **`R`** THEN **ripple edit** MUST toggle. WHILE ripple is on:
    - nudge / group-move / `moveClips` MUST shift later same-lane clips by Δt;
-   - delete MUST close the gap by shifting later same-lane clips left.
+   - delete MUST close the gap by shifting later same-lane clips left;
+   - **Resize** edge commits MUST shift later same-lane clips by Δend (`cut-timeline-edit-ux-wave5.md`).
 5. WHEN ripple is off THEN free-arrange overlaps remain allowed (Wave 1 behavior).
 
 ## Snap filter
@@ -60,6 +61,10 @@ See `cut-editor-shortcuts.md`, V2/VO marquee, minimap window drag, and `videon.c
 ## Wave 4
 
 Slip commit + multilayer undo/redo: `cut-timeline-edit-ux-wave4.md`.
+
+## Wave 5
+
+Ripple-aware Resize trim: `cut-timeline-edit-ux-wave5.md`.
 
 ## Acceptance
 

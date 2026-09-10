@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { expandGroupMoveWithRipple, rippleCloseGapAfterDelete, rippleShiftLaterClips } from '@/lib/timeline-ripple'
+import { expandGroupMoveWithRipple, rippleCloseGapAfterDelete, rippleMovesAfterResize, rippleShiftLaterClips } from '@/lib/timeline-ripple'
 import { marqueeHitClipIds, normalizeMarqueeRect } from '@/lib/timeline-marquee'
 import { clipIntersectsView, viewportTimeRange } from '@/lib/timeline-viewport-cull'
 import { downsamplePeaks } from '@/lib/waveform-lod'
@@ -41,6 +41,61 @@ describe('timeline ripple', () => {
       [{ id: 'a', originStartMs: 0, newStartMs: 50 }],
     )
     expect(moves.find((move) => move.id === 'b')?.timelineStartMs).toBe(250)
+  })
+
+  it('shifts later clips when resize shortens the end', () => {
+    const moves = rippleMovesAfterResize(
+      [
+        { id: 'a', timelineStartMs: 0, durationMs: 2000 },
+        { id: 'b', timelineStartMs: 2000, durationMs: 500 },
+        { id: 'c', timelineStartMs: 3000, durationMs: 500 },
+      ],
+      {
+        id: 'a',
+        originTimelineStartMs: 0,
+        originDurationMs: 2000,
+        newTimelineStartMs: 0,
+        newDurationMs: 1000,
+      },
+    )
+    expect(moves).toEqual([
+      { id: 'b', timelineStartMs: 1000 },
+      { id: 'c', timelineStartMs: 2000 },
+    ])
+  })
+
+  it('shifts later clips when resize lengthens the end', () => {
+    const moves = rippleMovesAfterResize(
+      [
+        { id: 'a', timelineStartMs: 0, durationMs: 1000 },
+        { id: 'b', timelineStartMs: 1000, durationMs: 500 },
+      ],
+      {
+        id: 'a',
+        originTimelineStartMs: 0,
+        originDurationMs: 1000,
+        newTimelineStartMs: 0,
+        newDurationMs: 1500,
+      },
+    )
+    expect(moves).toEqual([{ id: 'b', timelineStartMs: 1500 }])
+  })
+
+  it('skips neighbor moves when end is unchanged (right-anchored start resize)', () => {
+    const moves = rippleMovesAfterResize(
+      [
+        { id: 'a', timelineStartMs: 0, durationMs: 2000 },
+        { id: 'b', timelineStartMs: 2000, durationMs: 500 },
+      ],
+      {
+        id: 'a',
+        originTimelineStartMs: 0,
+        originDurationMs: 2000,
+        newTimelineStartMs: 500,
+        newDurationMs: 1500,
+      },
+    )
+    expect(moves).toEqual([])
   })
 })
 
