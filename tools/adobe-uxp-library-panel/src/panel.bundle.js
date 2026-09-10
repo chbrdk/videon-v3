@@ -470,6 +470,15 @@
     });
     return `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/frame?${params}`;
   }
+  function previewUrl(settings, hit, durationMs = 2e3) {
+    const t = hit.startMs != null && hit.startMs >= 0 ? Math.floor(hit.startMs) : 1e3;
+    const params = new URLSearchParams({
+      platformProjectId: hit.platformProjectId,
+      t: String(t),
+      durationMs: String(Math.min(Math.max(durationMs, 1), 3e3))
+    });
+    return `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/preview?${params}`;
+  }
   async function fetchFrameBlob(settings, hit, signal) {
     const response = await httpRequest(frameUrl(settings, hit), {
       headers: authHeaders(settings.apiToken),
@@ -477,7 +486,20 @@
       responseType: "arraybuffer"
     });
     if (!response.ok) return null;
-    return response.blob();
+    const buffer = await response.arrayBuffer();
+    return new Blob([buffer], { type: "image/jpeg" });
+  }
+  async function fetchPreviewBlob(settings, hit, signal) {
+    if (!hit?.platformProjectId || !hit?.mediaAssetId) return null;
+    const response = await httpRequest(previewUrl(settings, hit), {
+      headers: authHeaders(settings.apiToken),
+      signal,
+      responseType: "arraybuffer"
+    });
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    if (!buffer?.byteLength) return null;
+    return new Blob([buffer], { type: "video/mp4" });
   }
   async function requestAdobeDownload(settings, hit, signal) {
     if (!hit.platformProjectId) {
@@ -1151,7 +1173,8 @@
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.14";
+  var PANEL_VERSION = "0.1.15";
+  var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
     return {
@@ -1350,6 +1373,28 @@
     els.searchBtn.disabled = busy;
     els.dryRunBtn.disabled = busy;
     els.insertBtn.disabled = busy;
+    for (const btn of els.resultsList?.querySelectorAll(".hit-insert-btn") || []) {
+      btn.disabled = busy;
+    }
+  }
+  function findHitCard(hitId) {
+    if (!els.resultsList) return null;
+    for (const node of els.resultsList.querySelectorAll(".hit-card") || []) {
+      if (node.getAttribute("data-hit-id") === hitId) return node;
+    }
+    return null;
+  }
+  async function mapPool(items, concurrency, worker) {
+    const list = [...items];
+    const limit = Math.max(1, concurrency);
+    const runners = Array.from({ length: Math.min(limit, list.length) }, async () => {
+      while (list.length) {
+        const item = list.shift();
+        if (item === void 0) return;
+        await worker(item);
+      }
+    });
+    await Promise.all(runners);
   }
   function authErrorHint(message) {
     const text = String(message || "");
@@ -1410,6 +1455,18 @@
     } else {
       img.classList.add("hit-ph");
     }
+    const video = document.createElement("video");
+    video.className = "hit-card-preview";
+    video.muted = true;
+    video.loop = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.setAttribute("muted", "");
+    video.setAttribute("loop", "");
+    video.setAttribute("autoplay", "");
+    video.setAttribute("playsinline", "");
+    video.hidden = true;
     const check = document.createElement("input");
     check.type = "checkbox";
     check.className = "hit-card-check";
@@ -1432,7 +1489,7 @@
       badge.textContent = duration ? `\u0394 ${duration}` : timing;
       media.append(badge);
     }
-    media.append(img, check);
+    media.append(img, video, check);
     const body = document.createElement("div");
     body.className = "hit-card-body";
     const title = document.createElement("div");
@@ -1462,13 +1519,22 @@
       }
       void openExternal(href);
     });
-    actions.append(open);
+    const insertOne = document.createElement("button");
+    insertOne.type = "button";
+    insertOne.className = "primary tiny hit-insert-btn";
+    insertOne.textContent = "+";
+    insertOne.title = "In Premiere / AE einf\xFCgen";
+    on(insertOne, "click", (event) => {
+      event.stopPropagation?.();
+      void runInsert([hit.id]);
+    });
+    actions.append(open, insertOne);
     body.append(title, meta, snippet, actions);
     row.append(media, body);
     on(row, "click", (event) => {
       const target = event.target;
-      if (target === check || target === open || target && open.contains?.(target)) return;
-      if (target && media.contains?.(target) && target !== media && target !== img) {
+      if (target === check || target === open || target === insertOne || target && open.contains?.(target) || target && insertOne.contains?.(target)) {
+        return;
       }
       check.checked = !check.checked;
       if (check.checked) selected.add(hit.id);
@@ -1479,19 +1545,32 @@
     return row;
   }
   function applyPosterToCard(hitId, posterUrl) {
-    if (!posterUrl || !els.resultsList) return;
-    let card = null;
-    for (const node of els.resultsList.querySelectorAll(".hit-card") || []) {
-      if (node.getAttribute("data-hit-id") === hitId) {
-        card = node;
-        break;
-      }
-    }
+    if (!posterUrl) return;
+    const card = findHitCard(hitId);
     if (!card) return;
     const img = card.querySelector("img.hit-card-thumb");
     if (!img) return;
     img.src = posterUrl;
     img.classList.remove("hit-ph");
+  }
+  function applyPreviewToCard(hitId, previewUrl2) {
+    if (!previewUrl2) return;
+    const card = findHitCard(hitId);
+    if (!card) return;
+    const video = card.querySelector("video.hit-card-preview");
+    const img = card.querySelector("img.hit-card-thumb");
+    if (!video) return;
+    video.src = previewUrl2;
+    video.hidden = false;
+    if (img) img.classList.add("hit-thumb-under");
+    try {
+      const playResult = video.play?.();
+      if (playResult && typeof playResult.catch === "function") {
+        playResult.catch(() => {
+        });
+      }
+    } catch {
+    }
   }
   async function renderHits(settings, signal) {
     revokeBlobs();
@@ -1524,6 +1603,17 @@
         }
       })
     );
+    void mapPool(hits, PREVIEW_CONCURRENCY, async (hit) => {
+      if (signal?.aborted) return;
+      try {
+        const blob = await fetchPreviewBlob(settings, hit, signal);
+        if (!blob || signal?.aborted) return;
+        const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
+        applyPreviewToCard(hit.id, url);
+      } catch {
+      }
+    });
   }
   async function runSearch() {
     const settings = saveSettings(readFormSettings());
@@ -1606,9 +1696,10 @@
       setTimeout(() => els.progress.classList.add("hidden"), 800);
     }
   }
-  async function runInsert() {
+  async function runInsert(hitIds) {
     const settings = saveSettings(readFormSettings());
-    const chosen = hits.filter((h) => selected.has(h.id));
+    const idSet = hitIds?.length ? new Set(hitIds) : selected;
+    const chosen = hits.filter((h) => idSet.has(h.id));
     if (!chosen.length) return;
     els.progress.classList.remove("hidden");
     els.progressBar.style.width = "0%";

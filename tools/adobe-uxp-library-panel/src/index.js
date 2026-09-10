@@ -2,6 +2,7 @@ import { insertHitIntoAfterEffects } from './aftereffects.js'
 import {
   absoluteProductHref,
   fetchFrameBlob,
+  fetchPreviewBlob,
   listCollections,
   loadLastQuery,
   loadSettings,
@@ -36,7 +37,10 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.14'
+const PANEL_VERSION = '0.1.15'
+
+/** Max concurrent MP4 preview fetches (Product route ≤3s each). */
+const PREVIEW_CONCURRENCY = 2
 
 /** @type {Record<string, HTMLElement | null>} */
 let els = {}
@@ -270,6 +274,30 @@ function setBusy(busy) {
   els.searchBtn.disabled = busy
   els.dryRunBtn.disabled = busy
   els.insertBtn.disabled = busy
+  for (const btn of els.resultsList?.querySelectorAll('.hit-insert-btn') || []) {
+    btn.disabled = busy
+  }
+}
+
+function findHitCard(hitId) {
+  if (!els.resultsList) return null
+  for (const node of els.resultsList.querySelectorAll('.hit-card') || []) {
+    if (node.getAttribute('data-hit-id') === hitId) return node
+  }
+  return null
+}
+
+async function mapPool(items, concurrency, worker) {
+  const list = [...items]
+  const limit = Math.max(1, concurrency)
+  const runners = Array.from({ length: Math.min(limit, list.length) }, async () => {
+    while (list.length) {
+      const item = list.shift()
+      if (item === undefined) return
+      await worker(item)
+    }
+  })
+  await Promise.all(runners)
 }
 
 function authErrorHint(message) {
@@ -343,6 +371,19 @@ function buildHitRow(settings, hit, posterUrl) {
     img.classList.add('hit-ph')
   }
 
+  const video = document.createElement('video')
+  video.className = 'hit-card-preview'
+  video.muted = true
+  video.loop = true
+  video.autoplay = true
+  video.playsInline = true
+  video.preload = 'metadata'
+  video.setAttribute('muted', '')
+  video.setAttribute('loop', '')
+  video.setAttribute('autoplay', '')
+  video.setAttribute('playsinline', '')
+  video.hidden = true
+
   const check = document.createElement('input')
   check.type = 'checkbox'
   check.className = 'hit-card-check'
@@ -367,7 +408,7 @@ function buildHitRow(settings, hit, posterUrl) {
     media.append(badge)
   }
 
-  media.append(img, check)
+  media.append(img, video, check)
 
   const body = document.createElement('div')
   body.className = 'hit-card-body'
@@ -391,6 +432,7 @@ function buildHitRow(settings, hit, posterUrl) {
 
   const actions = document.createElement('div')
   actions.className = 'hit-actions'
+
   const open = document.createElement('button')
   open.type = 'button'
   open.className = 'ghost tiny'
@@ -404,16 +446,32 @@ function buildHitRow(settings, hit, posterUrl) {
     }
     void openExternal(href)
   })
-  actions.append(open)
+
+  const insertOne = document.createElement('button')
+  insertOne.type = 'button'
+  insertOne.className = 'primary tiny hit-insert-btn'
+  insertOne.textContent = '+'
+  insertOne.title = 'In Premiere / AE einfügen'
+  on(insertOne, 'click', (event) => {
+    event.stopPropagation?.()
+    void runInsert([hit.id])
+  })
+
+  actions.append(open, insertOne)
 
   body.append(title, meta, snippet, actions)
   row.append(media, body)
 
   on(row, 'click', (event) => {
     const target = event.target
-    if (target === check || target === open || (target && open.contains?.(target))) return
-    if (target && media.contains?.(target) && target !== media && target !== img) {
-      /* badge clicks still toggle */
+    if (
+      target === check ||
+      target === open ||
+      target === insertOne ||
+      (target && open.contains?.(target)) ||
+      (target && insertOne.contains?.(target))
+    ) {
+      return
     }
     check.checked = !check.checked
     if (check.checked) selected.add(hit.id)
@@ -426,19 +484,35 @@ function buildHitRow(settings, hit, posterUrl) {
 }
 
 function applyPosterToCard(hitId, posterUrl) {
-  if (!posterUrl || !els.resultsList) return
-  let card = null
-  for (const node of els.resultsList.querySelectorAll('.hit-card') || []) {
-    if (node.getAttribute('data-hit-id') === hitId) {
-      card = node
-      break
-    }
-  }
+  if (!posterUrl) return
+  const card = findHitCard(hitId)
   if (!card) return
   const img = card.querySelector('img.hit-card-thumb')
   if (!img) return
   img.src = posterUrl
   img.classList.remove('hit-ph')
+}
+
+function applyPreviewToCard(hitId, previewUrl) {
+  if (!previewUrl) return
+  const card = findHitCard(hitId)
+  if (!card) return
+  const video = card.querySelector('video.hit-card-preview')
+  const img = card.querySelector('img.hit-card-thumb')
+  if (!video) return
+  video.src = previewUrl
+  video.hidden = false
+  if (img) img.classList.add('hit-thumb-under')
+  try {
+    const playResult = video.play?.()
+    if (playResult && typeof playResult.catch === 'function') {
+      playResult.catch(() => {
+        /* autoplay may be blocked — poster remains */
+      })
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 async function renderHits(settings, signal) {
@@ -450,7 +524,7 @@ async function renderHits(settings, signal) {
     return
   }
 
-  // Paint cards immediately — never wait on posters (UXP/502 would leave an empty list).
+  // Paint cards immediately — never wait on posters/previews.
   els.resultsList.innerHTML = ''
   const fragment = document.createDocumentFragment?.() || null
   const nodes = hits.map((hit) => buildHitRow(settings, hit, null))
@@ -462,7 +536,7 @@ async function renderHits(settings, signal) {
   }
   updateSelectionChrome()
 
-  // Progressive poster fill; failures stay as placeholders.
+  // Progressive poster fill.
   void Promise.all(
     hits.map(async (hit) => {
       if (signal?.aborted) return
@@ -477,6 +551,20 @@ async function renderHits(settings, signal) {
       }
     }),
   )
+
+  // Progressive muted MP4 previews (GIF-like), limited concurrency.
+  void mapPool(hits, PREVIEW_CONCURRENCY, async (hit) => {
+    if (signal?.aborted) return
+    try {
+      const blob = await fetchPreviewBlob(settings, hit, signal)
+      if (!blob || signal?.aborted) return
+      const url = URL.createObjectURL(blob)
+      blobUrls.push(url)
+      applyPreviewToCard(hit.id, url)
+    } catch {
+      /* keep still poster */
+    }
+  })
 }
 
 async function runSearch() {
@@ -568,9 +656,10 @@ async function runDryDownload() {
   }
 }
 
-async function runInsert() {
+async function runInsert(hitIds) {
   const settings = saveSettings(readFormSettings())
-  const chosen = hits.filter((h) => selected.has(h.id))
+  const idSet = hitIds?.length ? new Set(hitIds) : selected
+  const chosen = hits.filter((h) => idSet.has(h.id))
   if (!chosen.length) return
 
   els.progress.classList.remove('hidden')

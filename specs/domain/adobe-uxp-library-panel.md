@@ -66,7 +66,7 @@ Reuse existing Product routes; extend only where noted.
 | Collections | `GET /api/collections` | Picker; Model B |
 | Search | `GET /api/media/search?q=&platformProjectId?&limit?` | Same query plan as `/chat` (`scene-search-query`) |
 | Hit posters | `GET /api/media/:id/frame?platformProjectId=&t=&w=` | Prefer `w=240` or `160` |
-| Hover/scrub preview (optional) | `GET /api/media/:id/preview?…` | ≤3s; not required for MVP insert |
+| Hover/scrub preview | `GET /api/media/:id/preview?…` | ≤3s muted MP4 — panel cards load as looping `<video>` (GIF-like) after still poster |
 | Media for insert | `GET /api/media/:id/adobe-download` (`media-adobe-download.md`) | Issued **after** user selects insert — never in search list |
 
 ### Search hit shape
@@ -124,7 +124,7 @@ Minimum surface:
 
 1. Settings: Product base URL (from env/docs, no hardcode in source defaults beyond staging documented in `knowledge/paths.md`), API token, default Collection, default Bin/Comp name, cache path reveal/clear.
 2. Search field + Enter; loading and empty states.
-3. Result **card grid** (UXP-safe flex wrap): fixed-height 16:9-ish poster (84px), filename, project, scene/timing badge, snippet, score/rank if present; multi-select via checkbox or card click. Cards render **before** poster fetch — placeholders stay if frames fail (e.g. 502).
+3. Result **card grid** (UXP-safe flex wrap): fixed-height poster (84px) then progressive muted MP4 preview (`/preview`, ≤3s loop); filename, project, scene/timing badge, snippet, score/rank if present; multi-select via checkbox or card click; per-card **+** insert beside “In VIDEON”. Cards render **before** media fetch — placeholders stay if frames/previews fail.
 4. Insert options: Bin only vs Bin+Sequence (Premiere); target Comp (AE); sequential + gap.
 5. Progress for multi-insert downloads.
 

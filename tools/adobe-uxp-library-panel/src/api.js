@@ -137,6 +137,16 @@ export function frameUrl(settings, hit, width = 240) {
   return `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/frame?${params}`
 }
 
+export function previewUrl(settings, hit, durationMs = 2000) {
+  const t = hit.startMs != null && hit.startMs >= 0 ? Math.floor(hit.startMs) : 1000
+  const params = new URLSearchParams({
+    platformProjectId: hit.platformProjectId,
+    t: String(t),
+    durationMs: String(Math.min(Math.max(durationMs, 1), 3000)),
+  })
+  return `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/preview?${params}`
+}
+
 export async function fetchFrameBlob(settings, hit, signal) {
   const response = await httpRequest(frameUrl(settings, hit), {
     headers: authHeaders(settings.apiToken),
@@ -144,7 +154,22 @@ export async function fetchFrameBlob(settings, hit, signal) {
     responseType: 'arraybuffer',
   })
   if (!response.ok) return null
-  return response.blob()
+  const buffer = await response.arrayBuffer()
+  return new Blob([buffer], { type: 'image/jpeg' })
+}
+
+/** Short muted MP4 (≤3s) — GIF-like hover preview for panel cards. */
+export async function fetchPreviewBlob(settings, hit, signal) {
+  if (!hit?.platformProjectId || !hit?.mediaAssetId) return null
+  const response = await httpRequest(previewUrl(settings, hit), {
+    headers: authHeaders(settings.apiToken),
+    signal,
+    responseType: 'arraybuffer',
+  })
+  if (!response.ok) return null
+  const buffer = await response.arrayBuffer()
+  if (!buffer?.byteLength) return null
+  return new Blob([buffer], { type: 'video/mp4' })
 }
 
 export async function requestAdobeDownload(settings, hit, signal) {
