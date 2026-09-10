@@ -34,11 +34,15 @@ import { detectHostApp, isAfterEffectsHost } from './host.js'
 import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
+/** Keep in sync with manifest.json / package.json — shown in panel chrome. */
+const PANEL_VERSION = '0.1.10'
+
 /** @type {Record<string, HTMLElement | null>} */
 let els = {}
 
 function queryEls() {
   return {
+    panelVersion: document.getElementById('panel-version'),
     settingsToggle: document.getElementById('settings-toggle'),
     settingsPanel: document.getElementById('settings-panel'),
     productBaseUrl: document.getElementById('product-base-url'),
@@ -734,6 +738,7 @@ function bootPanel() {
   }
 
   bindPanel()
+  if (els.panelVersion) els.panelVersion.textContent = `v${PANEL_VERSION}`
   applySettingsToForm(loadSettings())
   if (els.searchInput) els.searchInput.value = loadLastQuery()
   updateCacheStatsLabel(getCacheStats())

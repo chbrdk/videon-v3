@@ -3,12 +3,14 @@
  * Spec: adobe-uxp-library-panel.md
  */
 
+import { loadNativeModule } from './native.js'
+
 /**
  * @returns {Promise<{ id: 'PPRO' | 'AEFT', source: 'uxp' | 'preview' | 'default' }>}
  */
 export async function detectHostApp() {
   try {
-    const uxp = await import('uxp')
+    const uxp = await loadNativeModule('uxp')
     const name = String(uxp?.host?.name || uxp?.host?.app || '').toLowerCase()
     if (name.includes('after') || name === 'aeft' || name === 'ae') {
       return { id: 'AEFT', source: uxp?.host?.__videonPreview ? 'preview' : 'uxp' }

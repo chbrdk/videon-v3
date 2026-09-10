@@ -30,10 +30,29 @@ See [`DEV.md`](./DEV.md) — browser preview (`preview.html`), curl smokes, unit
 
 ## Load in UXP Developer Tool
 
-1. Open UXP Developer Tool → Add Plugin → select this folder (`tools/adobe-uxp-library-panel`).
-2. Launch / load against Premiere Pro and/or After Effects (dual-host).
-3. Panel: **Window → VIDEON Library**.
-4. Paste Product base URL + API token → Speichern → Collection wählen → Suchen.
+UXP hat **kein** ES-Module-Support. Das Panel lädt deshalb `src/panel.bundle.js` (IIFE + `require`). Nach Code-Änderungen:
+
+```bash
+cd tools/adobe-uxp-library-panel && npm install && npm run build
+```
+
+1. In **Premiere Pro**: Preferences → **Plugins** → **Enable developer mode**.
+2. Premiere **vollständig beenden**, neu starten, **Projekt öffnen** (nicht nur Homescreen).
+3. Danach UXP Developer Tool starten.
+4. Add Plugin → Ordner `tools/adobe-uxp-library-panel`.
+5. **Load** / **Load & Watch** → Panel unter **Window → VIDEON Library**.
+
+Wenn oben dauerhaft „Panel wird geladen…“ steht: Bundle fehlt oder JS läuft nicht → `npm run build`, Plugin Remove + erneut Add.
+
+Wenn *No applications are connected to the service*: Premiere ist nicht am UDT-Service (Port 14001). Developer Mode prüfen, Premiere neu starten, erst danach UDT.
+
+### Sideload ohne UDT (Fallback)
+
+Plugin liegt unter:
+
+`~/Library/Application Support/Adobe/UXP/Plugins/External/videon.libraryPanel_0.1.8`
+
+Nach Manifest-Änderungen Ordner neu syncen, Premiere neu starten, Panel unter Window → UXP Plugins öffnen.
 
 ## Manual QA
 

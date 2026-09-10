@@ -6,12 +6,13 @@
  *     → createSetInOutPointsAction (scene range) → optional Sequence insert.
  */
 
+import { loadNativeModule } from './native.js'
 import { sceneInOutFrames } from './time.js'
 import { assertLocalImportPath, pathBasename, pathsLikelyMatch } from './premiere-path.js'
 
 async function getPremiereApi() {
   try {
-    return await import('premierepro')
+    return await loadNativeModule('premierepro')
   } catch {
     return null
   }

@@ -17,6 +17,7 @@ import {
   pickEvictionKeys,
   removeKeysFromIndex,
 } from './cache-index.js'
+import { loadNativeModule } from './native.js'
 import { isHttpUrl } from './premiere-path.js'
 
 const META_KEY = 'videon.adobe.cacheIndex'
@@ -58,7 +59,7 @@ function cacheFileName(cacheKey, filename) {
 }
 
 async function getUxpFs() {
-  const uxp = await import('uxp')
+  const uxp = await loadNativeModule('uxp')
   const fs = uxp.storage?.localFileSystem
   if (!fs?.getDataFolder) {
     throw new Error('UXP localFileSystem nicht verfügbar — Cache unmöglich')

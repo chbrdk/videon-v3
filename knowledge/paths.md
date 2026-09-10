@@ -89,6 +89,8 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 |------------|---------|
 | Domain spec | `specs/domain/adobe-uxp-library-panel.md` — Premiere Wave 1, AE Wave 1.5 |
 | Package | `tools/adobe-uxp-library-panel/` (UXP dual-host: Premiere Wave 1 + AE Wave 1.5) |
+| UDT External copy (macOS) | `~/Library/Application Support/Adobe/UXP/Plugins/External/videon.libraryPanel_<version>/` — frozen after Load; must Unload + Load / re-sync after every build |
+| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`) |
 | Auth | Settings API Bearer (`settings-api-tokens.md`); not MCP service-secret |
 | Search | Same `GET /api/media/search` + `scene-hit-model.md` as `/chat` |
 | Posters | `GET /api/media/:id/frame` (`apiMediaFrame`) |

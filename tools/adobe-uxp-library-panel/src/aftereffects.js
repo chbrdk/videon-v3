@@ -7,6 +7,7 @@
  * return an explicit placement plan (no fake success).
  */
 
+import { loadNativeModule } from './native.js'
 import { assertLocalImportPath, pathBasename } from './premiere-path.js'
 import { aeLayerTiming, planAeInserts, sceneSourceWindowSec } from './ae-placement.js'
 
@@ -23,7 +24,7 @@ function getExtendScriptApp() {
 async function getAeUxpModule() {
   for (const id of ['aeft', 'aftereffects']) {
     try {
-      return await import(id)
+      return await loadNativeModule(id)
     } catch {
       /* try next */
     }

@@ -12,6 +12,15 @@ npm run build   # → src/panel.bundle.js
 
 Reload the plugin in UDT (or re-sync the External sideload folder) after every build.
 
+**Critical — UDT copies plugins:** Loading the folder once copies it to  
+`~/Library/Application Support/Adobe/UXP/Plugins/External/videon.libraryPanel_<version>/`.  
+Premiere keeps that **frozen** copy. Repo edits alone do nothing until you:
+
+1. `npm run build` in `tools/adobe-uxp-library-panel`
+2. UDT → **Unload** the old plugin (check version)
+3. **Load** the repo folder again (or sync into a new `…_<newVersion>` External folder)
+4. Confirm the panel header shows **`v0.1.10`** (or current) — if you still see `v?` / no version / old behavior, you are on a stale External copy
+
 **UXP path quirk:** `main` is `src/index.html`, but CSS/JS hrefs resolve from the **plugin root**. Use `src/styles.css` and `src/panel.bundle.js` (not bare `styles.css`).
 
 Panel JS MUST poll for DOM nodes via `setTimeout` — never `document.addEventListener`. Never call element `addEventListener` either (UXP domjs throws); use `on*` properties + optional HTML `onclick="videonPanel…"`.

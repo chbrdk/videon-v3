@@ -1044,9 +1044,11 @@
   }
 
   // src/index.js
+  var PANEL_VERSION = "0.1.10";
   var els = {};
   function queryEls() {
     return {
+      panelVersion: document.getElementById("panel-version"),
       settingsToggle: document.getElementById("settings-toggle"),
       settingsPanel: document.getElementById("settings-panel"),
       productBaseUrl: document.getElementById("product-base-url"),
@@ -1658,6 +1660,7 @@
       return false;
     }
     bindPanel();
+    if (els.panelVersion) els.panelVersion.textContent = `v${PANEL_VERSION}`;
     applySettingsToForm(loadSettings());
     if (els.searchInput) els.searchInput.value = loadLastQuery();
     updateCacheStatsLabel(getCacheStats());
