@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findProgramVideoAtCutMs } from '@/lib/cut-program-hit'
-import { buildProgramExportSlices } from '@/lib/cut-export-program'
+import { buildProgramExportSlices, busClipsEndMs } from '@/lib/cut-export-program'
 
 describe('findProgramVideoAtCutMs', () => {
   const v1 = [
@@ -54,5 +54,27 @@ describe('buildProgramExportSlices with V2', () => {
       { kind: 'media', sceneId: 'ov', mediaAssetId: 'm2', startMs: 0, endMs: 2000 },
       { kind: 'media', sceneId: 'a', mediaAssetId: 'm1', startMs: 3000, endMs: 4000 },
     ])
+  })
+
+  it('pads black through VO bus end past picture', () => {
+    const slices = buildProgramExportSlices(
+      [{ id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 1000, timelineStartMs: 0 }],
+      { busEndMs: 3000 },
+    )
+    expect(slices).toEqual([
+      { kind: 'media', sceneId: 'a', mediaAssetId: 'm1', startMs: 0, endMs: 1000 },
+      { kind: 'black', durationMs: 2000 },
+    ])
+  })
+})
+
+describe('busClipsEndMs', () => {
+  it('returns the latest bus timeline end', () => {
+    expect(
+      busClipsEndMs([
+        { timelineStartMs: 0, startMs: 0, endMs: 1000 },
+        { timelineStartMs: 500, startMs: 0, endMs: 4000 },
+      ]),
+    ).toBe(4500)
   })
 })

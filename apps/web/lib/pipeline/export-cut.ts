@@ -14,7 +14,7 @@ import {
   markCutExportSucceeded,
 } from '@/lib/db/cut-exports'
 import { findMediaAssetDetail, type MediaAssetDetail } from '@/lib/db/media'
-import { buildProgramExportSlices } from '@/lib/cut-export-program'
+import { buildProgramExportSlices, busClipsEndMs } from '@/lib/cut-export-program'
 import { buildPremiereXmeml, assignPremiereZipMediaNames, premierePackageReadme, sanitizePremiereXmlFilename } from '@/lib/pipeline/export-premiere-xml'
 import { safeUnlink, writePremiereExportZip } from '@/lib/pipeline/export-premiere-zip'
 import { cutExportStorageKey } from '@/lib/storage/object-store'
@@ -217,6 +217,7 @@ async function buildSegments(input: {
     endMs: number
   }>
   v2Muted?: boolean
+  busEndMs?: number
 }): Promise<string[]> {
   const segmentPaths: string[] = []
   const width = input.cut.width && input.cut.width > 0 ? input.cut.width : 1280
@@ -235,6 +236,7 @@ async function buildSegments(input: {
     {
       v2Clips: input.v2Clips ?? [],
       v2Muted: input.v2Muted,
+      busEndMs: input.busEndMs,
     },
   )
 
@@ -545,6 +547,7 @@ export async function runCutExport(exportId: string): Promise<void> {
     }
 
     const normalize = cutExportNeedsNormalize(cut, scenes, mediaById) || overlayClips.length > 0
+    const busEndMs = busClipsEndMs(busClips)
     const segmentInput = {
       scenes,
       sourceCache,
@@ -558,6 +561,7 @@ export async function runCutExport(exportId: string): Promise<void> {
         endMs: clip.endMs,
       })),
       v2Muted,
+      busEndMs,
     }
     segmentPaths = await buildSegments({ ...segmentInput, reencode: normalize })
 

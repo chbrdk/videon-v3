@@ -25,4 +25,12 @@ describe('buildProgramExportSlices', () => {
       { kind: 'media', sceneId: 'a', mediaAssetId: 'm1', startMs: 3000, endMs: 4000 },
     ])
   })
+
+  it('pads black when busEndMs extends past picture', () => {
+    const slices = buildProgramExportSlices(
+      [{ id: 'a', position: 0, mediaAssetId: 'm1', startMs: 0, endMs: 1000, timelineStartMs: 0 }],
+      { busEndMs: 2500 },
+    )
+    expect(slices.at(-1)).toEqual({ kind: 'black', durationMs: 1500 })
+  })
 })

@@ -55,6 +55,7 @@ README.txt
 - Operator flow: extract ZIP → Import XML in Premiere → clips link offline-ready when relative `media/` resolves.
 - WHEN unmuted `audio_bus` clips exist THEN the ZIP MUST include those source files under `media/` and the XMEML MUST place them on additional audio tracks with timeline `start`/`end` and source `<in>`/`<out>` matching `cut_audio_clips` (`cut-multi-track.md`).
 - WHEN exporting `mp4` AND unmuted bus clips exist THEN the job MUST mix bus audio into the program mix.
+- WHEN exporting `mp4` AND unmuted VO bus clips extend past V1/V2 picture THEN the program duration MUST pad with black (or equivalent silence video) so the mix keeps the full VO (same end rule as Premiere sequence duration).
 
 ### Multilayer XMEML (locked — Wave Multilayer polish)
 
@@ -83,6 +84,7 @@ README.txt
 - WHEN the Premiere download URL is issued, the filename extension MUST be `.zip` and Content-Disposition attachment.
 - WHEN unmuted V2 overlays exist THEN Premiere XMEML MUST include a second named video track `V2` and mute fully covered V1 linked audio (see Multilayer XMEML).
 - WHEN VO bus clips extend past video THEN sequence duration MUST still cover the bus end.
+- WHEN exporting `mp4` with VO past picture THEN program length MUST cover the bus end (black pad + mix).
 
 ## Acceptance
 

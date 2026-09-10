@@ -110,6 +110,7 @@ MP4 export / Premiere MAY continue to treat V2 as video-only for mux (stems stay
 
 - Program monitor MUST mix unmuted bus clips with the active video lane’s stems.
 - MP4 export MUST mix bus audio onto the program mix when unmuted clips exist.
+- WHEN VO extends past picture THEN MP4 MUST pad program length through the bus end (`cut-export-extras.md`).
 - Premiere ZIP MUST include bus source files under `media/` and map them to additional XMEML audio tracks.
 
 ### V2 export

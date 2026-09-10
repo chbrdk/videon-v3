@@ -18,26 +18,41 @@ export type ProgramExportSlice =
     }
   | { kind: 'black'; durationMs: number }
 
-function programTotalMs(scenes: CutTimelineScene[], v2Clips: ProgramVideoClipRef[]): number {
+/** Latest timeline end among VO bus clips (for MP4 pad / Premiere parity). */
+export function busClipsEndMs(
+  clips: Array<{ timelineStartMs: number; startMs: number; endMs: number }>,
+): number {
+  return clips.reduce((max, clip) => {
+    const end = Math.max(0, clip.timelineStartMs) + Math.max(0, clip.endMs - clip.startMs)
+    return Math.max(max, end)
+  }, 0)
+}
+
+function programTotalMs(
+  scenes: CutTimelineScene[],
+  v2Clips: ProgramVideoClipRef[],
+  busEndMs = 0,
+): number {
   const v1 = cutTotalDurationMs(scenes)
   const v2 = v2Clips.reduce((max, clip) => {
     const end = Math.max(0, clip.timelineStartMs) + Math.max(0, clip.endMs - clip.startMs)
     return Math.max(max, end)
   }, 0)
-  return Math.max(v1, v2)
+  return Math.max(v1, v2, Math.max(0, busEndMs))
 }
 
 /**
  * Flatten free-arrange timeline into concat-ready slices.
  * Gaps → black; V1 overlaps → higher position; unmuted V2 covers V1.
+ * Optional `busEndMs` extends the program with black so VO past picture is kept.
  */
 export function buildProgramExportSlices(
   scenes: CutTimelineScene[],
-  options?: { v2Clips?: ProgramVideoClipRef[]; v2Muted?: boolean },
+  options?: { v2Clips?: ProgramVideoClipRef[]; v2Muted?: boolean; busEndMs?: number },
 ): ProgramExportSlice[] {
   const v2Clips = options?.v2Clips ?? []
   const v2Muted = Boolean(options?.v2Muted)
-  const total = programTotalMs(scenes, v2Muted ? [] : v2Clips)
+  const total = programTotalMs(scenes, v2Muted ? [] : v2Clips, options?.busEndMs ?? 0)
   if (total <= 0) return []
 
   const timeline = buildCutTimeline(scenes)
@@ -72,6 +87,11 @@ export function buildProgramExportSlices(
       continue
     }
     if (hit.lane === 'v2') {
+      // Past overlay end → black (V2 finder has no hold-at-end).
+      if (mid >= hit.cutEndMs || from >= hit.cutEndMs) {
+        raw.push({ kind: 'black', durationMs: to - from })
+        continue
+      }
       const sourceStart = hit.clip.startMs + (from - hit.cutStartMs)
       const sourceEnd = hit.clip.startMs + (to - hit.cutStartMs)
       raw.push({
@@ -81,6 +101,11 @@ export function buildProgramExportSlices(
         startMs: sourceStart,
         endMs: sourceEnd,
       })
+      continue
+    }
+    // V1 playhead holds last frame after cut end — for export that MUST become black pad.
+    if (mid >= hit.item.cutEndMs || from >= hit.item.cutEndMs) {
+      raw.push({ kind: 'black', durationMs: to - from })
       continue
     }
     const sourceStart = hit.item.scene.startMs + (from - hit.item.cutStartMs)
