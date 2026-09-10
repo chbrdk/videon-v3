@@ -181,41 +181,105 @@ button:disabled {
 }
 
 .results-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+  max-height: 54vh;
+  overflow: auto;
+  padding: 2px;
+}
+
+.hit-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 52vh;
-  overflow: auto;
-}
-
-.hit {
-  display: grid;
-  grid-template-columns: 18px 64px 1fr;
-  gap: 8px;
-  align-items: start;
-  padding: 8px;
+  gap: 0;
   border: 1px solid var(--stroke);
-  border-radius: 4px;
+  border-radius: 8px;
   background: var(--bg);
+  overflow: hidden;
+  cursor: pointer;
+  min-width: 0;
 }
 
-.hit img {
-  width: 64px;
-  height: 36px;
-  object-fit: cover;
+.hit-card.selected {
+  border-color: #8a8a8a;
+  box-shadow: inset 0 0 0 1px #8a8a8a;
+}
+
+.hit-card-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
   background: #111;
-  border-radius: 2px;
+}
+
+.hit-card-media img,
+.hit-card-media .hit-ph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
 }
 
 .hit-ph {
-  width: 64px;
-  height: 36px;
-  background: #111;
-  border-radius: 2px;
+  background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+}
+
+.hit-card-check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  z-index: 1;
+}
+
+.hit-card-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #f2f2f2;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.hit-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  min-width: 0;
 }
 
 .hit-title {
   font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hit-meta {
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hit-snippet {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.7em;
 }
 
 .hit-meta,
@@ -290,11 +354,11 @@ button:disabled {
 .hit-actions {
   display: flex;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .hit-actions a,
 .hit-actions button {
-  font-size: 11px;
+  font-size: 10px;
   padding: 2px 6px;
 }

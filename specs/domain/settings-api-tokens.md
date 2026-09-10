@@ -22,7 +22,9 @@ The **Plexon assistant** does **not** use a fixed Settings token. It uses `PLEXO
 | `tokenHash` | SHA-256 of raw token |
 | `createdAt` / `lastUsedAt` | ISO |
 
-Raw secret returned **once** on create. Phase 1 = in-memory fixture store (survives process lifetime); Postgres `api_tokens` deferred.
+Raw secret returned **once** on create. Tokens persist in Postgres `api_tokens` (migration `0017_api_tokens.sql`). In-memory fallback remains for tests without `DATABASE_URL`.
+
+Owner id is stored **with** the token hash. Clients discover it via `POST /api/tokens/verify` — the Adobe panel MUST NOT ask for a separate owner id.
 
 ### Bootstrap (optional Cursor staging)
 
@@ -31,7 +33,7 @@ Optional env seed for a **direct** MCP client after process restart (not the ass
 | Key | Notes |
 |-----|--------|
 | `VIDEON_BOOTSTRAP_API_TOKEN` | Full `videon_` + 64 hex — same value as optional MCP `VIDEON_API_TOKEN` |
-| `VIDEON_BOOTSTRAP_API_OWNER_ID` | Plexon user id (Access Model B membership) |
+| `VIDEON_BOOTSTRAP_API_OWNER_ID` | Optional when the token hash already exists in `api_tokens` (owner is taken from that row). Required only for cold first seed of a brand-new bootstrap secret. |
 
 Applied lazily on Bearer resolve via `ensureBootstrapApiToken()`.
 
@@ -47,7 +49,8 @@ Routes stay fail-closed on Model B after user id is known.
 
 ## Acceptance
 
-1. Create / list / revoke / verify roundtrip.  
+1. Create / list / revoke / verify roundtrip (Postgres when configured).  
 2. Bearer on `GET /api/media/search` authenticates as token owner.  
 3. Service-secret + actor header authenticates as that actor (assistant path).  
-4. Paths only via `paths.ts`.
+4. Paths only via `paths.ts`.  
+5. `POST /api/tokens/verify` returns `{ ok, ownerId, tokenId }` for a valid Bearer — panel connection test uses this to surface the owner without a second config field.

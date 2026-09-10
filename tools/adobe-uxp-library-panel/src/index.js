@@ -10,6 +10,7 @@ import {
   saveSettings,
   searchMedia,
   testHealth,
+  verifyApiToken,
 } from './api.js'
 import { loadNativeModule } from './native.js'
 import {
@@ -35,7 +36,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.11'
+const PANEL_VERSION = '0.1.13'
 
 /** @type {Record<string, HTMLElement | null>} */
 let els = {}
@@ -273,10 +274,14 @@ function setBusy(busy) {
 
 function authErrorHint(message) {
   const text = String(message || '')
-  if (/service_unauthorized/i.test(text) || /Authentication required/i.test(text)) {
+  if (
+    /service_unauthorized/i.test(text) ||
+    /Authentication required/i.test(text) ||
+    /Invalid or missing API token/i.test(text)
+  ) {
     return (
-      `${text} — Token ungültig oder nach Server-Restart weg (In-Memory-Store). ` +
-      `In VIDEON Settings neuen Token erzeugen (videon_…), hier einfügen, Speichern.`
+      `${text} — Token unbekannt (nach Restart/Deploy neu in VIDEON Settings erzeugen, ` +
+      `videon_… hier einfügen). Owner kommt automatisch aus dem Token.`
     )
   }
   return text
@@ -323,52 +328,68 @@ async function refreshCollections(showStatus = true) {
 
 function buildHitRow(settings, hit, posterUrl) {
   const row = document.createElement('article')
-  row.className = 'hit'
+  row.className = `hit-card${selected.has(hit.id) ? ' selected' : ''}`
+  row.setAttribute('data-hit-id', hit.id)
 
-  const check = document.createElement('input')
-  check.type = 'checkbox'
-  check.checked = selected.has(hit.id)
-  on(check, 'change', () => {
-    if (check.checked) selected.add(hit.id)
-    else selected.delete(hit.id)
-    updateSelectionChrome()
-  })
+  const media = document.createElement('div')
+  media.className = 'hit-card-media'
 
   const img = document.createElement('img')
-  img.alt = ''
+  img.alt = hit.mediaFilename || 'Szene'
   if (posterUrl) img.src = posterUrl
   else img.classList.add('hit-ph')
 
+  const check = document.createElement('input')
+  check.type = 'checkbox'
+  check.className = 'hit-card-check'
+  check.checked = selected.has(hit.id)
+  check.title = 'Auswählen'
+  on(check, 'change', () => {
+    if (check.checked) selected.add(hit.id)
+    else selected.delete(hit.id)
+    row.classList.toggle('selected', check.checked)
+    updateSelectionChrome()
+  })
+
+  const timing = sceneHitTimingLabel(hit)
+  const duration = sceneHitDurationLabel(hit)
+  if (duration || timing) {
+    const badge = document.createElement('span')
+    badge.className = 'hit-card-badge'
+    badge.textContent = duration ? `Δ ${duration}` : timing
+    media.append(badge)
+  }
+
+  media.append(img, check)
+
   const body = document.createElement('div')
+  body.className = 'hit-card-body'
+
   const title = document.createElement('div')
   title.className = 'hit-title'
-  title.textContent = hit.mediaFilename
+  title.textContent = hit.mediaFilename || 'Clip'
+  title.title = hit.mediaFilename || ''
 
   const meta = document.createElement('div')
   meta.className = 'hit-meta'
-  const timing = sceneHitTimingLabel(hit)
-  const duration = sceneHitDurationLabel(hit)
   const rank = formatRank(hit.rank)
-  meta.textContent = [
-    hit.projectName,
-    timing,
-    duration ? `Δ ${duration}` : null,
-    hit.sceneKey,
-    rank ? `rank ${rank}` : null,
-  ]
+  meta.textContent = [hit.projectName, timing, hit.sceneKey, rank ? `rank ${rank}` : null]
     .filter(Boolean)
     .join(' · ')
 
   const snippet = document.createElement('div')
-  snippet.className = 'hit-meta'
-  snippet.textContent = hit.searchText
+  snippet.className = 'hit-snippet'
+  snippet.textContent = hit.searchText || ''
+  snippet.title = hit.searchText || ''
 
   const actions = document.createElement('div')
   actions.className = 'hit-actions'
   const open = document.createElement('button')
   open.type = 'button'
-  open.textContent = 'In VIDEON öffnen'
-  on(open, 'click', () => {
+  open.className = 'ghost tiny'
+  open.textContent = 'In VIDEON'
+  on(open, 'click', (event) => {
+    event.stopPropagation?.()
     const href = absoluteProductHref(settings, hit.href)
     if (!href) {
       showBanner('Kein Deep Link am Treffer.', 'error')
@@ -379,7 +400,18 @@ function buildHitRow(settings, hit, posterUrl) {
   actions.append(open)
 
   body.append(title, meta, snippet, actions)
-  row.append(check, img, body)
+  row.append(media, body)
+
+  on(row, 'click', (event) => {
+    const target = event.target
+    if (target === check || target === open || (target && open.contains?.(target))) return
+    check.checked = !check.checked
+    if (check.checked) selected.add(hit.id)
+    else selected.delete(hit.id)
+    row.classList.toggle('selected', check.checked)
+    updateSelectionChrome()
+  })
+
   return row
 }
 
@@ -625,7 +657,11 @@ function runTestConnection() {
         return
       }
       if (els.settingsStatus) {
-        els.settingsStatus.textContent = `Health OK — prüfe Token… (v${PANEL_VERSION})`
+        els.settingsStatus.textContent = `Health OK — Token verify… (v${PANEL_VERSION})`
+      }
+      const verified = await verifyApiToken(settings)
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = `Token OK · owner ${verified.ownerId} (v${PANEL_VERSION})`
       }
       await refreshCollections(true)
     } catch (error) {
@@ -704,12 +740,18 @@ function bindPanel() {
     for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
       input.checked = true
     }
+    for (const card of els.resultsList?.querySelectorAll('.hit-card') || []) {
+      card.classList.add('selected')
+    }
     updateSelectionChrome()
   })
   on(els.selectNoneBtn, 'click', () => {
     selected.clear()
     for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
       input.checked = false
+    }
+    for (const card of els.resultsList?.querySelectorAll('.hit-card') || []) {
+      card.classList.remove('selected')
     }
     updateSelectionChrome()
   })

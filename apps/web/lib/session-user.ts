@@ -14,7 +14,7 @@ import { resolveApiTokenOwner } from '@/lib/fixtures/api-tokens-store'
 export async function requireSessionUserId(): Promise<string | null> {
   try {
     const h = await headers()
-    const fromToken = resolveApiTokenOwner(h.get('authorization'))
+    const fromToken = await resolveApiTokenOwner(h.get('authorization'))
     if (fromToken?.ownerId) return fromToken.ownerId
 
     const reqLike = {

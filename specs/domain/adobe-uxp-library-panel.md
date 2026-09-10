@@ -102,7 +102,7 @@ Hard limit Wave 1: ≤ **40** hits returned to the panel UI. Product `GET /api/m
 
 ### Premiere (Wave 1)
 
-1. Requires Premiere Pro **UXP ≥ 25.6** (`premierepro` module).
+1. Requires Premiere Pro **UXP** with host id `premierepro` (manifest `minVersion` ≥ 25.2). Do **not** use CEP host code `PPRO`.
 2. Import into a dedicated Bin via `importFiles(paths, suppressUI=true, targetBin|null, false)` — never pass `undefined` as `targetBin`.
 3. Resolve the imported `ClipProjectItem` by media path / name; set scene bounds with `createSetInOutPointsAction` when `startMs`/`endMs` are valid.
 4. Optional: append to the active Sequence with `SequenceEditor.createInsertProjectItemAction` at playhead (V1/A1). Bin-only remains acceptable if Sequence insert fails.
@@ -111,7 +111,7 @@ Hard limit Wave 1: ≤ **40** hits returned to the panel UI. Product `GET /api/m
 
 ### After Effects (Wave 1.5)
 
-1. Panel MUST detect host (`PPRO` vs `AEFT`) and route insert to the AE adapter when running in After Effects.
+1. Panel MUST detect host and route insert to the AE adapter when running in After Effects (Wave 1.5; AE host id TBD — Premiere Wave 1 uses `premierepro` only).
 2. Manifest MUST declare both Premiere and After Effects hosts (dual-host package).
 3. Import footage from the **local cache path** (same `adobe-download` + cache as Premiere); never use search `downloadUrl` or legacy localhost `videoFilePath`.
 4. Place a layer in the target Comp (existing by name or create); trim to scene `startMs`/`endMs` using footage FPS for source timing; support sequential placement + gap frames (Legacy port, corrected layer math).
@@ -124,7 +124,7 @@ Minimum surface:
 
 1. Settings: Product base URL (from env/docs, no hardcode in source defaults beyond staging documented in `knowledge/paths.md`), API token, default Collection, default Bin/Comp name, cache path reveal/clear.
 2. Search field + Enter; loading and empty states.
-3. Result list: poster, filename, project, scene/timing, snippet, score/rank if present; multi-select.
+3. Result **card grid**: 16:9 poster thumbnail, filename, project, scene/timing badge, snippet (2 lines), score/rank if present; multi-select via checkbox or card click.
 4. Insert options: Bin only vs Bin+Sequence (Premiere); target Comp (AE); sequential + gap.
 5. Progress for multi-insert downloads.
 
@@ -187,7 +187,7 @@ Product routes remain those in `apps/web/lib/paths.ts` (`apiMediaSearch`, `apiMe
 
 ### Wave 1.5 — After Effects
 
-1. Same search/auth/cache core; dual-host manifest (`PPRO` + `AEFT`).
+1. Same search/auth/cache core; Premiere host `premierepro` first, AE host later.
 2. AE adapter: placement planner unit-tested; ExtendScript `app.project` insert when available; otherwise explicit plan/`unsupported` (public AE UXP DOM still pending Adobe).
 3. Panel switches Comp / sequential / gap UI when host is After Effects.
 4. Legacy CEP not required for install.

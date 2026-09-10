@@ -2,21 +2,26 @@
 
 **Spec:** `specs/domain/settings-api-tokens.md`  
 **Prefix:** `videon_` (see `paths.apiTokenPrefix`)  
-**Routes:** `GET/POST /api/tokens`, `DELETE /api/tokens/:id`, `POST /api/tokens/verify`
+**Routes:** `GET/POST /api/tokens`, `DELETE /api/tokens/:id`, `POST /api/tokens/verify`  
+**Table:** `api_tokens` (`migrations/0017_api_tokens.sql`)
 
-Optional Bearer tokens for **Cursor / direct** MCP (`VIDEON_API_TOKEN`). Tools then run as the token owner under Access Model B.
+Optional Bearer tokens for **Cursor / direct** MCP and the Adobe panel. Tools then run as the token owner under Access Model B.
 
 Plexon assistant auth is separate: service secret + dynamic `actorUserId` per chat user (`knowledge/mcp-server.md`).
 
-## Staging caveat (Phase 1 in-memory)
+## Owner discovery
 
-Tokens created in VIDEON Settings live only in the Node process. **Coolify redeploys wipe them.**
+The owner is **on the token row**. Flow:
 
-Durable staging seed needs **both** env keys on `videon-v3:main-app` (`mi0j3pyjrel80jodebwvhgvi`):
+1. Operator creates a token while logged into VIDEON Settings (session → `owner_id`).
+2. Panel / MCP sends `Authorization: Bearer videon_…`.
+3. `POST /api/tokens/verify` (or any Product route via `requireSessionUserId`) resolves `ownerId` from the hash — no separate owner field in the panel.
+
+## Staging
 
 | Key | Role |
 |-----|------|
-| `VIDEON_BOOTSTRAP_API_TOKEN` | Full `videon_` + 64 hex |
-| `VIDEON_BOOTSTRAP_API_OWNER_ID` | Plexon user id (≥ 8 chars) — **required**; without it bootstrap is a no-op |
+| `VIDEON_BOOTSTRAP_API_TOKEN` | Optional durable seed secret |
+| `VIDEON_BOOTSTRAP_API_OWNER_ID` | Only for cold first seed of that secret; skipped when the hash already exists in `api_tokens` |
 
-Adobe panel `service_unauthorized` after Health OK almost always means: token missing from the in-memory store (restart) or wrong format. Fix: create a fresh token under `/settings`, paste into the panel, or complete bootstrap env + restart.
+After deploy, create a fresh token in Settings once — it survives restarts via Postgres. Adobe panel connection test should show `Health OK · owner <id>` after verify.

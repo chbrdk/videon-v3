@@ -66,9 +66,11 @@ function base(settings) {
 async function parseError(response) {
   try {
     const body = await response.json()
-    const msg = body?.error?.message || body?.message
+    const msg = body?.error?.message || body?.message || body?.error
     const code = body?.error?.code
-    return code ? `${code}: ${msg || response.statusText}` : msg || `${response.status} ${response.statusText}`
+    if (typeof msg === 'string' && code) return `${code}: ${msg}`
+    if (typeof msg === 'string') return msg
+    return `${response.status} ${response.statusText}`
   } catch {
     return `${response.status} ${response.statusText}`
   }
@@ -80,6 +82,24 @@ export async function testHealth(settings, signal) {
     signal,
   })
   return response.ok
+}
+
+/**
+ * Resolve token → ownerId via Product verify (no separate owner config).
+ * @returns {Promise<{ ownerId: string, tokenId: string }>}
+ */
+export async function verifyApiToken(settings, signal) {
+  const response = await httpRequest(`${base(settings)}/api/tokens/verify`, {
+    method: 'POST',
+    headers: authHeaders(settings.apiToken),
+    signal,
+  })
+  if (!response.ok) throw new Error(await parseError(response))
+  const body = await response.json()
+  if (!body?.ok || !body?.ownerId) {
+    throw new Error('Token verify lieferte keinen ownerId')
+  }
+  return { ownerId: String(body.ownerId), tokenId: String(body.tokenId || '') }
 }
 
 export async function listCollections(settings, signal) {

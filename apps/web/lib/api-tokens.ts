@@ -26,14 +26,14 @@ export function toApiTokenOwnerId(sessionUser?: {
 }
 
 export async function listApiTokensForOwner(ownerId: string): Promise<{ items: ApiTokenStub[] }> {
-  return { items: listApiTokens(ownerId) }
+  return { items: await listApiTokens(ownerId) }
 }
 
 export async function createApiTokenForOwner(
   ownerId: string,
   label?: string | null,
 ): Promise<ApiTokenCreateResponse> {
-  const { stub, token } = createApiToken(ownerId, label)
+  const { stub, token } = await createApiToken(ownerId, label)
   return { ...stub, token }
 }
 
@@ -42,7 +42,7 @@ export async function revokeApiTokenForOwner(
   ownerId: string,
 ): Promise<{ ok: true } | ApiTokensError> {
   if (!tokenId.trim()) return { error: 'tokenId is required', status: 400 }
-  if (!revokeApiToken(tokenId, ownerId)) {
+  if (!(await revokeApiToken(tokenId, ownerId))) {
     return { error: 'Token not found or already revoked', status: 404 }
   }
   return { ok: true }
@@ -51,7 +51,7 @@ export async function revokeApiTokenForOwner(
 export async function verifyApiTokenBearer(
   authorization: string | null | undefined,
 ): Promise<{ ok: true; ownerId: string; tokenId: string } | ApiTokensError> {
-  const resolved = resolveApiTokenOwner(authorization)
+  const resolved = await resolveApiTokenOwner(authorization)
   if (!resolved) return { error: 'Invalid or missing API token', status: 401 }
   return { ok: true, ownerId: resolved.ownerId, tokenId: resolved.tokenId }
 }

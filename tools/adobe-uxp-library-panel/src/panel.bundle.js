@@ -409,9 +409,11 @@
   async function parseError(response) {
     try {
       const body = await response.json();
-      const msg = body?.error?.message || body?.message;
+      const msg = body?.error?.message || body?.message || body?.error;
       const code = body?.error?.code;
-      return code ? `${code}: ${msg || response.statusText}` : msg || `${response.status} ${response.statusText}`;
+      if (typeof msg === "string" && code) return `${code}: ${msg}`;
+      if (typeof msg === "string") return msg;
+      return `${response.status} ${response.statusText}`;
     } catch {
       return `${response.status} ${response.statusText}`;
     }
@@ -422,6 +424,19 @@
       signal
     });
     return response.ok;
+  }
+  async function verifyApiToken(settings, signal) {
+    const response = await httpRequest(`${base(settings)}/api/tokens/verify`, {
+      method: "POST",
+      headers: authHeaders(settings.apiToken),
+      signal
+    });
+    if (!response.ok) throw new Error(await parseError(response));
+    const body = await response.json();
+    if (!body?.ok || !body?.ownerId) {
+      throw new Error("Token verify lieferte keinen ownerId");
+    }
+    return { ownerId: String(body.ownerId), tokenId: String(body.tokenId || "") };
   }
   async function listCollections(settings, signal) {
     const response = await httpRequest(`${base(settings)}/api/collections`, {
@@ -1136,7 +1151,7 @@
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.11";
+  var PANEL_VERSION = "0.1.13";
   var els = {};
   function queryEls() {
     return {
@@ -1338,8 +1353,8 @@
   }
   function authErrorHint(message) {
     const text = String(message || "");
-    if (/service_unauthorized/i.test(text) || /Authentication required/i.test(text)) {
-      return `${text} \u2014 Token ung\xFCltig oder nach Server-Restart weg (In-Memory-Store). In VIDEON Settings neuen Token erzeugen (videon_\u2026), hier einf\xFCgen, Speichern.`;
+    if (/service_unauthorized/i.test(text) || /Authentication required/i.test(text) || /Invalid or missing API token/i.test(text)) {
+      return `${text} \u2014 Token unbekannt (nach Restart/Deploy neu in VIDEON Settings erzeugen, videon_\u2026 hier einf\xFCgen). Owner kommt automatisch aus dem Token.`;
     }
     return text;
   }
@@ -1383,44 +1398,56 @@
   }
   function buildHitRow(settings, hit, posterUrl) {
     const row = document.createElement("article");
-    row.className = "hit";
+    row.className = `hit-card${selected.has(hit.id) ? " selected" : ""}`;
+    row.setAttribute("data-hit-id", hit.id);
+    const media = document.createElement("div");
+    media.className = "hit-card-media";
+    const img = document.createElement("img");
+    img.alt = hit.mediaFilename || "Szene";
+    if (posterUrl) img.src = posterUrl;
+    else img.classList.add("hit-ph");
     const check = document.createElement("input");
     check.type = "checkbox";
+    check.className = "hit-card-check";
     check.checked = selected.has(hit.id);
+    check.title = "Ausw\xE4hlen";
     on(check, "change", () => {
       if (check.checked) selected.add(hit.id);
       else selected.delete(hit.id);
+      row.classList.toggle("selected", check.checked);
       updateSelectionChrome();
     });
-    const img = document.createElement("img");
-    img.alt = "";
-    if (posterUrl) img.src = posterUrl;
-    else img.classList.add("hit-ph");
-    const body = document.createElement("div");
-    const title = document.createElement("div");
-    title.className = "hit-title";
-    title.textContent = hit.mediaFilename;
-    const meta = document.createElement("div");
-    meta.className = "hit-meta";
     const timing = sceneHitTimingLabel(hit);
     const duration = sceneHitDurationLabel(hit);
+    if (duration || timing) {
+      const badge = document.createElement("span");
+      badge.className = "hit-card-badge";
+      badge.textContent = duration ? `\u0394 ${duration}` : timing;
+      media.append(badge);
+    }
+    media.append(img, check);
+    const body = document.createElement("div");
+    body.className = "hit-card-body";
+    const title = document.createElement("div");
+    title.className = "hit-title";
+    title.textContent = hit.mediaFilename || "Clip";
+    title.title = hit.mediaFilename || "";
+    const meta = document.createElement("div");
+    meta.className = "hit-meta";
     const rank = formatRank(hit.rank);
-    meta.textContent = [
-      hit.projectName,
-      timing,
-      duration ? `\u0394 ${duration}` : null,
-      hit.sceneKey,
-      rank ? `rank ${rank}` : null
-    ].filter(Boolean).join(" \xB7 ");
+    meta.textContent = [hit.projectName, timing, hit.sceneKey, rank ? `rank ${rank}` : null].filter(Boolean).join(" \xB7 ");
     const snippet = document.createElement("div");
-    snippet.className = "hit-meta";
-    snippet.textContent = hit.searchText;
+    snippet.className = "hit-snippet";
+    snippet.textContent = hit.searchText || "";
+    snippet.title = hit.searchText || "";
     const actions = document.createElement("div");
     actions.className = "hit-actions";
     const open = document.createElement("button");
     open.type = "button";
-    open.textContent = "In VIDEON \xF6ffnen";
-    on(open, "click", () => {
+    open.className = "ghost tiny";
+    open.textContent = "In VIDEON";
+    on(open, "click", (event) => {
+      event.stopPropagation?.();
       const href = absoluteProductHref(settings, hit.href);
       if (!href) {
         showBanner("Kein Deep Link am Treffer.", "error");
@@ -1430,7 +1457,16 @@
     });
     actions.append(open);
     body.append(title, meta, snippet, actions);
-    row.append(check, img, body);
+    row.append(media, body);
+    on(row, "click", (event) => {
+      const target = event.target;
+      if (target === check || target === open || target && open.contains?.(target)) return;
+      check.checked = !check.checked;
+      if (check.checked) selected.add(hit.id);
+      else selected.delete(hit.id);
+      row.classList.toggle("selected", check.checked);
+      updateSelectionChrome();
+    });
     return row;
   }
   async function renderHits(settings, signal) {
@@ -1646,7 +1682,11 @@
           return;
         }
         if (els.settingsStatus) {
-          els.settingsStatus.textContent = `Health OK \u2014 pr\xFCfe Token\u2026 (v${PANEL_VERSION})`;
+          els.settingsStatus.textContent = `Health OK \u2014 Token verify\u2026 (v${PANEL_VERSION})`;
+        }
+        const verified = await verifyApiToken(settings);
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = `Token OK \xB7 owner ${verified.ownerId} (v${PANEL_VERSION})`;
         }
         await refreshCollections(true);
       } catch (error) {
@@ -1715,12 +1755,18 @@
       for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
         input.checked = true;
       }
+      for (const card of els.resultsList?.querySelectorAll(".hit-card") || []) {
+        card.classList.add("selected");
+      }
       updateSelectionChrome();
     });
     on(els.selectNoneBtn, "click", () => {
       selected.clear();
       for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
         input.checked = false;
+      }
+      for (const card of els.resultsList?.querySelectorAll(".hit-card") || []) {
+        card.classList.remove("selected");
       }
       updateSelectionChrome();
     });
