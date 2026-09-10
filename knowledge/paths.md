@@ -38,7 +38,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | `envPlexonPublicUrl` | `NEXT_PUBLIC_PLEXON_URL` (browser iframe origin; fallback `NEXT_PLEXON_BASE_URL` / `PLEXON_AUTH_URL`) |
 | Media frame (assistant + Cut editor posters) | `GET /api/media/:id/frame?platformProjectId=&t=&w=` → `image/jpeg`; tiers `160`/`240`/`480`; eager S3 posters + write-through; cache `private, max-age=86400`; specs `specs/api/media-frame.md`, `specs/domain/cut-editor-load-performance.md` |
 | Media peaks backfill | `POST /api/media/:id/peaks-backfill?platformProjectId=` → mixPeaks without full re-analysis; `specs/api/media-peaks-backfill.md` |
-| Media preview (assistant hover) | `GET /api/media/:id/preview?platformProjectId=&t=&durationMs=` → `video/mp4` ≤3s; spec `specs/api/media-preview.md` |
+| Media preview (assistant hover + Adobe panel cards) | `GET /api/media/:id/preview?platformProjectId=&t=&durationMs=` → `video/mp4` ≤3s; spec `specs/api/media-preview.md` |
 | Scene hit model | `specs/domain/scene-hit-model.md` — shared Product `/chat` + Plexon `video_hit_strip` |
 | Knowledge facet `media_insights` | Publish via Plexon Collection Knowledge Pack; ownership VIDEON · `specs/domain/media-insights-publish.md` · `apps/web/lib/plexon-knowledge-pack.ts` |
 
