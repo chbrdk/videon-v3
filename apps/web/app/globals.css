@@ -1663,7 +1663,7 @@ main {
 }
 
 .videon-cut-timeline__track--audio {
-  min-height: 1.5rem;
+  min-height: 0.75rem;
   cursor: default;
 }
 
@@ -1672,13 +1672,26 @@ main {
 }
 
 .videon-cut-timeline__header-label--audio {
-  min-height: 1.5rem;
-  font-size: 0.62rem;
+  min-height: 0.75rem;
+  grid-template-rows: none;
+  grid-auto-flow: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.05rem 0.1rem;
+  font-size: 0.55rem;
+}
+
+.videon-cut-timeline__header-label--audio .videon-cut-timeline__track-btn,
+.videon-cut-timeline__header-label--transcript .videon-cut-timeline__track-btn {
+  width: 0.7rem;
+  height: 0.7rem;
+  font-size: 0.48rem;
 }
 
 .videon-cut-timeline__audio-canvas {
   width: 100%;
-  height: 1.5rem;
+  height: 0.75rem;
   display: block;
 }
 
@@ -2618,7 +2631,14 @@ main {
 }
 
 .videon-cut-timeline__header-label--transcript {
-  min-height: 1.5rem;
+  min-height: 0.75rem;
+  grid-template-rows: none;
+  grid-auto-flow: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.05rem 0.1rem;
+  font-size: 0.55rem;
 }
 
 .videon-cut-timeline__header-label--insight {
@@ -2821,8 +2841,8 @@ a.videon-cut-timeline__track-btn--link {
 
 .videon-cut-timeline__track--audio .videon-cut-timeline__clip,
 .videon-cut-timeline__track--audio .videon-cut-timeline__clip.ds-timeline-clip {
-  top: 0.1rem;
-  bottom: 0.1rem;
+  top: 0.05rem;
+  bottom: 0.05rem;
 }
 
 .videon-cut-timeline__track--music .videon-cut-timeline__clip.ds-timeline-clip--audio {
@@ -2836,13 +2856,14 @@ a.videon-cut-timeline__track-btn--link {
 }
 
 .videon-cut-timeline__transcript-segment.ds-timeline-clip {
-  top: 0.1rem;
-  bottom: 0.1rem;
+  top: 0.05rem;
+  bottom: 0.05rem;
   cursor: pointer;
   align-content: center;
   background: color-mix(in srgb, #3f5a3a 55%, transparent);
-  font-size: 0.62rem;
-  padding: 0.05rem 0.25rem;
+  font-size: 0.55rem;
+  padding: 0 0.2rem;
+  line-height: 1;
 }
 
 .videon-cut-timeline__ruler-tick {
@@ -2881,7 +2902,7 @@ a.videon-cut-timeline__track-btn--link {
 }
 
 .videon-cut-timeline__track--transcript {
-  min-height: 1.5rem;
+  min-height: 0.75rem;
   cursor: default;
 }
 

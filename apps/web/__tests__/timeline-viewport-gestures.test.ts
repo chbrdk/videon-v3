@@ -65,7 +65,7 @@ describe('cut timeline edit UX smoke', () => {
     expect(css).toMatch(/is-selected/)
     expect(css).toMatch(/videon-cut-timeline__mark/)
     expect(css).toMatch(/track--video/)
-    expect(css).toMatch(/min-height: 1\.5rem/)
+    expect(css).toMatch(/min-height: 0\.75rem/)
     expect(spec).toMatch(/Snap toggle MUST use/)
     expect(spec).toMatch(/plain vertical/)
   })
