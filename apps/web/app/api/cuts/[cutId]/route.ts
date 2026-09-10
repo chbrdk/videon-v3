@@ -38,7 +38,7 @@ import {
 import { moveSceneToVideoOverlay, moveVideoOverlayToScene } from '@/lib/db/cut-lane-move'
 import { moveCutClipsBatch } from '@/lib/db/cut-batch-move'
 import { findMediaAsset, findMediaAssetDetail } from '@/lib/db/media'
-import { sanitizePremiereFiltersXml } from '@/lib/pipeline/premiere-filters-xml'
+import { sanitizePremiereClipSidecarXml } from '@/lib/pipeline/premiere-filters-xml'
 import { objectStorageConfig } from '@/lib/runtime-config'
 import { resolveMediaSourceStorageKey } from '@/lib/storage/resolve-media-source'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
@@ -416,8 +416,10 @@ async function applyCutPatch(input: {
           : undefined
       const premiereFiltersXml =
         typeof scene.premiereFiltersXml === 'string' && scene.premiereFiltersXml.trim()
-          ? sanitizePremiereFiltersXml(scene.premiereFiltersXml)
-          : null
+          ? sanitizePremiereClipSidecarXml(scene.premiereFiltersXml)
+          : typeof scene.premiereClipSidecarXml === 'string' && scene.premiereClipSidecarXml.trim()
+            ? sanitizePremiereClipSidecarXml(scene.premiereClipSidecarXml)
+            : null
       if (!mediaId || sceneStart === null || sceneEnd === null) continue
       if (sceneEnd <= sceneStart) {
         return apiError(
@@ -553,11 +555,26 @@ async function applyCutPatch(input: {
       return apiError(request, 404, 'not_found', audioParsed.error ?? 'Media asset not found')
     }
 
+    const premiereV1TrackSidecarXml =
+      typeof record.premiereV1TrackSidecarXml === 'string'
+        ? sanitizePremiereClipSidecarXml(record.premiereV1TrackSidecarXml)
+        : record.premiereV1TrackSidecarXml === null
+          ? null
+          : undefined
+    const premiereSequenceExtrasXml =
+      typeof record.premiereSequenceExtrasXml === 'string'
+        ? sanitizePremiereClipSidecarXml(record.premiereSequenceExtrasXml)
+        : record.premiereSequenceExtrasXml === null
+          ? null
+          : undefined
+
     const restored = await restoreCutTimeline({
       cutId: cut.id,
       scenes: restoreScenes,
       ...(videoParsed && 'clips' in videoParsed ? { videoClips: videoParsed.clips } : {}),
       ...(audioParsed && 'clips' in audioParsed ? { audioClips: audioParsed.clips } : {}),
+      ...(premiereV1TrackSidecarXml !== undefined ? { premiereV1TrackSidecarXml } : {}),
+      ...(premiereSequenceExtrasXml !== undefined ? { premiereSequenceExtrasXml } : {}),
     })
     if (!restored) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
     return apiJson(request, restored)

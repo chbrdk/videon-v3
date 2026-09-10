@@ -206,18 +206,18 @@ Alternative: reuse existing PATCH scene batch APIs after client-side mapping —
 
 **Why:** Editors apply Premiere effects, sync Cut ↔ Premiere, and expect effects to survive. Clip effects are **data-only** (no Videon timeline UI).
 
-**P3.0 (clip filters) — shipped ≥ panel 0.1.27:**
+**P3.0–P3.1 (best-effort NLE sidecars) — shipped ≥ panel 0.1.28:**
 
-1. Capture `<filter>…</filter>` from Premiere XMEML clipitems on pushback.
-2. Persist opaque XML on `cut_scenes.premiere_filters_xml` (migration `0018`).
-3. Re-emit into outbound `premiere_xml` clipitems.
-4. No Videon UI surface for effects; no “effects lost” warnings for stored filters.
+1. Clip residual XML (filters + labels + markers + …) on `cut_scenes.premiere_filters_xml`.
+2. V1 track residual (transitions/generators) on `cuts.premiere_v1_track_sidecar_xml`.
+3. Sequence extras on `cuts.premiere_sequence_extras_xml`.
+4. Re-emit all three on `premiere_xml` export. No Videon UI.
 
-- [x] Opaque filter sidecar + restore/export round-trip
+- [x] Opaque clip/track/sequence sidecars + restore/export
 - [x] Panel capture + tests
-- [ ] Staging smoke: Lumetri / opacity / blur survive Cut aktualisieren → Premiere aktualisieren
-- [ ] Transitions between clips (store + re-emit `transitionitem`)
-- [ ] Spike remaining: which third-party effects never appear in XMEML
+- [ ] Staging smoke: Lumetri + transition + marker survive round-trip
+- [ ] V2/VO lane extras once those lanes apply
+- [ ] Spike: host-only state that never appears in XMEML
 
 Knowledge: `knowledge/adobe-uxp-pushback-effects-backlog.md`
 

@@ -49,7 +49,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.27'
+const PANEL_VERSION = '0.1.28'
 
 /** Max concurrent MP4 preview fetches (Product route ≤3s each). */
 const PREVIEW_CONCURRENCY = 2
@@ -593,6 +593,8 @@ async function confirmPushback(withSequenceReplace) {
       cutId: preview.cutId,
       platformProjectId: preview.platformProjectId,
       restoreScenes: preview.restoreScenes,
+      premiereV1TrackSidecarXml: preview.premiereV1TrackSidecarXml ?? null,
+      premiereSequenceExtrasXml: preview.premiereSequenceExtrasXml ?? null,
     })
     hidePushbackConfirm()
     if (!applied.ok) {

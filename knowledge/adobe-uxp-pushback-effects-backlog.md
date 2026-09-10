@@ -1,29 +1,28 @@
-# Pushback — Clip effects sidecar (Wave P3.0)
+# Pushback — Best-effort Premiere NLE sidecars
 
-**Status:** Shipped panel ≥ **0.1.27** + migration `0018_cut_scenes_premiere_filters.sql`  
+**Status:** Shipped panel ≥ **0.1.28** + migrations `0018` / `0019`  
 **Updated:** 2026-09-10  
 **Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md` § Wave P3
 
 ## Product rule
 
-Clip effects MUST stay in Cut **data** through round-trip. They are **not** shown in the Videon Cut UI.
+Capture **as much as XMEML exposes** from Premiere and keep it in Cut **data** (no Videon UI). Re-emit on `premiere_xml` export so round-trips preserve look where Premiere’s XML can represent it.
 
-## Flow
+## What we store
 
-1. Premiere → Cut: parse each V1 `clipitem`’s `<filter>…</filter>` → `cut_scenes.premiere_filters_xml`  
-2. Cut → Premiere: `buildPremiereXmeml` re-injects that XML into the matching clipitem  
-3. No loss warnings in the panel for clip effects
+| Layer | Column | Contents |
+|-------|--------|----------|
+| Clip | `cut_scenes.premiere_filters_xml` | Residual clipitem XML (filters, labels, markers, comments, alphatype, …) — everything except timing/`file`/`sourcetrack` we rewrite |
+| V1 track | `cuts.premiere_v1_track_sidecar_xml` | Track body after removing clipitems (transitions, generators, titles on that track) |
+| Sequence | `cuts.premiere_sequence_extras_xml` | Sequence extras outside `<media>` (markers, …) |
 
-## Limits
+## Honest limits
 
-- **Clip filters** only (what Premiere puts under `<filter>` in XMEML).  
-- **Transitions** between clips: not stored yet.  
-- Third-party / non-XML effects may not appear in XMEML capture — then nothing to store.  
-- Premiere must re-accept the re-injected filters on import (native Premiere FX usually do).
+- Only what Premiere puts into the captured XMEML. Pure host-DOM state that never serializes cannot be stored.
+- Nested sequences / some third-party plugins often flatten or drop in XML.
+- Re-import fidelity depends on Premiere accepting the re-injected fragments.
+- V2/VO lanes: clip mapping still P2.1; their extras follow when those lanes apply.
 
-## Files
+## Operator
 
-- Migration: `migrations/0018_cut_scenes_premiere_filters.sql`  
-- Sanitize: `apps/web/lib/pipeline/premiere-filters-xml.ts`  
-- Panel: `xmeml-pushback.js` `extractPremiereFilterBlocks`  
-- Export: `export-premiere-xml.ts` injects `premiereFiltersXml`
+Panel **v0.1.28** → Cut aktualisieren → Übernehmen → Premiere aktualisieren. Diff may show `Clip-Sidecar` / `Track-Sidecar` / `Sequenz-Extras`.

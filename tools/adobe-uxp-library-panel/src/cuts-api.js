@@ -133,8 +133,22 @@ export async function listWorkspaceMedia(settings, platformProjectId, signal) {
 }
 
 /** PATCH restore — replace V1 timeline (optional videoClips/audioClips omitted = leave lanes). */
-export async function restoreCutFromPushback(settings, cutId, platformProjectId, scenes, signal) {
+export async function restoreCutFromPushback(
+  settings,
+  cutId,
+  platformProjectId,
+  scenes,
+  signal,
+  sidecars = {},
+) {
   const params = new URLSearchParams({ platformProjectId })
+  const body = { action: 'restore', scenes }
+  if (sidecars.premiereV1TrackSidecarXml !== undefined) {
+    body.premiereV1TrackSidecarXml = sidecars.premiereV1TrackSidecarXml
+  }
+  if (sidecars.premiereSequenceExtrasXml !== undefined) {
+    body.premiereSequenceExtrasXml = sidecars.premiereSequenceExtrasXml
+  }
   const response = await httpRequest(
     `${base(settings)}/api/cuts/${encodeURIComponent(cutId)}?${params}`,
     {
@@ -143,7 +157,7 @@ export async function restoreCutFromPushback(settings, cutId, platformProjectId,
         ...authHeaders(settings.apiToken),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'restore', scenes }),
+      body: JSON.stringify(body),
       signal,
     },
   )

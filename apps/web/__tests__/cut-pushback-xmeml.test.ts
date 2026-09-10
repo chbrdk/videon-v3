@@ -229,15 +229,13 @@ describe('xmeml pushback parser', () => {
     )
   })
 
-  it('panel ships pushback modules in 0.1.27', () => {
+  it('panel ships pushback modules in 0.1.28', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
-    expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('previewCutPushback')
-    expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('premiereFiltersXml')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereFilterBlocks')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.27'")
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('pushback-confirm')
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).not.toContain('Wave P3')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereClipSidecar')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereTrackSidecar')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereSequenceExtras')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.28'")
+    expect(readFileSync(join(root, 'src/cuts-api.js'), 'utf8')).toContain('premiereV1TrackSidecarXml')
   })
 
   it('stores clip filter XML on restore scenes and re-exports them', () => {
@@ -257,6 +255,7 @@ describe('xmeml pushback parser', () => {
   <sequence>
     <name>FX Cut</name>
     <rate><timebase>25</timebase><ntsc>FALSE</ntsc></rate>
+    <marker><comment>beat</comment></marker>
     <media>
       <video>
         <track>
@@ -273,7 +272,12 @@ describe('xmeml pushback parser', () => {
             </file>
             <sourcetrack><mediatype>video</mediatype><trackindex>1</trackindex></sourcetrack>
             ${filter}
+            <labels><label2>Lavender</label2></labels>
           </clipitem>
+          <transitionitem>
+            <start>45</start>
+            <end>55</end>
+          </transitionitem>
         </track>
       </video>
     </media>
@@ -281,8 +285,11 @@ describe('xmeml pushback parser', () => {
 </xmeml>`
     const parsed = parsePremiereTimelineXml(xml)
     expect(parsed.ignored).not.toContain('effects')
+    expect(parsed.ignored).not.toContain('transitions')
     expect(parsed.v1[0].premiereFiltersXml).toContain('<filter')
-    expect(parsed.v1[0].premiereFiltersXml).toContain('Opacity')
+    expect(parsed.v1[0].premiereFiltersXml).toContain('labels')
+    expect(parsed.premiereV1TrackSidecarXml).toContain('transitionitem')
+    expect(parsed.premiereSequenceExtrasXml).toContain('marker')
     const { scenes } = mappedClipsToRestoreScenes([
       {
         ...parsed.v1[0],
@@ -290,14 +297,10 @@ describe('xmeml pushback parser', () => {
       },
     ])
     expect(scenes[0].premiereFiltersXml).toContain('Opacity')
-    const msg = formatPushbackDiffMessage({ summary: 'V1: 1 → 1' }, [], 0, 0, 1)
-    expect(msg).toContain('Effekte: 1 Clip(s) im Cut gespeichert')
-  })
-
-  it('warns only for transitions that are not stored yet', () => {
-    const msg = formatPushbackDiffMessage({ summary: 'V1: 1 → 1' }, ['transitions'], 0, 0, 0)
-    expect(msg).toContain('Transitions: noch nicht im Cut gespeichert')
-    expect(msg).not.toMatch(/Achtung: Effekte/)
+    const msg = formatPushbackDiffMessage({ summary: 'V1: 1 → 1' }, [], 0, 0, 1, true, true)
+    expect(msg).toContain('Clip-Sidecar')
+    expect(msg).toContain('Track-Sidecar')
+    expect(msg).toContain('Sequenz-Extras')
   })
 
   it('prefers Cut media over Mediathek duplicates for the same filename', () => {

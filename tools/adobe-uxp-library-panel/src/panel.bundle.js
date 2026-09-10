@@ -1851,8 +1851,15 @@
     const body = await response.json();
     return Array.isArray(body?.items) ? body.items : Array.isArray(body) ? body : [];
   }
-  async function restoreCutFromPushback(settings, cutId, platformProjectId, scenes, signal) {
+  async function restoreCutFromPushback(settings, cutId, platformProjectId, scenes, signal, sidecars = {}) {
     const params = new URLSearchParams({ platformProjectId });
+    const body = { action: "restore", scenes };
+    if (sidecars.premiereV1TrackSidecarXml !== void 0) {
+      body.premiereV1TrackSidecarXml = sidecars.premiereV1TrackSidecarXml;
+    }
+    if (sidecars.premiereSequenceExtrasXml !== void 0) {
+      body.premiereSequenceExtrasXml = sidecars.premiereSequenceExtrasXml;
+    }
     const response = await httpRequest(
       `${base2(settings)}/api/cuts/${encodeURIComponent(cutId)}?${params}`,
       {
@@ -1861,7 +1868,7 @@
           ...authHeaders2(settings.apiToken),
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ action: "restore", scenes }),
+        body: JSON.stringify(body),
         signal
       }
     );
@@ -2940,7 +2947,7 @@ ${extracted.xmlNativePath}`
       }
     }
     if (startMs == null || endMs == null || endMs <= startMs) return null;
-    const premiereFiltersXml = extractPremiereFilterBlocks(body);
+    const premiereFiltersXml = extractPremiereClipSidecar(body);
     return {
       name,
       filename,
@@ -2954,6 +2961,90 @@ ${extracted.xmlNativePath}`
       premiereFiltersXml
     };
   }
+  var MANAGED_CLIPITEM_TAGS = /* @__PURE__ */ new Set([
+    "name",
+    "enabled",
+    "start",
+    "end",
+    "in",
+    "out",
+    "file",
+    "sourcetrack",
+    "link",
+    "pproticksin",
+    "pproticksout",
+    "pproticksduration"
+  ]);
+  function extractTopLevelXmlElements(body) {
+    const src = String(body || "");
+    const out = [];
+    let i = 0;
+    while (i < src.length) {
+      const lt = src.indexOf("<", i);
+      if (lt < 0) break;
+      if (src.startsWith("<!--", lt)) {
+        const end = src.indexOf("-->", lt + 4);
+        i = end < 0 ? src.length : end + 3;
+        continue;
+      }
+      const tagMatch = src.slice(lt).match(/^<\/?([A-Za-z_][\w.-]*)/);
+      if (!tagMatch) {
+        i = lt + 1;
+        continue;
+      }
+      const tag = tagMatch[1];
+      if (src[lt + 1] === "/") {
+        i = lt + 2;
+        continue;
+      }
+      const selfClose = src.slice(lt).match(new RegExp(`^<${tag}\\b[^>]*\\/>`, "i"));
+      if (selfClose) {
+        out.push(selfClose[0]);
+        i = lt + selfClose[0].length;
+        continue;
+      }
+      const openEnd = src.indexOf(">", lt);
+      if (openEnd < 0) break;
+      const close = `</${tag}>`;
+      let depth = 1;
+      let cursor = openEnd + 1;
+      while (cursor < src.length && depth > 0) {
+        const nextOpen = src.indexOf(`<${tag}`, cursor);
+        const nextClose = src.toLowerCase().indexOf(close.toLowerCase(), cursor);
+        if (nextClose < 0) {
+          cursor = src.length;
+          break;
+        }
+        if (nextOpen >= 0 && nextOpen < nextClose) {
+          const after = src[nextOpen + tag.length + 1];
+          if (after === ">" || after === " " || after === "/" || after === "\n" || after === "	") {
+            depth += 1;
+            cursor = nextOpen + tag.length + 1;
+            continue;
+          }
+        }
+        depth -= 1;
+        if (depth === 0) {
+          out.push(src.slice(lt, nextClose + close.length));
+          i = nextClose + close.length;
+          break;
+        }
+        cursor = nextClose + close.length;
+      }
+      if (depth !== 0) i = openEnd + 1;
+    }
+    return out;
+  }
+  function extractPremiereClipSidecar(clipItemBody) {
+    const residual = extractTopLevelXmlElements(clipItemBody).filter((el) => {
+      const tag = (el.match(/^<\/?([A-Za-z_][\w.-]*)/) || [])[1]?.toLowerCase();
+      return tag && !MANAGED_CLIPITEM_TAGS.has(tag);
+    });
+    const joined = residual.join("\n").trim();
+    if (!joined) return extractPremiereFilterBlocks(clipItemBody);
+    if (joined.length > 15e5) return joined.slice(0, 15e5);
+    return joined;
+  }
   function extractPremiereFilterBlocks(clipItemBody) {
     const blocks = [];
     const re = /<filter\b[\s\S]*?<\/filter>/gi;
@@ -2964,15 +3055,39 @@ ${extracted.xmlNativePath}`
     }
     const joined = blocks.join("\n").trim();
     if (!joined) return null;
-    if (joined.length > 512e3) return joined.slice(0, 512e3);
+    if (joined.length > 15e5) return joined.slice(0, 15e5);
     return joined;
+  }
+  function extractPremiereTrackSidecar(trackBody) {
+    let rest = String(trackBody || "").replace(/<clipitem\b[\s\S]*?<\/clipitem>/gi, "");
+    rest = rest.replace(/<name>\s*V1\s*<\/name>/i, "");
+    rest = rest.replace(/<name>\s*Video\s*1\s*<\/name>/i, "");
+    rest = rest.trim();
+    if (!rest) return null;
+    if (rest.length > 15e5) return rest.slice(0, 15e5);
+    return rest;
+  }
+  function extractPremiereSequenceExtras(xml) {
+    const seq = String(xml || "").match(/<sequence\b[^>]*>([\s\S]*?)<\/sequence>/i);
+    if (!seq) return null;
+    let body = seq[1];
+    body = body.replace(/<media\b[\s\S]*?<\/media>/i, "");
+    body = body.replace(/<name>[\s\S]*?<\/name>/i, "");
+    body = body.replace(/<rate>[\s\S]*?<\/rate>/i, "");
+    body = body.replace(/<duration>[\s\S]*?<\/duration>/i, "");
+    body = body.replace(/<timecode>[\s\S]*?<\/timecode>/i, "");
+    body = body.trim();
+    if (!body) return null;
+    if (body.length > 15e5) return body.slice(0, 15e5);
+    return body;
   }
   function parsePremiereTimelineXml(xml) {
     const ignored = [];
     if (!xml || !/<xmeml|<xmeml\b|<fcpxml|<sequence/i.test(xml)) {
       return { fps: 25, v1: [], ignored: ["not_xml_timeline"], trackName: null, fileCount: 0 };
     }
-    if (/transitionitem/i.test(xml)) ignored.push("transitions");
+    if (/transitionitem/i.test(xml)) {
+    }
     const fps = parseSequenceTimebase(xml);
     const fileRegistry = extractFileRegistry(xml);
     const tracks = extractVideoTracks(xml);
@@ -2982,13 +3097,17 @@ ${extracted.xmlNativePath}`
       else if (extra.length) ignored.push("extra_video_tracks");
     }
     const v1Track = pickV1Track(tracks);
+    const premiereV1TrackSidecarXml = v1Track ? extractPremiereTrackSidecar(v1Track.body) : null;
+    const premiereSequenceExtrasXml = extractPremiereSequenceExtras(xml);
     if (!v1Track) {
       return {
         fps,
         v1: [],
         ignored: [...ignored, "no_video_track"],
         trackName: null,
-        fileCount: Object.keys(fileRegistry).length
+        fileCount: Object.keys(fileRegistry).length,
+        premiereV1TrackSidecarXml: null,
+        premiereSequenceExtrasXml
       };
     }
     const v1 = [];
@@ -3009,7 +3128,9 @@ ${extracted.xmlNativePath}`
       v1,
       ignored: [...new Set(ignored)],
       trackName: v1Track.name || "V1",
-      fileCount: Object.keys(fileRegistry).length
+      fileCount: Object.keys(fileRegistry).length,
+      premiereV1TrackSidecarXml,
+      premiereSequenceExtrasXml
     };
   }
   function catalogLookupKeys(clip) {
@@ -3194,17 +3315,16 @@ ${extracted.xmlNativePath}`
     });
     return { scenes, clampedCount };
   }
-  function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedCount = 0, effectsStoredCount = 0) {
+  function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedCount = 0, effectsStoredCount = 0, trackSidecar = false, sequenceExtras = false) {
     const lines = [diff.summary];
     if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`);
     if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf \u2265${MIN_PUSHBACK_CLIP_MS}ms angehoben`);
     if (effectsStoredCount > 0) {
-      lines.push(`Effekte: ${effectsStoredCount} Clip(s) im Cut gespeichert (kein Videon-UI)`);
+      lines.push(`Clip-Sidecar: ${effectsStoredCount} Clip(s) (Effekte/Labels/\u2026)`);
     }
+    if (trackSidecar) lines.push("Track-Sidecar: Transitions/Generatoren gespeichert");
+    if (sequenceExtras) lines.push("Sequenz-Extras: Marker/\u2026 gespeichert");
     if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(", ")}`);
-    if ((ignored || []).some((x) => /transition/i.test(String(x)))) {
-      lines.push("Transitions: noch nicht im Cut gespeichert");
-    }
     return lines.join("\n");
   }
   function formatUnmappedHint(unmapped) {
@@ -3283,7 +3403,9 @@ ${extracted.xmlNativePath}`
       parsed.ignored,
       0,
       clampedCount,
-      effectsStoredCount
+      effectsStoredCount,
+      Boolean(parsed.premiereV1TrackSidecarXml),
+      Boolean(parsed.premiereSequenceExtrasXml)
     );
     return {
       ok: true,
@@ -3293,6 +3415,8 @@ ${extracted.xmlNativePath}`
       ignored: parsed.ignored,
       mapped,
       restoreScenes,
+      premiereV1TrackSidecarXml: parsed.premiereV1TrackSidecarXml || null,
+      premiereSequenceExtrasXml: parsed.premiereSequenceExtrasXml || null,
       clampedCount,
       captureMode: captured.mode,
       sequenceName: captured.sequenceName || null,
@@ -3302,7 +3426,15 @@ ${extracted.xmlNativePath}`
     };
   }
   async function applyCutPushback(input) {
-    const { settings, cutId, platformProjectId, restoreScenes, signal } = input;
+    const {
+      settings,
+      cutId,
+      platformProjectId,
+      restoreScenes,
+      premiereV1TrackSidecarXml,
+      premiereSequenceExtrasXml,
+      signal
+    } = input;
     if (!restoreScenes?.length) {
       return { ok: false, mode: "apply_rejected", message: "Keine Scenes zum Restore." };
     }
@@ -3311,7 +3443,11 @@ ${extracted.xmlNativePath}`
       cutId,
       platformProjectId,
       restoreScenes,
-      signal
+      signal,
+      {
+        premiereV1TrackSidecarXml: premiereV1TrackSidecarXml === void 0 ? void 0 : premiereV1TrackSidecarXml,
+        premiereSequenceExtrasXml: premiereSequenceExtrasXml === void 0 ? void 0 : premiereSequenceExtrasXml
+      }
     );
     return {
       ok: true,
@@ -3439,7 +3575,7 @@ ${extracted.xmlNativePath}`
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.27";
+  var PANEL_VERSION = "0.1.28";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
@@ -3914,7 +4050,9 @@ ${extracted.xmlNativePath}`
         settings,
         cutId: preview.cutId,
         platformProjectId: preview.platformProjectId,
-        restoreScenes: preview.restoreScenes
+        restoreScenes: preview.restoreScenes,
+        premiereV1TrackSidecarXml: preview.premiereV1TrackSidecarXml ?? null,
+        premiereSequenceExtrasXml: preview.premiereSequenceExtrasXml ?? null
       });
       hidePushbackConfirm();
       if (!applied.ok) {

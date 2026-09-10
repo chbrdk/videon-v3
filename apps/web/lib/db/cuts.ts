@@ -13,6 +13,10 @@ export type Cut = {
   height: number | null
   frameRate: number | null
   status: CutStatus
+  /** Opaque V1 track residual (transitions/generators). */
+  premiereV1TrackSidecarXml: string | null
+  /** Opaque sequence-level extras (markers…). */
+  premiereSequenceExtrasXml: string | null
   createdAt: string
   updatedAt: string
 }
@@ -26,7 +30,7 @@ export type CutScene = {
   endMs: number
   timelineStartMs: number
   sceneKey: string | null
-  /** Opaque Premiere <filter> XML; not shown in Videon UI. */
+  /** Opaque Premiere clipitem residual XML (filters + labels + …); not shown in Videon UI. */
   premiereFiltersXml: string | null
   createdAt: string
 }
@@ -40,6 +44,8 @@ type CutRow = {
   height: number | null
   frame_rate: string | number | null
   status: CutStatus
+  premiere_v1_track_sidecar_xml: string | null
+  premiere_sequence_extras_xml: string | null
   created_at: Date | string
   updated_at: Date | string
 }
@@ -70,6 +76,8 @@ function mapCut(row: CutRow): Cut {
     height: row.height,
     frameRate: row.frame_rate === null ? null : Number(row.frame_rate),
     status: row.status,
+    premiereV1TrackSidecarXml: row.premiere_v1_track_sidecar_xml ?? null,
+    premiereSequenceExtrasXml: row.premiere_sequence_extras_xml ?? null,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   }
@@ -90,10 +98,13 @@ function mapCutScene(row: CutSceneRow): CutScene {
   }
 }
 
+const CUT_SELECT =
+  `id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status,
+   premiere_v1_track_sidecar_xml, premiere_sequence_extras_xml, created_at, updated_at`
+
 export async function listCutsForWorkspace(workspaceId: string): Promise<Cut[]> {
   const result = await databasePool().query<CutRow>(
-    `select id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status,
-            created_at, updated_at
+    `select ${CUT_SELECT}
        from cuts
       where workspace_id = $1
         and status <> 'archived'
@@ -106,8 +117,7 @@ export async function listCutsForWorkspace(workspaceId: string): Promise<Cut[]> 
 
 export async function findCut(cutId: string): Promise<Cut | null> {
   const result = await databasePool().query<CutRow>(
-    `select id, workspace_id, created_by_plexon_user_id, name, width, height, frame_rate, status,
-            created_at, updated_at
+    `select ${CUT_SELECT}
        from cuts
       where id = $1
         and status <> 'archived'`,
@@ -700,6 +710,8 @@ export async function restoreCutTimeline(input: {
   }>
   videoClips?: CutRestoreClip[]
   audioClips?: CutRestoreClip[]
+  premiereV1TrackSidecarXml?: string | null
+  premiereSequenceExtrasXml?: string | null
 }): Promise<CutRestoreResult | null> {
   if (input.scenes.length === 0) return null
   for (const scene of input.scenes) {
@@ -809,7 +821,27 @@ export async function restoreCutTimeline(input: {
       }
     }
 
-    await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    if (
+      input.premiereV1TrackSidecarXml !== undefined ||
+      input.premiereSequenceExtrasXml !== undefined
+    ) {
+      await client.query(
+        `update cuts
+            set premiere_v1_track_sidecar_xml = case when $2::boolean then $3 else premiere_v1_track_sidecar_xml end,
+                premiere_sequence_extras_xml = case when $4::boolean then $5 else premiere_sequence_extras_xml end,
+                updated_at = now()
+          where id = $1`,
+        [
+          input.cutId,
+          input.premiereV1TrackSidecarXml !== undefined,
+          input.premiereV1TrackSidecarXml?.trim() || null,
+          input.premiereSequenceExtrasXml !== undefined,
+          input.premiereSequenceExtrasXml?.trim() || null,
+        ],
+      )
+    } else {
+      await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
+    }
     await client.query('commit')
     const [{ listCutVideoClips }, { listCutAudioClips }] = await Promise.all([
       import('./cut-video'),

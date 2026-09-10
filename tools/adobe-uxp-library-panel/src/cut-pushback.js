@@ -106,6 +106,8 @@ export async function previewCutPushback(input) {
     0,
     clampedCount,
     effectsStoredCount,
+    Boolean(parsed.premiereV1TrackSidecarXml),
+    Boolean(parsed.premiereSequenceExtrasXml),
   )
 
   return {
@@ -116,6 +118,8 @@ export async function previewCutPushback(input) {
     ignored: parsed.ignored,
     mapped,
     restoreScenes,
+    premiereV1TrackSidecarXml: parsed.premiereV1TrackSidecarXml || null,
+    premiereSequenceExtrasXml: parsed.premiereSequenceExtrasXml || null,
     clampedCount,
     captureMode: captured.mode,
     sequenceName: captured.sequenceName || null,
@@ -126,7 +130,15 @@ export async function previewCutPushback(input) {
 }
 
 export async function applyCutPushback(input) {
-  const { settings, cutId, platformProjectId, restoreScenes, signal } = input
+  const {
+    settings,
+    cutId,
+    platformProjectId,
+    restoreScenes,
+    premiereV1TrackSidecarXml,
+    premiereSequenceExtrasXml,
+    signal,
+  } = input
   if (!restoreScenes?.length) {
     return { ok: false, mode: 'apply_rejected', message: 'Keine Scenes zum Restore.' }
   }
@@ -136,6 +148,12 @@ export async function applyCutPushback(input) {
     platformProjectId,
     restoreScenes,
     signal,
+    {
+      premiereV1TrackSidecarXml:
+        premiereV1TrackSidecarXml === undefined ? undefined : premiereV1TrackSidecarXml,
+      premiereSequenceExtrasXml:
+        premiereSequenceExtrasXml === undefined ? undefined : premiereSequenceExtrasXml,
+    },
   )
   return {
     ok: true,

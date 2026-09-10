@@ -219,7 +219,7 @@ function parseClipItem(body, sequenceFps, fileRegistry) {
   }
   if (startMs == null || endMs == null || endMs <= startMs) return null
 
-  const premiereFiltersXml = extractPremiereFilterBlocks(body)
+  const premiereFiltersXml = extractPremiereClipSidecar(body)
 
   return {
     name,
@@ -235,6 +235,93 @@ function parseClipItem(body, sequenceFps, fileRegistry) {
   }
 }
 
+const MANAGED_CLIPITEM_TAGS = new Set([
+  'name',
+  'enabled',
+  'start',
+  'end',
+  'in',
+  'out',
+  'file',
+  'sourcetrack',
+  'link',
+  'pproticksin',
+  'pproticksout',
+  'pproticksduration',
+])
+
+function extractTopLevelXmlElements(body) {
+  const src = String(body || '')
+  const out = []
+  let i = 0
+  while (i < src.length) {
+    const lt = src.indexOf('<', i)
+    if (lt < 0) break
+    if (src.startsWith('<!--', lt)) {
+      const end = src.indexOf('-->', lt + 4)
+      i = end < 0 ? src.length : end + 3
+      continue
+    }
+    const tagMatch = src.slice(lt).match(/^<\/?([A-Za-z_][\w.-]*)/)
+    if (!tagMatch) {
+      i = lt + 1
+      continue
+    }
+    const tag = tagMatch[1]
+    if (src[lt + 1] === '/') {
+      i = lt + 2
+      continue
+    }
+    const selfClose = src.slice(lt).match(new RegExp(`^<${tag}\\b[^>]*\\/>`, 'i'))
+    if (selfClose) {
+      out.push(selfClose[0])
+      i = lt + selfClose[0].length
+      continue
+    }
+    const openEnd = src.indexOf('>', lt)
+    if (openEnd < 0) break
+    const close = `</${tag}>`
+    let depth = 1
+    let cursor = openEnd + 1
+    while (cursor < src.length && depth > 0) {
+      const nextOpen = src.indexOf(`<${tag}`, cursor)
+      const nextClose = src.toLowerCase().indexOf(close.toLowerCase(), cursor)
+      if (nextClose < 0) {
+        cursor = src.length
+        break
+      }
+      if (nextOpen >= 0 && nextOpen < nextClose) {
+        const after = src[nextOpen + tag.length + 1]
+        if (after === '>' || after === ' ' || after === '/' || after === '\n' || after === '\t') {
+          depth += 1
+          cursor = nextOpen + tag.length + 1
+          continue
+        }
+      }
+      depth -= 1
+      if (depth === 0) {
+        out.push(src.slice(lt, nextClose + close.length))
+        i = nextClose + close.length
+        break
+      }
+      cursor = nextClose + close.length
+    }
+    if (depth !== 0) i = openEnd + 1
+  }
+  return out
+}
+
+export function extractPremiereClipSidecar(clipItemBody) {
+  const residual = extractTopLevelXmlElements(clipItemBody).filter((el) => {
+    const tag = (el.match(/^<\/?([A-Za-z_][\w.-]*)/) || [])[1]?.toLowerCase()
+    return tag && !MANAGED_CLIPITEM_TAGS.has(tag)
+  })
+  const joined = residual.join('\n').trim()
+  if (!joined) return extractPremiereFilterBlocks(clipItemBody)
+  if (joined.length > 1500000) return joined.slice(0, 1500000)
+  return joined
+}
+
 function extractPremiereFilterBlocks(clipItemBody) {
   const blocks = []
   const re = /<filter\b[\s\S]*?<\/filter>/gi
@@ -245,8 +332,33 @@ function extractPremiereFilterBlocks(clipItemBody) {
   }
   const joined = blocks.join('\n').trim()
   if (!joined) return null
-  if (joined.length > 512000) return joined.slice(0, 512000)
+  if (joined.length > 1500000) return joined.slice(0, 1500000)
   return joined
+}
+
+export function extractPremiereTrackSidecar(trackBody) {
+  let rest = String(trackBody || '').replace(/<clipitem\b[\s\S]*?<\/clipitem>/gi, '')
+  rest = rest.replace(/<name>\s*V1\s*<\/name>/i, '')
+  rest = rest.replace(/<name>\s*Video\s*1\s*<\/name>/i, '')
+  rest = rest.trim()
+  if (!rest) return null
+  if (rest.length > 1500000) return rest.slice(0, 1500000)
+  return rest
+}
+
+export function extractPremiereSequenceExtras(xml) {
+  const seq = String(xml || '').match(/<sequence\b[^>]*>([\s\S]*?)<\/sequence>/i)
+  if (!seq) return null
+  let body = seq[1]
+  body = body.replace(/<media\b[\s\S]*?<\/media>/i, '')
+  body = body.replace(/<name>[\s\S]*?<\/name>/i, '')
+  body = body.replace(/<rate>[\s\S]*?<\/rate>/i, '')
+  body = body.replace(/<duration>[\s\S]*?<\/duration>/i, '')
+  body = body.replace(/<timecode>[\s\S]*?<\/timecode>/i, '')
+  body = body.trim()
+  if (!body) return null
+  if (body.length > 1500000) return body.slice(0, 1500000)
+  return body
 }
 
 /**
@@ -258,8 +370,9 @@ export function parsePremiereTimelineXml(xml) {
   if (!xml || !/<xmeml|<xmeml\b|<fcpxml|<sequence/i.test(xml)) {
     return { fps: 25, v1: [], ignored: ['not_xml_timeline'], trackName: null, fileCount: 0 }
   }
-  if (/transitionitem/i.test(xml)) ignored.push('transitions')
-  // Clip <filter>/<effect> blocks are stored as opaque sidecar (not ignored as lost).
+  if (/transitionitem/i.test(xml)) {
+    // Transitions are stored in V1 track sidecar — not ignored as lost.
+  }
 
   const fps = parseSequenceTimebase(xml)
   const fileRegistry = extractFileRegistry(xml)
@@ -271,6 +384,8 @@ export function parsePremiereTimelineXml(xml) {
   }
 
   const v1Track = pickV1Track(tracks)
+  const premiereV1TrackSidecarXml = v1Track ? extractPremiereTrackSidecar(v1Track.body) : null
+  const premiereSequenceExtrasXml = extractPremiereSequenceExtras(xml)
   if (!v1Track) {
     return {
       fps,
@@ -278,6 +393,8 @@ export function parsePremiereTimelineXml(xml) {
       ignored: [...ignored, 'no_video_track'],
       trackName: null,
       fileCount: Object.keys(fileRegistry).length,
+      premiereV1TrackSidecarXml: null,
+      premiereSequenceExtrasXml,
     }
   }
 
@@ -301,6 +418,8 @@ export function parsePremiereTimelineXml(xml) {
     ignored: [...new Set(ignored)],
     trackName: v1Track.name || 'V1',
     fileCount: Object.keys(fileRegistry).length,
+    premiereV1TrackSidecarXml,
+    premiereSequenceExtrasXml,
   }
 }
 
@@ -549,17 +668,18 @@ export function formatPushbackDiffMessage(
   unmappedCount,
   clampedCount = 0,
   effectsStoredCount = 0,
+  trackSidecar = false,
+  sequenceExtras = false,
 ) {
   const lines = [diff.summary]
   if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`)
   if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf ≥${MIN_PUSHBACK_CLIP_MS}ms angehoben`)
   if (effectsStoredCount > 0) {
-    lines.push(`Effekte: ${effectsStoredCount} Clip(s) im Cut gespeichert (kein Videon-UI)`)
+    lines.push(`Clip-Sidecar: ${effectsStoredCount} Clip(s) (Effekte/Labels/…)`)
   }
+  if (trackSidecar) lines.push('Track-Sidecar: Transitions/Generatoren gespeichert')
+  if (sequenceExtras) lines.push('Sequenz-Extras: Marker/… gespeichert')
   if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(', ')}`)
-  if ((ignored || []).some((x) => /transition/i.test(String(x)))) {
-    lines.push('Transitions: noch nicht im Cut gespeichert')
-  }
   return lines.join('\n')
 }
 

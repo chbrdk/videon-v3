@@ -455,6 +455,8 @@ async function runPremiereXmlExport(input: {
           zipMediaName: zipNames.get(clip.mediaAssetId),
         }
       }),
+      premiereV1TrackSidecarXml: input.cut.premiereV1TrackSidecarXml,
+      premiereSequenceExtrasXml: input.cut.premiereSequenceExtrasXml,
     })
 
     const mediaFiles = [...mediaById.values()].map((media) => ({

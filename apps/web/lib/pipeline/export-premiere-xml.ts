@@ -18,7 +18,7 @@ export type PremiereXmlScene = {
   zipMediaName?: string
   /** Full source media duration in ms (file duration); falls back to endMs. */
   mediaDurationMs?: number | null
-  /** Opaque Premiere <filter> blocks; re-injected into clipitem on export. */
+  /** Opaque Premiere clipitem residual (filters, labels, markers, …). */
   premiereFiltersXml?: string | null
 }
 
@@ -202,6 +202,8 @@ export function buildPremiereXmeml(input: {
   scenes: PremiereXmlScene[]
   busClips?: PremiereXmlBusClip[]
   overlayClips?: PremiereXmlOverlayClip[]
+  premiereV1TrackSidecarXml?: string | null
+  premiereSequenceExtrasXml?: string | null
 }): string {
   const fps = input.cut.frameRate && input.cut.frameRate > 0 ? input.cut.frameRate : 25
   const width = input.cut.width && input.cut.width > 0 ? input.cut.width : 1920
@@ -480,6 +482,9 @@ export function buildPremiereXmeml(input: {
 				</track>`
       : ''
 
+  const trackSidecar = input.premiereV1TrackSidecarXml?.trim() || ''
+  const sequenceExtras = input.premiereSequenceExtrasXml?.trim() || ''
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE xmeml>
 <xmeml version="5">
@@ -490,7 +495,7 @@ export function buildPremiereXmeml(input: {
 			<timebase>${timebase}</timebase>
 			<ntsc>FALSE</ntsc>
 		</rate>
-		<media>
+		${sequenceExtras ? `${sequenceExtras}\n\t\t` : ''}<media>
 			<video>
 				<format>
 					<samplecharacteristics>
@@ -507,6 +512,7 @@ export function buildPremiereXmeml(input: {
 				<track>
 					<name>V1</name>
 					${videoClips}
+					${trackSidecar}
 				</track>
 				${
           overlayClips.length > 0
