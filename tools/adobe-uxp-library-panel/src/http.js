@@ -6,13 +6,14 @@
 
 /**
  * @param {string} url
- * @param {{ method?: string, headers?: Record<string, string>, signal?: AbortSignal, responseType?: '' | 'text' | 'arraybuffer' | 'blob' | 'json' }} [init]
+ * @param {{ method?: string, headers?: Record<string, string>, body?: string | ArrayBuffer | Blob | null, signal?: AbortSignal, responseType?: '' | 'text' | 'arraybuffer' | 'blob' | 'json' }} [init]
  * @returns {Promise<{ ok: boolean, status: number, statusText: string, json: () => Promise<any>, text: () => Promise<string>, blob: () => Promise<Blob>, arrayBuffer: () => Promise<ArrayBuffer> }>}
  */
 export function httpRequest(url, init = {}) {
   const method = (init.method || 'GET').toUpperCase()
   const headers = init.headers || {}
   const responseType = init.responseType || ''
+  const body = init.body == null ? null : init.body
 
   if (typeof XMLHttpRequest === 'function') {
     return new Promise((resolve, reject) => {
@@ -95,7 +96,7 @@ export function httpRequest(url, init = {}) {
       }
 
       try {
-        xhr.send()
+        xhr.send(body)
       } catch (error) {
         finish(reject, error)
       }

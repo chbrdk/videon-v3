@@ -162,14 +162,25 @@ export async function fetchFrameBlob(settings, hit, signal) {
 export async function fetchPreviewBlob(settings, hit, signal) {
   if (!hit?.platformProjectId || !hit?.mediaAssetId) return null
   const response = await httpRequest(previewUrl(settings, hit), {
-    headers: authHeaders(settings.apiToken),
+    headers: {
+      ...authHeaders(settings.apiToken),
+      Accept: 'video/mp4,application/octet-stream,*/*',
+    },
     signal,
     responseType: 'arraybuffer',
   })
-  if (!response.ok) return null
+  if (!response.ok) {
+    console.warn('[VIDEON] preview HTTP', response.status, previewUrl(settings, hit))
+    return null
+  }
   const buffer = await response.arrayBuffer()
   if (!buffer?.byteLength) return null
-  return new Blob([buffer], { type: 'video/mp4' })
+  // Ensure a real ArrayBuffer slice (UXP XHR sometimes returns SharedArrayBuffer-like views)
+  const copy =
+    buffer instanceof ArrayBuffer
+      ? buffer.slice(0)
+      : Uint8Array.from(new Uint8Array(buffer)).buffer
+  return new Blob([copy], { type: 'video/mp4' })
 }
 
 export async function requestAdobeDownload(settings, hit, signal) {

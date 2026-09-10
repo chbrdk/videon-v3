@@ -1,7 +1,7 @@
 {
   "name": "@videon-v3/adobe-uxp-library-panel",
   "private": true,
-  "version": "0.1.15",
+  "version": "0.1.22",
   "description": "VIDEON Premiere UXP Library Panel — specs/domain/adobe-uxp-library-panel.md",
   "scripts": {
     "build": "node build.cjs",
@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
   }
 }

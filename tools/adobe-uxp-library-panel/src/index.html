@@ -9,7 +9,7 @@
   <body>
     <div id="app">
       <header class="header">
-        <div class="brand">VIDEON <span id="panel-version" class="panel-version">v0.1.15</span></div>
+        <div class="brand">VIDEON <span id="panel-version" class="panel-version">v0.1.22</span></div>
         <button type="button" id="settings-toggle" class="ghost">Einstellungen</button>
       </header>
       <p id="boot-status" class="status">Panel wird geladen…</p>
@@ -66,56 +66,91 @@
             <option value="">— alle zugänglichen —</option>
           </select>
         </label>
+        <div class="mode-tabs" role="tablist">
+          <button type="button" id="mode-scenes-btn" class="mode-tab is-active" data-mode="scenes">
+            Szenen
+          </button>
+          <button type="button" id="mode-cuts-btn" class="mode-tab" data-mode="cuts">Cuts</button>
+        </div>
       </section>
 
-      <section class="search">
-        <input id="search-input" type="search" placeholder="Szenen suchen…" />
-        <button type="button" id="search-btn" class="primary">Suchen</button>
-      </section>
+      <section id="scenes-mode" class="mode-panel">
+        <section class="search">
+          <input id="search-input" type="search" placeholder="Szenen suchen…" />
+          <button type="button" id="search-btn" class="primary">Suchen</button>
+        </section>
 
-      <p id="banner" class="banner" hidden></p>
+        <p id="banner" class="banner" hidden></p>
 
-      <section class="results">
-        <div class="results-meta">
-          <strong>Treffer</strong>
-          <div class="results-meta-actions">
-            <button type="button" id="select-all-btn" class="ghost tiny" hidden>Alle</button>
-            <button type="button" id="select-none-btn" class="ghost tiny" hidden>Keine</button>
-            <span id="results-count">0</span>
+        <section class="results">
+          <div class="results-meta">
+            <strong>Treffer</strong>
+            <div class="results-meta-actions">
+              <button type="button" id="select-all-btn" class="ghost tiny" hidden>Alle</button>
+              <button type="button" id="select-none-btn" class="ghost tiny" hidden>Keine</button>
+              <span id="results-count">0</span>
+            </div>
           </div>
-        </div>
-        <div id="results-list" class="results-list">
-          <p class="empty">Token setzen, Collection wählen, dann suchen.</p>
-        </div>
+          <div id="results-list" class="results-list">
+            <p class="empty">Token setzen, Collection wählen, dann suchen.</p>
+          </div>
+        </section>
+
+        <section id="insert-bar" class="insert-bar hidden">
+          <p id="host-badge" class="host-badge" hidden></p>
+          <label id="premiere-insert-opts" class="check">
+            <input id="append-sequence" type="checkbox" />
+            Auch auf aktive Sequence (wenn Host-API erlaubt)
+          </label>
+          <div id="ae-insert-opts" class="host-ae hidden">
+            <label class="check">
+              <input id="ae-sequential" type="checkbox" checked />
+              Sequenziell platzieren
+            </label>
+            <label>
+              Gap (Frames)
+              <input id="ae-gap-frames" type="number" min="0" step="1" value="0" />
+            </label>
+          </div>
+          <div class="row">
+            <button type="button" id="dry-run-btn" class="ghost">
+              Download prüfen
+            </button>
+            <button type="button" id="insert-btn" class="primary">
+              Einfügen (<span id="selected-count">0</span>)
+            </button>
+          </div>
+          <div id="progress" class="progress hidden">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+        </section>
       </section>
 
-      <section id="insert-bar" class="insert-bar hidden">
-        <p id="host-badge" class="host-badge" hidden></p>
-        <label id="premiere-insert-opts" class="check">
-          <input id="append-sequence" type="checkbox" />
-          Auch auf aktive Sequence (wenn Host-API erlaubt)
-        </label>
-        <div id="ae-insert-opts" class="host-ae hidden">
-          <label class="check">
-            <input id="ae-sequential" type="checkbox" checked />
-            Sequenziell platzieren
-          </label>
-          <label>
-            Gap (Frames)
-            <input id="ae-gap-frames" type="number" min="0" step="1" value="0" />
-          </label>
-        </div>
-        <div class="row">
-          <button type="button" id="dry-run-btn" class="ghost">
-            Download prüfen
-          </button>
-          <button type="button" id="insert-btn" class="primary">
-            Einfügen (<span id="selected-count">0</span>)
-          </button>
-        </div>
-        <div id="progress" class="progress hidden">
-          <div id="progress-bar" class="progress-bar"></div>
-        </div>
+      <section id="cuts-mode" class="mode-panel hidden">
+        <p id="cuts-banner" class="banner" hidden></p>
+        <section class="cuts-panel">
+          <div class="results-meta">
+            <strong>Cuts</strong>
+            <div class="results-meta-actions">
+              <button type="button" id="cuts-refresh-btn" class="ghost tiny">Aktual.</button>
+              <span id="cuts-count">0</span>
+            </div>
+          </div>
+          <div id="cuts-list" class="cuts-list">
+            <p class="empty">Collection pinnen, dann Cuts laden.</p>
+          </div>
+        </section>
+        <section id="pushback-confirm" class="pushback-confirm hidden">
+          <strong>Cut aktualisieren?</strong>
+          <pre id="pushback-diff" class="pushback-diff"></pre>
+          <div class="row">
+            <button type="button" id="pushback-apply-btn" class="primary">Übernehmen</button>
+            <button type="button" id="pushback-refresh-btn" class="ghost">
+              Übernehmen + Premiere neu laden
+            </button>
+            <button type="button" id="pushback-cancel-btn" class="ghost">Abbrechen</button>
+          </div>
+        </section>
       </section>
     </div>
     <script src="src/panel.bundle.js"></script>

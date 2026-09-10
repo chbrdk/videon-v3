@@ -215,6 +215,153 @@ export function posterCacheKey(hit, width = 240) {
   return `${hit.mediaAssetId}:poster:w${width}:t${t}`
 }
 
+export function previewCacheKey(hit, durationMs = 2000) {
+  const t = hit.startMs != null && hit.startMs >= 0 ? Math.floor(hit.startMs) : 1000
+  return `${hit.mediaAssetId}:preview:t${t}:d${durationMs}`
+}
+
+/** Build a file:// URL from a native OS path (macOS/Windows). */
+function nativePathToFileUrl(nativePath) {
+  if (!nativePath || typeof nativePath !== 'string') return null
+  const trimmed = nativePath.trim()
+  if (!trimmed) return null
+  if (/^file:/i.test(trimmed)) return trimmed
+  if (trimmed.startsWith('/')) {
+    return `file://${encodeURI(trimmed).replace(/#/g, '%23')}`
+  }
+  // Windows: C:\foo\bar.mp4 → file:///C:/foo/bar.mp4
+  return `file:///${encodeURI(trimmed.replace(/\\/g, '/')).replace(/#/g, '%23')}`
+}
+
+/**
+ * Resolve UXP-playable URL candidates for a File entry.
+ * Premiere <video> often rejects blob: — try plugin-data / getFsUrl / file:// nativePath.
+ * @returns {Promise<string[]>}
+ */
+async function resolveEntryPlaybackUrls(file) {
+  if (!file) return []
+  const out = []
+  const push = (value) => {
+    const s = value != null ? String(value).trim() : ''
+    if (s && !out.includes(s)) out.push(s)
+  }
+
+  try {
+    if (file.url) push(file.url)
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const { fs } = await getUxpFs()
+    if (typeof fs.getFsUrl === 'function') push(fs.getFsUrl(file))
+  } catch {
+    /* fall through */
+  }
+
+  try {
+    if (file.name) push(`plugin-data:/${file.name}`)
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const native = file.nativePath
+    if (native) {
+      push(nativePathToFileUrl(native))
+      push(native)
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return out
+}
+
+/** @returns {Promise<string | null>} first candidate, or null */
+async function resolveEntryPlaybackUrl(file) {
+  const urls = await resolveEntryPlaybackUrls(file)
+  return urls[0] || null
+}
+
+/** Read cached preview MP4 as Blob, or null. */
+export async function readCachedPreviewBlob(cacheKey) {
+  const index = readPosterIndex()
+  const entry = index[cacheKey]
+  if (!entry?.fileName) return null
+  try {
+    const { uxp } = await getUxpFs()
+    const folder = await getDataFolder()
+    const file = await findEntryByName(folder, entry.fileName)
+    if (!file || typeof file.read !== 'function') return null
+    const data = await file.read({ format: uxp.storage.formats.binary })
+    if (!data || (data.byteLength != null && data.byteLength === 0)) return null
+    index[cacheKey] = { ...entry, at: Date.now() }
+    writePosterIndex(index)
+    return new Blob([data], { type: 'video/mp4' })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Persist preview MP4 and return UXP-playable src URL candidates (+ optional blob fallback).
+ * @returns {Promise<{ url: string, urls: string[], via: 'file' | 'blob' } | null>}
+ */
+export async function materializePreview(input) {
+  const { cacheKey, blob, filename } = input
+  if (!cacheKey || !blob) return null
+
+  const index = readPosterIndex()
+  const existing = index[cacheKey]
+  if (existing?.fileName) {
+    try {
+      const folder = await getDataFolder()
+      const file = await findEntryByName(folder, existing.fileName)
+      const urls = await resolveEntryPlaybackUrls(file)
+      if (urls.length) {
+        index[cacheKey] = { ...existing, at: Date.now() }
+        writePosterIndex(index)
+        return { url: urls[0], urls, via: 'file' }
+      }
+    } catch {
+      /* rewrite */
+    }
+  }
+
+  try {
+    const { uxp } = await getUxpFs()
+    const folder = await getDataFolder()
+    const fileName = cacheFileName(cacheKey, filename || 'preview.mp4')
+    const file = await folder.createFile(fileName, { overwrite: true })
+    const buffer = blob instanceof ArrayBuffer ? blob : await blob.arrayBuffer()
+    if (!buffer?.byteLength) return null
+    await file.write(buffer, { format: uxp.storage.formats.binary })
+    index[cacheKey] = {
+      path: file.nativePath || undefined,
+      fileName,
+      at: Date.now(),
+      bytes: buffer.byteLength,
+    }
+    writePosterIndex(index)
+    const urls = await resolveEntryPlaybackUrls(file)
+    if (urls.length) {
+      console.info('[VIDEON] materializePreview ok', fileName, urls[0], `(${urls.length} candidates)`)
+      return { url: urls[0], urls, via: 'file' }
+    }
+    console.warn('[VIDEON] materializePreview wrote file but no playback URL', fileName, file?.nativePath)
+  } catch (error) {
+    console.warn('[VIDEON] materializePreview file write failed', error)
+  }
+
+  try {
+    const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: 'video/mp4' }))
+    return { url, urls: [url], via: 'blob' }
+  } catch {
+    return null
+  }
+}
+
 /** Read cached poster bytes as Blob, or null. */
 export async function readCachedPosterBlob(cacheKey) {
   const index = readPosterIndex()

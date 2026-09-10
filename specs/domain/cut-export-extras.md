@@ -3,7 +3,7 @@
 **Status:** Accepted — 2026-09-09 (ZIP media package)  
 **Implements:** `PATCH setCanvas` · `cut_exports.format` `mp4` \| `premiere_xml` · Cut-Editor presets  
 **API:** `specs/api/cuts.md`  
-**Companions:** `cut-multi-source-compose.md` · MCP `videon.export_run` · Catalog `videon.export.run`  
+**Companions:** `cut-multi-source-compose.md` · MCP `videon.export_run` · Catalog `videon.export.run` · Panel open-cut wave `adobe-uxp-open-cut-premiere.md`  
 **Federation:** `2026-05-plexon-federation-v3`
 
 ## Purpose
@@ -70,6 +70,8 @@ README.txt
 | Surface | Behavior |
 |---------|----------|
 | Cut editor | Preset select + apply; Export MP4 / Premiere ZIP |
+| Adobe UXP panel | Open Cut wave — same ZIP, NLE-side open (`adobe-uxp-open-cut-premiere.md`) |
+| Adobe UXP pushback (draft) | Manual Premiere → Cut — `adobe-uxp-cut-pushback-premiere.md` (not live sync) |
 | Product API | `setCanvas`; POST exports `{ format }` |
 | MCP | `videon.export_run` optional `format` |
 | Catalog / Flow | `videon.export.run` — Flow-first; optional format |

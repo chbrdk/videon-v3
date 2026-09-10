@@ -20,10 +20,22 @@ import {
   getCacheStats,
   materializeDownload,
   materializePoster,
+  materializePreview,
   posterCacheKey,
+  previewCacheKey,
   readCachedPosterBlob,
+  readCachedPreviewBlob,
   refreshCacheStats,
 } from './cache.js'
+import { clearOpenCutCache } from './open-cut-cache.js'
+import { listCuts } from './cuts-api.js'
+import { runOpenCut } from './open-cut.js'
+import { applyCutPushback, previewCutPushback } from './cut-pushback.js'
+import { saveCutSequenceLink } from './cut-link-store.js'
+import {
+  canvasLabel,
+  formatUpdatedAt,
+} from './open-cut-model.js'
 import { normalizeCollections } from './collections.js'
 import {
   dedupeSearchHits,
@@ -37,7 +49,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.15'
+const PANEL_VERSION = '0.1.22'
 
 /** Max concurrent MP4 preview fetches (Product route ≤3s each). */
 const PREVIEW_CONCURRENCY = 2
@@ -86,6 +98,19 @@ function queryEls() {
     selectedCount: document.getElementById('selected-count'),
     progress: document.getElementById('progress'),
     progressBar: document.getElementById('progress-bar'),
+    modeScenesBtn: document.getElementById('mode-scenes-btn'),
+    modeCutsBtn: document.getElementById('mode-cuts-btn'),
+    scenesMode: document.getElementById('scenes-mode'),
+    cutsMode: document.getElementById('cuts-mode'),
+    cutsBanner: document.getElementById('cuts-banner'),
+    cutsList: document.getElementById('cuts-list'),
+    cutsCount: document.getElementById('cuts-count'),
+    cutsRefreshBtn: document.getElementById('cuts-refresh-btn'),
+    pushbackConfirm: document.getElementById('pushback-confirm'),
+    pushbackDiff: document.getElementById('pushback-diff'),
+    pushbackApplyBtn: document.getElementById('pushback-apply-btn'),
+    pushbackRefreshBtn: document.getElementById('pushback-refresh-btn'),
+    pushbackCancelBtn: document.getElementById('pushback-cancel-btn'),
   }
 }
 
@@ -115,15 +140,49 @@ const blobUrls = []
 let collections = []
 /** @type {AbortController | null} */
 let searchAbort = null
+/** @type {AbortController | null} */
+let cutsAbort = null
+/** @type {AbortController | null} */
+let openCutAbort = null
+/** @type {'scenes' | 'cuts'} */
+let panelMode = 'scenes'
+/** @type {ReturnType<typeof listCuts> extends Promise<infer T> ? T : never} */
+let cuts = []
+/** @type {boolean} */
+let openCutBusy = false
+/** @type {null | object} */
+let pendingPushback = null
 /** @type {{ id: 'PPRO' | 'AEFT', source: string }} */
 let hostInfo = { id: 'PPRO', source: 'default' }
 /** @type {number} */
 let aeCursorSec = 0
 
 function showBanner(message, tone = '') {
-  els.banner.hidden = !message
-  els.banner.textContent = message || ''
-  els.banner.className = `banner${tone ? ` ${tone}` : ''}`
+  const target = panelMode === 'cuts' ? els.cutsBanner : els.banner
+  if (!target) return
+  target.hidden = !message
+  target.textContent = message || ''
+  target.className = `banner${tone ? ` ${tone}` : ''}`
+}
+
+function setPanelMode(mode) {
+  panelMode = mode === 'cuts' ? 'cuts' : 'scenes'
+  els.modeScenesBtn?.classList.toggle('is-active', panelMode === 'scenes')
+  els.modeCutsBtn?.classList.toggle('is-active', panelMode === 'cuts')
+  els.scenesMode?.classList.toggle('hidden', panelMode !== 'scenes')
+  els.cutsMode?.classList.toggle('hidden', panelMode !== 'cuts')
+
+  if (panelMode === 'cuts') {
+    searchAbort?.abort()
+    openCutAbort?.abort()
+    openCutBusy = false
+    void refreshCutsList()
+  } else {
+    cutsAbort?.abort()
+    openCutAbort?.abort()
+    openCutBusy = false
+    hidePushbackConfirm()
+  }
 }
 
 function applyHostChrome() {
@@ -260,6 +319,305 @@ function onCollectionChange(event) {
   if (els.collectionSelectMain) els.collectionSelectMain.value = id
   if (els.defaultProjectId) els.defaultProjectId.value = id
   saveSettings({ defaultPlatformProjectId: id })
+  if (panelMode === 'cuts') void refreshCutsList()
+}
+
+function showCutsBanner(message, tone = '') {
+  if (!els.cutsBanner) return
+  els.cutsBanner.hidden = !message
+  els.cutsBanner.textContent = message || ''
+  els.cutsBanner.className = `banner${tone ? ` ${tone}` : ''}`
+}
+
+function updateCutRowStatus(cutId, text, isError = false) {
+  let card = null
+  for (const node of els.cutsList?.querySelectorAll('.cut-card') || []) {
+    if (node.getAttribute('data-cut-id') === cutId) {
+      card = node
+      break
+    }
+  }
+  if (!card) return
+  let status = card.querySelector('.cut-card-status')
+  if (!status) {
+    status = document.createElement('div')
+    status.className = 'cut-card-status'
+    card.append(status)
+  }
+  status.textContent = text || ''
+  status.classList.toggle('is-error', Boolean(isError))
+  status.hidden = !text
+  card.classList.toggle('is-busy', Boolean(text) && !isError && openCutBusy)
+}
+
+function buildCutCard(cut) {
+  const card = document.createElement('article')
+  card.className = 'cut-card'
+  card.setAttribute('data-cut-id', cut.id)
+
+  const title = document.createElement('div')
+  title.className = 'cut-card-title'
+  title.textContent = cut.name
+
+  const meta = document.createElement('div')
+  meta.className = 'cut-card-meta'
+  const parts = [canvasLabel(cut)]
+  if (cut.sceneCount != null) parts.push(`${cut.sceneCount} Szenen`)
+  parts.push(formatUpdatedAt(cut.updatedAt))
+  meta.textContent = parts.join(' · ')
+
+  const actions = document.createElement('div')
+  actions.className = 'cut-card-actions'
+
+  const openBtn = document.createElement('button')
+  openBtn.type = 'button'
+  openBtn.className = 'primary'
+  openBtn.textContent = 'In Premiere öffnen'
+  on(openBtn, 'click', (event) => {
+    event.stopPropagation?.()
+    void startOpenCut(cut, true)
+  })
+
+  const refreshBtn = document.createElement('button')
+  refreshBtn.type = 'button'
+  refreshBtn.className = 'ghost'
+  refreshBtn.textContent = 'Premiere aktualisieren'
+  on(refreshBtn, 'click', (event) => {
+    event.stopPropagation?.()
+    void startOpenCut(cut, true)
+  })
+
+  const cacheBtn = document.createElement('button')
+  cacheBtn.type = 'button'
+  cacheBtn.className = 'ghost'
+  cacheBtn.textContent = 'ZIP cachen'
+  on(cacheBtn, 'click', (event) => {
+    event.stopPropagation?.()
+    void startOpenCut(cut, false)
+  })
+
+  const pushBtn = document.createElement('button')
+  pushBtn.type = 'button'
+  pushBtn.className = 'ghost'
+  pushBtn.textContent = 'Cut aktualisieren'
+  on(pushBtn, 'click', (event) => {
+    event.stopPropagation?.()
+    void startCutPushback(cut)
+  })
+
+  actions.append(openBtn, refreshBtn, pushBtn, cacheBtn)
+  card.append(title, meta, actions)
+  return card
+}
+
+function renderCutsList() {
+  if (!els.cutsList) return
+  if (els.cutsCount) els.cutsCount.textContent = String(cuts.length)
+  if (!cuts.length) {
+    els.cutsList.innerHTML = '<p class="empty">Keine Cuts in dieser Collection.</p>'
+    return
+  }
+  els.cutsList.innerHTML = ''
+  for (const cut of cuts) els.cutsList.append(buildCutCard(cut))
+}
+
+async function refreshCutsList() {
+  const settings = saveSettings(readFormSettings())
+  const platformProjectId = settings.defaultPlatformProjectId || ''
+  if (!platformProjectId) {
+    cuts = []
+    if (els.cutsCount) els.cutsCount.textContent = '0'
+    if (els.cutsList) {
+      els.cutsList.innerHTML =
+        '<p class="empty">Collection pinnen (nicht „alle“), dann Cuts laden.</p>'
+    }
+    showCutsBanner('Für Cuts eine Collection wählen.', 'error')
+    return
+  }
+  if (!settings.apiToken) {
+    showCutsBanner('API Token in den Einstellungen setzen.', 'error')
+    return
+  }
+
+  cutsAbort?.abort()
+  cutsAbort = new AbortController()
+  const { signal } = cutsAbort
+  showCutsBanner('Cuts laden…')
+  try {
+    cuts = await listCuts(settings, platformProjectId, signal)
+    if (signal.aborted) return
+    renderCutsList()
+    showCutsBanner(cuts.length ? `${cuts.length} Cut(s)` : 'Keine Cuts.', cuts.length ? 'ok' : '')
+  } catch (error) {
+    if (signal.aborted) return
+    const msg = error instanceof Error ? error.message : String(error)
+    showCutsBanner(msg, 'error')
+  }
+}
+
+async function startOpenCut(cut, handoff) {
+  if (openCutBusy) {
+    showCutsBanner('Bitte warten — Open Cut läuft bereits.', 'error')
+    return
+  }
+  const settings = saveSettings(readFormSettings())
+  const platformProjectId = settings.defaultPlatformProjectId || ''
+  if (!platformProjectId) {
+    showCutsBanner('Collection pinnen.', 'error')
+    return
+  }
+  if (isAfterEffectsHost(hostInfo)) {
+    showCutsBanner('Open Cut ist nur in Premiere Pro verfügbar.', 'error')
+    return
+  }
+
+  openCutBusy = true
+  openCutAbort?.abort()
+  openCutAbort = new AbortController()
+  const { signal } = openCutAbort
+
+  const result = await runOpenCut({
+    settings,
+    cut,
+    platformProjectId,
+    hostInfo,
+    signal,
+    handoff,
+    onPhase: (_phase, label) => {
+      updateCutRowStatus(cut.id, label, false)
+      showCutsBanner(`${cut.name}: ${label}`)
+    },
+  })
+
+  openCutBusy = false
+  if (result.ok) {
+    if (handoff && platformProjectId) {
+      saveCutSequenceLink({
+        cutId: cut.id,
+        platformProjectId,
+        sequenceName: result.sequenceName || cut.name,
+        exportId: result.exportId || null,
+        openedAt: new Date().toISOString(),
+      })
+    }
+    updateCutRowStatus(cut.id, result.message || 'Fertig', false)
+    showCutsBanner(result.message || 'Fertig', 'ok')
+  } else {
+    updateCutRowStatus(cut.id, result.message || 'Fehler', true)
+    showCutsBanner(result.message || 'Fehler', 'error')
+  }
+}
+
+function hidePushbackConfirm() {
+  pendingPushback = null
+  els.pushbackConfirm?.classList.add('hidden')
+  if (els.pushbackDiff) els.pushbackDiff.textContent = ''
+}
+
+function showPushbackConfirm(preview) {
+  pendingPushback = preview
+  if (els.pushbackDiff) els.pushbackDiff.textContent = preview.message || ''
+  els.pushbackConfirm?.classList.remove('hidden')
+}
+
+async function startCutPushback(cut) {
+  if (openCutBusy) {
+    showCutsBanner('Bitte warten…', 'error')
+    return
+  }
+  const settings = saveSettings(readFormSettings())
+  const platformProjectId = settings.defaultPlatformProjectId || ''
+  if (!platformProjectId) {
+    showCutsBanner('Collection pinnen.', 'error')
+    return
+  }
+  if (isAfterEffectsHost(hostInfo)) {
+    showCutsBanner('Cut aktualisieren nur in Premiere.', 'error')
+    return
+  }
+
+  openCutBusy = true
+  hidePushbackConfirm()
+  showCutsBanner(`${cut.name}: Sequenz lesen…`)
+  updateCutRowStatus(cut.id, 'Pushback…', false)
+
+  try {
+    const preview = await previewCutPushback({
+      settings,
+      cut,
+      platformProjectId,
+      hostInfo,
+    })
+    openCutBusy = false
+    if (!preview.ok) {
+      updateCutRowStatus(cut.id, preview.message || 'Fehler', true)
+      showCutsBanner(preview.message || 'Fehler', 'error')
+      return
+    }
+    if (!preview.diff?.changed) {
+      updateCutRowStatus(cut.id, 'Bereits gleich', false)
+      showCutsBanner('Cut entspricht der Sequenz (V1).', 'ok')
+      return
+    }
+    showPushbackConfirm(preview)
+    showCutsBanner('Diff prüfen und übernehmen.', 'ok')
+    updateCutRowStatus(cut.id, preview.diff.summary, false)
+  } catch (error) {
+    openCutBusy = false
+    const msg = error instanceof Error ? error.message : String(error)
+    updateCutRowStatus(cut.id, msg, true)
+    showCutsBanner(msg, 'error')
+  }
+}
+
+async function confirmPushback(withParityRefresh) {
+  if (!pendingPushback?.restoreScenes?.length) {
+    hidePushbackConfirm()
+    return
+  }
+  const preview = pendingPushback
+  const settings = saveSettings(readFormSettings())
+  openCutBusy = true
+  showCutsBanner('Cut wird geschrieben…')
+  try {
+    const applied = await applyCutPushback({
+      settings,
+      cutId: preview.cutId,
+      platformProjectId: preview.platformProjectId,
+      restoreScenes: preview.restoreScenes,
+    })
+    hidePushbackConfirm()
+    if (!applied.ok) {
+      openCutBusy = false
+      showCutsBanner(applied.message || 'Apply fehlgeschlagen', 'error')
+      return
+    }
+
+    const cut = cuts.find((c) => c.id === preview.cutId) || {
+      id: preview.cutId,
+      name: preview.cutId,
+      updatedAt: new Date().toISOString(),
+    }
+
+    if (withParityRefresh || preview.needsParityRefresh) {
+      showCutsBanner('Cut OK — Premiere wird neu geladen…', 'ok')
+      openCutBusy = false
+      await startOpenCut({ ...cut, name: cut.name || preview.sequenceName || cut.id }, true)
+      showCutsBanner(
+        'Cut aktualisiert. Premiere neu geladen — beide Seiten gleich (Cut-Modell).',
+        'ok',
+      )
+      return
+    }
+
+    openCutBusy = false
+    updateCutRowStatus(preview.cutId, 'Cut aktualisiert', false)
+    showCutsBanner('Cut entspricht der Sequenz.', 'ok')
+  } catch (error) {
+    openCutBusy = false
+    hidePushbackConfirm()
+    showCutsBanner(error instanceof Error ? error.message : String(error), 'error')
+  }
 }
 
 function updateSelectionChrome() {
@@ -377,12 +735,13 @@ function buildHitRow(settings, hit, posterUrl) {
   video.loop = true
   video.autoplay = true
   video.playsInline = true
-  video.preload = 'metadata'
+  video.preload = 'auto'
   video.setAttribute('muted', '')
   video.setAttribute('loop', '')
   video.setAttribute('autoplay', '')
   video.setAttribute('playsinline', '')
-  video.hidden = true
+  // Prefer class over hidden — UXP can ignore hidden on media elements.
+  video.style.display = 'none'
 
   const check = document.createElement('input')
   check.type = 'checkbox'
@@ -493,26 +852,118 @@ function applyPosterToCard(hitId, posterUrl) {
   img.classList.remove('hit-ph')
 }
 
-function applyPreviewToCard(hitId, previewUrl) {
-  if (!previewUrl) return
+function applyPreviewToCard(hitId, previewSrcOrList) {
+  const candidates = Array.isArray(previewSrcOrList)
+    ? previewSrcOrList.filter(Boolean)
+    : previewSrcOrList
+      ? [previewSrcOrList]
+      : []
+  if (!candidates.length) return
   const card = findHitCard(hitId)
   if (!card) return
   const video = card.querySelector('video.hit-card-preview')
   const img = card.querySelector('img.hit-card-thumb')
   if (!video) return
-  video.src = previewUrl
-  video.hidden = false
-  if (img) img.classList.add('hit-thumb-under')
+
+  let attempt = 0
+  let settled = false
+
+  const hideVideo = () => {
+    video.style.display = 'none'
+    video.classList.remove('is-visible')
+    if (img) img.classList.remove('hit-thumb-under')
+  }
+
+  const startPlayback = () => {
+    if (settled) return
+    settled = true
+    video.style.display = 'block'
+    video.classList.add('is-visible')
+    if (img) img.classList.add('hit-thumb-under')
+    try {
+      // UXP play() may resolve even on failure — rely on error event for retries.
+      void video.play?.()
+    } catch (error) {
+      console.warn('[VIDEON] video.play threw', hitId, error)
+      settled = false
+      tryNext()
+    }
+  }
+
+  const tryNext = () => {
+    if (attempt >= candidates.length) {
+      hideVideo()
+      console.warn('[VIDEON] video: all src candidates failed', hitId, candidates)
+      return
+    }
+    const src = candidates[attempt]
+    attempt += 1
+    settled = false
+    console.info('[VIDEON] video try src', hitId, src)
+    try {
+      video.pause?.()
+    } catch {
+      /* ignore */
+    }
+    video.src = src
+    try {
+      video.load?.()
+    } catch {
+      /* ignore */
+    }
+    setTimeout(() => {
+      if (!settled && video.readyState >= 2) startPlayback()
+    }, 450)
+  }
+
+  video.onerror = () => {
+    console.warn(
+      '[VIDEON] video error',
+      hitId,
+      video.error?.message || video.error,
+      'src=',
+      video.src,
+    )
+    if (settled) {
+      hideVideo()
+      return
+    }
+    tryNext()
+  }
+  video.onloadeddata = () => startPlayback()
+  video.oncanplay = () => startPlayback()
+
+  tryNext()
+}
+
+async function loadPreviewForHit(settings, hit, signal) {
+  const key = previewCacheKey(hit)
   try {
-    const playResult = video.play?.()
-    if (playResult && typeof playResult.catch === 'function') {
-      playResult.catch(() => {
-        /* autoplay may be blocked — poster remains */
+    const cached = await readCachedPreviewBlob(key)
+    if (cached) {
+      const materialized = await materializePreview({
+        cacheKey: key,
+        blob: cached,
+        filename: 'preview.mp4',
       })
+      if (materialized?.url) {
+        if (materialized.via === 'blob') blobUrls.push(materialized.url)
+        return materialized
+      }
     }
   } catch {
-    /* ignore */
+    /* network */
   }
+
+  const blob = await fetchPreviewBlob(settings, hit, signal)
+  if (!blob) return null
+  const materialized = await materializePreview({
+    cacheKey: key,
+    blob,
+    filename: 'preview.mp4',
+  })
+  if (materialized?.via === 'blob' && materialized.url) blobUrls.push(materialized.url)
+  return materialized
 }
 
 async function renderHits(settings, signal) {
@@ -552,17 +1003,15 @@ async function renderHits(settings, signal) {
     }),
   )
 
-  // Progressive muted MP4 previews (GIF-like), limited concurrency.
+  // Progressive muted MP4 previews via local UXP file URL (blob: often fails in Premiere).
   void mapPool(hits, PREVIEW_CONCURRENCY, async (hit) => {
     if (signal?.aborted) return
     try {
-      const blob = await fetchPreviewBlob(settings, hit, signal)
-      if (!blob || signal?.aborted) return
-      const url = URL.createObjectURL(blob)
-      blobUrls.push(url)
-      applyPreviewToCard(hit.id, url)
-    } catch {
-      /* keep still poster */
+      const materialized = await loadPreviewForHit(settings, hit, signal)
+      if (!materialized?.url || signal?.aborted) return
+      applyPreviewToCard(hit.id, materialized.urls?.length ? materialized.urls : materialized.url)
+    } catch (error) {
+      console.warn('[VIDEON] preview load failed', hit.id, error)
     }
   })
 }
@@ -796,6 +1245,22 @@ function runTestConnection() {
 }
 
 function bindPanel() {
+  on(els.modeScenesBtn, 'click', () => setPanelMode('scenes'))
+  on(els.modeCutsBtn, 'click', () => setPanelMode('cuts'))
+  on(els.cutsRefreshBtn, 'click', () => {
+    void refreshCutsList()
+  })
+  on(els.pushbackApplyBtn, 'click', () => {
+    void confirmPushback(false)
+  })
+  on(els.pushbackRefreshBtn, 'click', () => {
+    void confirmPushback(true)
+  })
+  on(els.pushbackCancelBtn, 'click', () => {
+    hidePushbackConfirm()
+    showCutsBanner('Pushback abgebrochen.')
+  })
+
   on(els.settingsToggle, 'click', () => {
     els.settingsPanel?.classList.toggle('hidden')
     if (els.settingsPanel && !els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
@@ -841,9 +1306,10 @@ function bindPanel() {
       }
       try {
         const result = await clearCache()
+        const openCut = await clearOpenCutCache().catch(() => ({ deleted: 0 }))
         updateCacheStatsLabel({ count: 0, bytes: 0 })
         if (els.settingsStatus) {
-          els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`
+          els.settingsStatus.textContent = `Cache geleert (${result.deleted} Media + ${openCut.deleted || 0} Open-Cut)`
         }
       } catch (error) {
         if (els.settingsStatus) {

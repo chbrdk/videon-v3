@@ -95,6 +95,8 @@ Create a Cut.
 ```
 
 - `scenes` MUST be non-empty (V1 timeline).
+- Each scene `id` SHOULD be a UUID; WHEN missing/invalid the server MUST mint a UUID.
+- Each scene MUST have `endMs - startMs ≥ 500` (`MIN_CUT_CLIP_MS`).
 - `videoClips` / `audioClips` MAY be omitted (leave those lanes unchanged) or sent as arrays (including `[]`) to replace the lane contents in the same transaction.
 - Each scene MUST honor `timelineStartMs` when provided.
 - Returns `{ scenes, videoClips, audioClips }`.

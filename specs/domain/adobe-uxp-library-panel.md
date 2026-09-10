@@ -3,7 +3,7 @@
 **Status:** Accepted — 2026-09-10 (Wave 0 API + Premiere Wave 1 scaffold)  
 **Product:** VIDEON v3  
 **Federation:** `2026-05-plexon-federation-v3`  
-**Companions:** `scene-hit-model.md` · `scene-chat.md` · `settings-api-tokens.md` · `mcp-server.md` · `specs/api/media-adobe-download.md` · PLEXON `specs/domain/videon-integration.md` · Legacy reference `videon/tools/ae-uxp-plugin`  
+**Companions:** `scene-hit-model.md` · `scene-chat.md` · `settings-api-tokens.md` · `mcp-server.md` · `specs/api/media-adobe-download.md` · `adobe-uxp-open-cut-premiere.md` · PLEXON `specs/domain/videon-integration.md` · Legacy reference `videon/tools/ae-uxp-plugin`  
 **Knowledge:** `knowledge/paths.md`  
 **Implements (scaffold):** `tools/adobe-uxp-library-panel/` · `GET /api/media/:id/adobe-download`
 
@@ -124,7 +124,7 @@ Minimum surface:
 
 1. Settings: Product base URL (from env/docs, no hardcode in source defaults beyond staging documented in `knowledge/paths.md`), API token, default Collection, default Bin/Comp name, cache path reveal/clear.
 2. Search field + Enter; loading and empty states.
-3. Result **card grid** (UXP-safe flex wrap): fixed-height poster (84px) then progressive muted MP4 preview (`/preview`, ≤3s loop); filename, project, scene/timing badge, snippet, score/rank if present; multi-select via checkbox or card click; per-card **+** insert beside “In VIDEON”. Cards render **before** media fetch — placeholders stay if frames/previews fail.
+3. Result **card grid** (UXP-safe flex wrap): fixed-height poster (84px) then progressive muted MP4 preview (`/preview`, ≤3s loop) written to the UXP data folder and played via `file.url`/`getFsUrl` (blob URLs are unreliable for `<video>` in Premiere UXP); filename, project, scene/timing badge, snippet; multi-select; per-card **+** insert. Cards render **before** media fetch.
 4. Insert options: Bin only vs Bin+Sequence (Premiere); target Comp (AE); sequential + gap.
 5. Progress for multi-insert downloads.
 
@@ -205,6 +205,7 @@ Product routes remain those in `apps/web/lib/paths.ts` (`apiMediaSearch`, `apiMe
 | `videon.media.search` | Same Product search the panel calls; MCP remains agent-only and MUST NOT return signed download URLs |
 | In-app `/chat` | Same retrieval semantics; different chrome |
 | Cut `premiere_xml` export | Complementary (project handoff); panel is live search/insert |
+| Open Cut in Premiere | Later wave — `adobe-uxp-open-cut-premiere.md` (ZIP → sequence; not scene insert) |
 
 ## Open questions (resolve before Wave 1 code freeze)
 

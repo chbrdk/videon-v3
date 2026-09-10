@@ -55,6 +55,129 @@ body {
   border: 1px solid var(--stroke);
   border-radius: 6px;
   padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-tab {
+  flex: 1;
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.mode-tab.is-active {
+  color: var(--text);
+  border-color: #9a9a9a;
+  background: #2e2e2e;
+}
+
+.mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mode-panel.hidden {
+  display: none;
+}
+
+.cuts-panel {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.cuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.cut-card {
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cut-card.is-busy {
+  opacity: 0.75;
+}
+
+.cut-card-title {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.cut-card-meta {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.cut-card-status {
+  font-size: 10px;
+  color: var(--ok);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.cut-card-status.is-error {
+  color: var(--danger);
+}
+
+.cut-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cut-card-actions button {
+  font-size: 10px;
+  padding: 4px 8px;
+}
+
+.pushback-confirm {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pushback-confirm.hidden {
+  display: none;
+}
+
+.pushback-diff {
+  margin: 0;
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 10px;
+  color: var(--muted);
+  max-height: 120px;
+  overflow: auto;
 }
 
 .workspace-bar label {
@@ -233,6 +356,11 @@ button:disabled {
   position: absolute;
   inset: 0;
   z-index: 1;
+  display: none;
+}
+
+.hit-card-preview.is-visible {
+  display: block;
 }
 
 .hit-thumb-under {

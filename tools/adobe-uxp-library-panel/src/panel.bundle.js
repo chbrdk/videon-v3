@@ -153,7 +153,7 @@
     return null;
   }
   function findFootageByPath(project, filePath) {
-    const base2 = pathBasename(filePath);
+    const base3 = pathBasename(filePath);
     for (let i = 1; i <= project.numItems; i += 1) {
       const item = project.item(i);
       if (!(item instanceof FootageItem)) continue;
@@ -161,11 +161,11 @@
         const main = item.mainSource;
         if (main instanceof FileSource && main.file) {
           const full = String(main.file.fsName || main.file.fullName || "");
-          if (full === filePath || full.endsWith(base2)) return item;
+          if (full === filePath || full.endsWith(base3)) return item;
         }
       } catch {
       }
-      if (item.name === base2) return item;
+      if (item.name === base3) return item;
     }
     return null;
   }
@@ -252,6 +252,7 @@
     const method = (init.method || "GET").toUpperCase();
     const headers = init.headers || {};
     const responseType = init.responseType || "";
+    const body = init.body == null ? null : init.body;
     if (typeof XMLHttpRequest === "function") {
       return new Promise((resolve, reject) => {
         let settled = false;
@@ -321,7 +322,7 @@
           };
         }
         try {
-          xhr.send();
+          xhr.send(body);
         } catch (error) {
           finish(reject, error);
         }
@@ -492,14 +493,21 @@
   async function fetchPreviewBlob(settings, hit, signal) {
     if (!hit?.platformProjectId || !hit?.mediaAssetId) return null;
     const response = await httpRequest(previewUrl(settings, hit), {
-      headers: authHeaders(settings.apiToken),
+      headers: {
+        ...authHeaders(settings.apiToken),
+        Accept: "video/mp4,application/octet-stream,*/*"
+      },
       signal,
       responseType: "arraybuffer"
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn("[VIDEON] preview HTTP", response.status, previewUrl(settings, hit));
+      return null;
+    }
     const buffer = await response.arrayBuffer();
     if (!buffer?.byteLength) return null;
-    return new Blob([buffer], { type: "video/mp4" });
+    const copy = buffer instanceof ArrayBuffer ? buffer.slice(0) : Uint8Array.from(new Uint8Array(buffer)).buffer;
+    return new Blob([copy], { type: "video/mp4" });
   }
   async function requestAdobeDownload(settings, hit, signal) {
     if (!hit.platformProjectId) {
@@ -607,8 +615,8 @@
     localStorage.setItem(POSTER_META_KEY, JSON.stringify(index));
   }
   function sanitizeFilename(name) {
-    const base2 = String(name || "clip.mp4").replace(/[^\w.\-()+ ]+/g, "_").slice(0, 120);
-    return base2.includes(".") ? base2 : `${base2}.mp4`;
+    const base3 = String(name || "clip.mp4").replace(/[^\w.\-()+ ]+/g, "_").slice(0, 120);
+    return base3.includes(".") ? base3 : `${base3}.mp4`;
   }
   function cacheFileName(cacheKey, filename) {
     return `${String(cacheKey).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80)}_${sanitizeFilename(filename)}`;
@@ -734,6 +742,117 @@
     const t = hit.startMs != null && hit.startMs >= 0 ? Math.floor(hit.startMs) : 1e3;
     return `${hit.mediaAssetId}:poster:w${width}:t${t}`;
   }
+  function previewCacheKey(hit, durationMs = 2e3) {
+    const t = hit.startMs != null && hit.startMs >= 0 ? Math.floor(hit.startMs) : 1e3;
+    return `${hit.mediaAssetId}:preview:t${t}:d${durationMs}`;
+  }
+  function nativePathToFileUrl(nativePath) {
+    if (!nativePath || typeof nativePath !== "string") return null;
+    const trimmed = nativePath.trim();
+    if (!trimmed) return null;
+    if (/^file:/i.test(trimmed)) return trimmed;
+    if (trimmed.startsWith("/")) {
+      return `file://${encodeURI(trimmed).replace(/#/g, "%23")}`;
+    }
+    return `file:///${encodeURI(trimmed.replace(/\\/g, "/")).replace(/#/g, "%23")}`;
+  }
+  async function resolveEntryPlaybackUrls(file) {
+    if (!file) return [];
+    const out = [];
+    const push = (value) => {
+      const s = value != null ? String(value).trim() : "";
+      if (s && !out.includes(s)) out.push(s);
+    };
+    try {
+      if (file.url) push(file.url);
+    } catch {
+    }
+    try {
+      const { fs } = await getUxpFs();
+      if (typeof fs.getFsUrl === "function") push(fs.getFsUrl(file));
+    } catch {
+    }
+    try {
+      if (file.name) push(`plugin-data:/${file.name}`);
+    } catch {
+    }
+    try {
+      const native = file.nativePath;
+      if (native) {
+        push(nativePathToFileUrl(native));
+        push(native);
+      }
+    } catch {
+    }
+    return out;
+  }
+  async function readCachedPreviewBlob(cacheKey) {
+    const index = readPosterIndex();
+    const entry = index[cacheKey];
+    if (!entry?.fileName) return null;
+    try {
+      const { uxp } = await getUxpFs();
+      const folder = await getDataFolder();
+      const file = await findEntryByName(folder, entry.fileName);
+      if (!file || typeof file.read !== "function") return null;
+      const data = await file.read({ format: uxp.storage.formats.binary });
+      if (!data || data.byteLength != null && data.byteLength === 0) return null;
+      index[cacheKey] = { ...entry, at: Date.now() };
+      writePosterIndex(index);
+      return new Blob([data], { type: "video/mp4" });
+    } catch {
+      return null;
+    }
+  }
+  async function materializePreview(input) {
+    const { cacheKey, blob, filename } = input;
+    if (!cacheKey || !blob) return null;
+    const index = readPosterIndex();
+    const existing = index[cacheKey];
+    if (existing?.fileName) {
+      try {
+        const folder = await getDataFolder();
+        const file = await findEntryByName(folder, existing.fileName);
+        const urls = await resolveEntryPlaybackUrls(file);
+        if (urls.length) {
+          index[cacheKey] = { ...existing, at: Date.now() };
+          writePosterIndex(index);
+          return { url: urls[0], urls, via: "file" };
+        }
+      } catch {
+      }
+    }
+    try {
+      const { uxp } = await getUxpFs();
+      const folder = await getDataFolder();
+      const fileName = cacheFileName(cacheKey, filename || "preview.mp4");
+      const file = await folder.createFile(fileName, { overwrite: true });
+      const buffer = blob instanceof ArrayBuffer ? blob : await blob.arrayBuffer();
+      if (!buffer?.byteLength) return null;
+      await file.write(buffer, { format: uxp.storage.formats.binary });
+      index[cacheKey] = {
+        path: file.nativePath || void 0,
+        fileName,
+        at: Date.now(),
+        bytes: buffer.byteLength
+      };
+      writePosterIndex(index);
+      const urls = await resolveEntryPlaybackUrls(file);
+      if (urls.length) {
+        console.info("[VIDEON] materializePreview ok", fileName, urls[0], `(${urls.length} candidates)`);
+        return { url: urls[0], urls, via: "file" };
+      }
+      console.warn("[VIDEON] materializePreview wrote file but no playback URL", fileName, file?.nativePath);
+    } catch (error) {
+      console.warn("[VIDEON] materializePreview file write failed", error);
+    }
+    try {
+      const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type: "video/mp4" }));
+      return { url, urls: [url], via: "blob" };
+    } catch {
+      return null;
+    }
+  }
   async function readCachedPosterBlob(cacheKey) {
     const index = readPosterIndex();
     const entry = index[cacheKey];
@@ -827,86 +946,910 @@
     return cacheStats(next);
   }
 
-  // src/collections.js
-  function normalizeCollections(payload) {
-    const items = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : [];
-    const out = [];
-    for (const item of items) {
-      if (!item || typeof item !== "object") continue;
-      const id = typeof item.id === "string" ? item.id.trim() : "";
-      const name = typeof item.name === "string" ? item.name.trim() : "";
-      if (!id || !name) continue;
-      out.push({
-        id,
-        name,
-        status: typeof item.status === "string" ? item.status : "active"
-      });
+  // node_modules/fflate/esm/browser.js
+  var u8 = Uint8Array;
+  var u16 = Uint16Array;
+  var i32 = Int32Array;
+  var fleb = new u8([
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2,
+    3,
+    3,
+    3,
+    3,
+    4,
+    4,
+    4,
+    4,
+    5,
+    5,
+    5,
+    5,
+    0,
+    /* unused */
+    0,
+    0,
+    /* impossible */
+    0
+  ]);
+  var fdeb = new u8([
+    0,
+    0,
+    0,
+    0,
+    1,
+    1,
+    2,
+    2,
+    3,
+    3,
+    4,
+    4,
+    5,
+    5,
+    6,
+    6,
+    7,
+    7,
+    8,
+    8,
+    9,
+    9,
+    10,
+    10,
+    11,
+    11,
+    12,
+    12,
+    13,
+    13,
+    /* unused */
+    0,
+    0
+  ]);
+  var clim = new u8([16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]);
+  var freb = function(eb, start) {
+    var b = new u16(31);
+    for (var i = 0; i < 31; ++i) {
+      b[i] = start += 1 << eb[i - 1];
     }
-    return out;
+    var r = new i32(b[30]);
+    for (var i = 1; i < 30; ++i) {
+      for (var j = b[i]; j < b[i + 1]; ++j) {
+        r[j] = j - b[i] << 5 | i;
+      }
+    }
+    return { b, r };
+  };
+  var _a = freb(fleb, 2);
+  var fl = _a.b;
+  var revfl = _a.r;
+  fl[28] = 258, revfl[258] = 28;
+  var _b = freb(fdeb, 0);
+  var fd = _b.b;
+  var revfd = _b.r;
+  var rev = new u16(32768);
+  for (i = 0; i < 32768; ++i) {
+    x = (i & 43690) >> 1 | (i & 21845) << 1;
+    x = (x & 52428) >> 2 | (x & 13107) << 2;
+    x = (x & 61680) >> 4 | (x & 3855) << 4;
+    rev[i] = ((x & 65280) >> 8 | (x & 255) << 8) >> 1;
+  }
+  var x;
+  var i;
+  var hMap = (function(cd, mb, r) {
+    var s = cd.length;
+    var i = 0;
+    var l = new u16(mb);
+    for (; i < s; ++i) {
+      if (cd[i])
+        ++l[cd[i] - 1];
+    }
+    var le = new u16(mb);
+    for (i = 1; i < mb; ++i) {
+      le[i] = le[i - 1] + l[i - 1] << 1;
+    }
+    var co;
+    if (r) {
+      co = new u16(1 << mb);
+      var rvb = 15 - mb;
+      for (i = 0; i < s; ++i) {
+        if (cd[i]) {
+          var sv = i << 4 | cd[i];
+          var r_1 = mb - cd[i];
+          var v = le[cd[i] - 1]++ << r_1;
+          for (var m = v | (1 << r_1) - 1; v <= m; ++v) {
+            co[rev[v] >> rvb] = sv;
+          }
+        }
+      }
+    } else {
+      co = new u16(s);
+      for (i = 0; i < s; ++i) {
+        if (cd[i]) {
+          co[i] = rev[le[cd[i] - 1]++] >> 15 - cd[i];
+        }
+      }
+    }
+    return co;
+  });
+  var flt = new u8(288);
+  for (i = 0; i < 144; ++i)
+    flt[i] = 8;
+  var i;
+  for (i = 144; i < 256; ++i)
+    flt[i] = 9;
+  var i;
+  for (i = 256; i < 280; ++i)
+    flt[i] = 7;
+  var i;
+  for (i = 280; i < 288; ++i)
+    flt[i] = 8;
+  var i;
+  var fdt = new u8(32);
+  for (i = 0; i < 32; ++i)
+    fdt[i] = 5;
+  var i;
+  var flrm = /* @__PURE__ */ hMap(flt, 9, 1);
+  var fdrm = /* @__PURE__ */ hMap(fdt, 5, 1);
+  var max = function(a) {
+    var m = a[0];
+    for (var i = 1; i < a.length; ++i) {
+      if (a[i] > m)
+        m = a[i];
+    }
+    return m;
+  };
+  var bits = function(d, p, m) {
+    var o = p / 8 | 0;
+    return (d[o] | d[o + 1] << 8) >> (p & 7) & m;
+  };
+  var bits16 = function(d, p) {
+    var o = p / 8 | 0;
+    return (d[o] | d[o + 1] << 8 | d[o + 2] << 16) >> (p & 7);
+  };
+  var shft = function(p) {
+    return (p + 7) / 8 | 0;
+  };
+  var slc = function(v, s, e) {
+    if (s == null || s < 0)
+      s = 0;
+    if (e == null || e > v.length)
+      e = v.length;
+    return new u8(v.subarray(s, e));
+  };
+  var ec = [
+    "unexpected EOF",
+    "invalid block type",
+    "invalid length/literal",
+    "invalid distance",
+    "stream finished",
+    "no stream handler",
+    ,
+    // determined by compression function
+    "no callback",
+    "invalid UTF-8 data",
+    "extra field too long",
+    "date not in range 1980-2099",
+    "filename too long",
+    "stream finishing",
+    "invalid zip data"
+    // determined by unknown compression method
+  ];
+  var err = function(ind, msg, nt) {
+    var e = new Error(msg || ec[ind]);
+    e.code = ind;
+    if (Error.captureStackTrace)
+      Error.captureStackTrace(e, err);
+    if (!nt)
+      throw e;
+    return e;
+  };
+  var inflt = function(dat, st, buf, dict) {
+    var sl = dat.length, dl = dict ? dict.length : 0;
+    if (!sl || st.f && !st.l)
+      return buf || new u8(0);
+    var noBuf = !buf;
+    var resize = noBuf || st.i != 2;
+    var noSt = st.i;
+    if (noBuf)
+      buf = new u8(sl * 3);
+    var cbuf = function(l2) {
+      var bl = buf.length;
+      if (l2 > bl) {
+        var nbuf = new u8(Math.max(bl * 2, l2));
+        nbuf.set(buf);
+        buf = nbuf;
+      }
+    };
+    var final = st.f || 0, pos = st.p || 0, bt = st.b || 0, lm = st.l, dm = st.d, lbt = st.m, dbt = st.n;
+    var tbts = sl * 8;
+    do {
+      if (!lm) {
+        final = bits(dat, pos, 1);
+        var type = bits(dat, pos + 1, 3);
+        pos += 3;
+        if (!type) {
+          var s = shft(pos) + 4, l = dat[s - 4] | dat[s - 3] << 8, t = s + l;
+          if (t > sl) {
+            if (noSt)
+              err(0);
+            break;
+          }
+          if (resize)
+            cbuf(bt + l);
+          buf.set(dat.subarray(s, t), bt);
+          st.b = bt += l, st.p = pos = t * 8, st.f = final;
+          continue;
+        } else if (type == 1)
+          lm = flrm, dm = fdrm, lbt = 9, dbt = 5;
+        else if (type == 2) {
+          var hLit = bits(dat, pos, 31) + 257, hcLen = bits(dat, pos + 10, 15) + 4;
+          var tl = hLit + bits(dat, pos + 5, 31) + 1;
+          pos += 14;
+          var ldt = new u8(tl);
+          var clt = new u8(19);
+          for (var i = 0; i < hcLen; ++i) {
+            clt[clim[i]] = bits(dat, pos + i * 3, 7);
+          }
+          pos += hcLen * 3;
+          var clb = max(clt), clbmsk = (1 << clb) - 1;
+          var clm = hMap(clt, clb, 1);
+          for (var i = 0; i < tl; ) {
+            var r = clm[bits(dat, pos, clbmsk)];
+            pos += r & 15;
+            var s = r >> 4;
+            if (s < 16) {
+              ldt[i++] = s;
+            } else {
+              var c = 0, n = 0;
+              if (s == 16)
+                n = 3 + bits(dat, pos, 3), pos += 2, c = ldt[i - 1];
+              else if (s == 17)
+                n = 3 + bits(dat, pos, 7), pos += 3;
+              else if (s == 18)
+                n = 11 + bits(dat, pos, 127), pos += 7;
+              while (n--)
+                ldt[i++] = c;
+            }
+          }
+          var lt = ldt.subarray(0, hLit), dt = ldt.subarray(hLit);
+          lbt = max(lt);
+          dbt = max(dt);
+          lm = hMap(lt, lbt, 1);
+          dm = hMap(dt, dbt, 1);
+        } else
+          err(1);
+        if (pos > tbts) {
+          if (noSt)
+            err(0);
+          break;
+        }
+      }
+      if (resize)
+        cbuf(bt + 131072);
+      var lms = (1 << lbt) - 1, dms = (1 << dbt) - 1;
+      var lpos = pos;
+      for (; ; lpos = pos) {
+        var c = lm[bits16(dat, pos) & lms], sym = c >> 4;
+        pos += c & 15;
+        if (pos > tbts) {
+          if (noSt)
+            err(0);
+          break;
+        }
+        if (!c)
+          err(2);
+        if (sym < 256)
+          buf[bt++] = sym;
+        else if (sym == 256) {
+          lpos = pos, lm = null;
+          break;
+        } else {
+          var add = sym - 254;
+          if (sym > 264) {
+            var i = sym - 257, b = fleb[i];
+            add = bits(dat, pos, (1 << b) - 1) + fl[i];
+            pos += b;
+          }
+          var d = dm[bits16(dat, pos) & dms], dsym = d >> 4;
+          if (!d)
+            err(3);
+          pos += d & 15;
+          var dt = fd[dsym];
+          if (dsym > 3) {
+            var b = fdeb[dsym];
+            dt += bits16(dat, pos) & (1 << b) - 1, pos += b;
+          }
+          if (pos > tbts) {
+            if (noSt)
+              err(0);
+            break;
+          }
+          if (resize)
+            cbuf(bt + 131072);
+          var end = bt + add;
+          if (bt < dt) {
+            var shift = dl - dt, dend = Math.min(dt, end);
+            if (shift + bt < 0)
+              err(3);
+            for (; bt < dend; ++bt)
+              buf[bt] = dict[shift + bt];
+          }
+          for (; bt < end; ++bt)
+            buf[bt] = buf[bt - dt];
+        }
+      }
+      st.l = lm, st.p = lpos, st.b = bt, st.f = final;
+      if (lm)
+        final = 1, st.m = lbt, st.d = dm, st.n = dbt;
+    } while (!final);
+    return bt != buf.length && noBuf ? slc(buf, 0, bt) : buf.subarray(0, bt);
+  };
+  var et = /* @__PURE__ */ new u8(0);
+  var b2 = function(d, b) {
+    return d[b] | d[b + 1] << 8;
+  };
+  var b4 = function(d, b) {
+    return (d[b] | d[b + 1] << 8 | d[b + 2] << 16 | d[b + 3] << 24) >>> 0;
+  };
+  var b8 = function(d, b) {
+    return b4(d, b) + b4(d, b + 4) * 4294967296;
+  };
+  function inflateSync(data, opts) {
+    return inflt(data, { i: 2 }, opts && opts.out, opts && opts.dictionary);
+  }
+  var td = typeof TextDecoder != "undefined" && /* @__PURE__ */ new TextDecoder();
+  var tds = 0;
+  try {
+    td.decode(et, { stream: true });
+    tds = 1;
+  } catch (e) {
+  }
+  var dutf8 = function(d) {
+    for (var r = "", i = 0; ; ) {
+      var c = d[i++];
+      var eb = (c > 127) + (c > 223) + (c > 239);
+      if (i + eb > d.length)
+        return { s: r, r: slc(d, i - 1) };
+      if (!eb)
+        r += String.fromCharCode(c);
+      else if (eb == 3) {
+        c = ((c & 15) << 18 | (d[i++] & 63) << 12 | (d[i++] & 63) << 6 | d[i++] & 63) - 65536, r += String.fromCharCode(55296 | c >> 10, 56320 | c & 1023);
+      } else if (eb & 1)
+        r += String.fromCharCode((c & 31) << 6 | d[i++] & 63);
+      else
+        r += String.fromCharCode((c & 15) << 12 | (d[i++] & 63) << 6 | d[i++] & 63);
+    }
+  };
+  function strFromU8(dat, latin1) {
+    if (latin1) {
+      var r = "";
+      for (var i = 0; i < dat.length; i += 16384)
+        r += String.fromCharCode.apply(null, dat.subarray(i, i + 16384));
+      return r;
+    } else if (td) {
+      return td.decode(dat);
+    } else {
+      var _a2 = dutf8(dat), s = _a2.s, r = _a2.r;
+      if (r.length)
+        err(8);
+      return s;
+    }
+  }
+  var slzh = function(d, b) {
+    return b + 30 + b2(d, b + 26) + b2(d, b + 28);
+  };
+  var zh = function(d, b, z) {
+    var fnl = b2(d, b + 28), efl = b2(d, b + 30), fn = strFromU8(d.subarray(b + 46, b + 46 + fnl), !(b2(d, b + 8) & 2048)), es = b + 46 + fnl;
+    var _a2 = z64hs(d, es, efl, z, b4(d, b + 20), b4(d, b + 24), b4(d, b + 42)), sc = _a2[0], su = _a2[1], off = _a2[2];
+    return [b2(d, b + 10), sc, su, fn, es + efl + b2(d, b + 32), off];
+  };
+  var z64hs = function(d, b, l, z, sc, su, off) {
+    var nsc = sc == 4294967295, nsu = su == 4294967295, noff = off == 4294967295, e = b + l;
+    var nf = nsc + nsu + noff;
+    if (z && nf) {
+      for (; b + 4 < e; b += 4 + b2(d, b + 2)) {
+        if (b2(d, b) == 1) {
+          return [
+            nsc ? b8(d, b + 4 + 8 * nsu) : sc,
+            nsu ? b8(d, b + 4) : su,
+            noff ? b8(d, b + 4 + 8 * (nsu + nsc)) : off,
+            1
+          ];
+        }
+      }
+      if (z < 2)
+        err(13);
+    }
+    return [sc, su, off, 0];
+  };
+  function unzipSync(data, opts) {
+    var files = {};
+    var e = data.length - 22;
+    for (; b4(data, e) != 101010256; --e) {
+      if (!e || data.length - e > 65558)
+        err(13);
+    }
+    ;
+    var c = b2(data, e + 8);
+    if (!c)
+      return {};
+    var o = b4(data, e + 16);
+    var z = b4(data, e - 20) == 117853008;
+    if (z) {
+      var ze = b4(data, e - 12);
+      z = b4(data, ze) == 101075792;
+      if (z) {
+        c = b4(data, ze + 32);
+        o = b4(data, ze + 48);
+      }
+    }
+    var fltr = opts && opts.filter;
+    for (var i = 0; i < c; ++i) {
+      var _a2 = zh(data, o, z), c_2 = _a2[0], sc = _a2[1], su = _a2[2], fn = _a2[3], no = _a2[4], off = _a2[5], b = slzh(data, off);
+      o = no;
+      if (!fltr || fltr({
+        name: fn,
+        size: sc,
+        originalSize: su,
+        compression: c_2
+      })) {
+        if (!c_2)
+          files[fn] = slc(data, b, b + sc);
+        else if (c_2 == 8)
+          files[fn] = inflateSync(data.subarray(b, b + sc), { out: new u8(su) });
+        else
+          err(14, "unknown compression type " + c_2);
+      }
+    }
+    return files;
   }
 
-  // src/hit-model.js
-  function formatSceneHitClock(ms) {
-    const total = Math.max(0, Math.floor(ms / 1e3));
-    const m = Math.floor(total / 60);
-    const s = total % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  // src/open-cut-model.js
+  var OPEN_CUT_PHASE = {
+    export: "export",
+    download: "download",
+    extract: "extract",
+    handoff: "handoff",
+    import: "import",
+    done: "done",
+    error: "error"
+  };
+  var OPEN_CUT_PHASE_LABEL = {
+    export: "Export\u2026",
+    download: "Download\u2026",
+    extract: "Entpacken\u2026",
+    handoff: "Bereit zum Import\u2026",
+    import: "Import\u2026",
+    done: "Fertig",
+    error: "Fehler"
+  };
+  var OPEN_CUT_LIST_LIMIT = 40;
+  var OPEN_CUT_MAX_TREES = 8;
+  var OPEN_CUT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+  var OPEN_CUT_POLL_TIMEOUT_MS = 10 * 60 * 1e3;
+  var OPEN_CUT_HANDOFF_BANNER = "ZIP entpackt. In Premiere: Datei \u2192 Importieren \u2192 XML w\xE4hlen.";
+  var PRESET_BY_WH = {
+    "1920x1080": "16:9",
+    "1080x1920": "9:16",
+    "1080x1080": "1:1"
+  };
+  function canvasLabel(cut) {
+    const w = cut?.width;
+    const h = cut?.height;
+    if (w == null || h == null || !Number.isFinite(w) || !Number.isFinite(h)) return "\u2014";
+    const key = `${Math.round(w)}x${Math.round(h)}`;
+    return PRESET_BY_WH[key] || `${Math.round(w)}\xD7${Math.round(h)}`;
   }
-  function sceneHitTimingLabel(hit) {
-    if (hit.startMs != null && hit.endMs != null) {
-      return `${formatSceneHitClock(hit.startMs)}\u2013${formatSceneHitClock(hit.endMs)}`;
+  function formatUpdatedAt(iso, now = Date.now()) {
+    if (!iso) return "\u2014";
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return "\u2014";
+    const delta = Math.max(0, now - t);
+    const min = Math.floor(delta / 6e4);
+    if (min < 1) return "gerade eben";
+    if (min < 60) return `vor ${min} Min.`;
+    const hrs = Math.floor(min / 60);
+    if (hrs < 48) return `vor ${hrs} Std.`;
+    const days = Math.floor(hrs / 24);
+    return `vor ${days} T.`;
+  }
+  function shouldReusePremiereExport(cut, exportJob) {
+    if (!cut || !exportJob) return false;
+    if (exportJob.format !== "premiere_xml") return false;
+    if (exportJob.status !== "succeeded") return false;
+    if (!exportJob.storageKey && exportJob.bytes == null) {
     }
-    if (hit.startMs != null) return formatSceneHitClock(hit.startMs);
+    const cutAt = Date.parse(cut.updatedAt || "");
+    const expAt = Date.parse(exportJob.createdAt || "");
+    if (!Number.isFinite(cutAt) || !Number.isFinite(expAt)) return false;
+    return expAt >= cutAt;
+  }
+  function pickReusablePremiereExport(cut, exportsList) {
+    const list = Array.isArray(exportsList) ? exportsList : [];
+    for (const job of list) {
+      if (shouldReusePremiereExport(cut, job)) return job;
+    }
     return null;
   }
-  function sceneHitDurationLabel(hit) {
-    if (hit.startMs == null || hit.endMs == null || hit.endMs < hit.startMs) return null;
-    return formatSceneHitClock(hit.endMs - hit.startMs);
+  function openCutIdempotencyKey(cut) {
+    const updated = cut?.updatedAt || "unknown";
+    return `open-cut:${cut?.id || "x"}:${updated}`;
   }
-  function formatRank(rank) {
-    const n = Number(rank);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    return n.toFixed(2);
+  function openCutCacheKey(cutId, exportId, bytesOrChecksum) {
+    const stamp = bytesOrChecksum != null ? String(bytesOrChecksum) : "na";
+    return `${cutId}:premiere_xml:${exportId}:${stamp}`;
   }
-  function buildHitHref(hit) {
-    if (!hit?.mediaAssetId || !hit?.platformProjectId) return null;
-    const params = new URLSearchParams({ platformProjectId: hit.platformProjectId });
-    if (hit.startMs != null && hit.startMs >= 0) params.set("t", String(Math.floor(hit.startMs)));
-    if (hit.sceneKey?.trim()) params.set("scene", hit.sceneKey.trim());
-    return `/media/${encodeURIComponent(hit.mediaAssetId)}?${params.toString()}`;
+  function sanitizeOpenCutFolder(cacheKey) {
+    return String(cacheKey || "cut").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
   }
-  function normalizeSearchHit(raw) {
-    const mediaAssetId = String(raw.mediaAssetId || "");
-    const platformProjectId = String(raw.platformProjectId || "");
-    const startMs = raw.startMs == null ? null : Number(raw.startMs);
-    const endMs = raw.endMs == null ? null : Number(raw.endMs);
-    const sceneKey = raw.sceneKey == null ? null : String(raw.sceneKey);
-    const rank = raw.rank == null ? null : Number(raw.rank);
-    const hit = {
-      id: String(raw.id || `${mediaAssetId}:${sceneKey || "asset"}`),
-      mediaAssetId,
-      platformProjectId,
-      sceneKey,
-      mediaFilename: String(raw.mediaFilename || raw.filename || "Untitled"),
-      startMs: Number.isFinite(startMs) ? startMs : null,
-      endMs: Number.isFinite(endMs) ? endMs : null,
-      searchText: String(raw.searchText || "").slice(0, 400),
-      projectName: raw.projectName == null ? null : String(raw.projectName),
-      rank: Number.isFinite(rank) ? rank : null,
-      href: raw.href ? String(raw.href) : null
-    };
-    if (!hit.href) hit.href = buildHitHref(hit);
-    return hit;
-  }
-  function dedupeSearchHits(hits2) {
-    const byKey = /* @__PURE__ */ new Map();
-    for (const hit of hits2) {
-      if (!hit?.mediaAssetId) continue;
-      const key = `${hit.mediaAssetId}::${hit.sceneKey || ""}::${hit.startMs ?? ""}::${hit.endMs ?? ""}`;
-      const prev = byKey.get(key);
-      if (!prev || (hit.rank ?? 0) > (prev.rank ?? 0)) byKey.set(key, hit);
+  function normalizeCutsList(payload) {
+    const raw = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+    const items = [];
+    for (const row of raw) {
+      if (!row || typeof row !== "object") continue;
+      const id = typeof row.id === "string" ? row.id.trim() : "";
+      if (!id) continue;
+      items.push({
+        id,
+        name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : id,
+        width: typeof row.width === "number" ? row.width : null,
+        height: typeof row.height === "number" ? row.height : null,
+        frameRate: typeof row.frameRate === "number" ? row.frameRate : null,
+        status: typeof row.status === "string" ? row.status : "active",
+        updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : "",
+        createdAt: typeof row.createdAt === "string" ? row.createdAt : "",
+        sceneCount: typeof row.sceneCount === "number" ? row.sceneCount : null
+      });
     }
-    return [...byKey.values()];
+    items.sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
+    return items.slice(0, OPEN_CUT_LIST_LIMIT);
+  }
+  function phaseLabel(phaseId, extra = "") {
+    const base3 = OPEN_CUT_PHASE_LABEL[phaseId] || phaseId;
+    if (phaseId === "done" && extra) return `${base3} \xB7 ${extra}`;
+    if (phaseId === "error" && extra) return `${base3} \xB7 ${extra}`;
+    return base3;
+  }
+  function nextPollDelayMs(attempt) {
+    const n = Math.max(0, Number(attempt) || 0);
+    return Math.min(5e3, Math.round(1e3 * Math.pow(1.5, n)));
+  }
+  function pickXmlPathFromEntries(paths) {
+    const list = (paths || []).map(String);
+    const root = list.filter((p) => /\.xml$/i.test(p) && !p.includes("/"));
+    if (root.length) return root[0];
+    const any = list.find((p) => /\.xml$/i.test(p));
+    return any || null;
+  }
+
+  // src/open-cut-cache.js
+  var INDEX_KEY = "videon.adobe.openCutIndex";
+  var ROOT_FOLDER = "open-cut";
+  function readIndex2() {
+    try {
+      return JSON.parse(localStorage.getItem(INDEX_KEY) || "{}") || {};
+    } catch {
+      return {};
+    }
+  }
+  function writeIndex2(index) {
+    localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+  }
+  async function getUxpFs2() {
+    const uxp = await loadNativeModule("uxp");
+    const fs = uxp.storage?.localFileSystem;
+    if (!fs?.getDataFolder) throw new Error("UXP localFileSystem nicht verf\xFCgbar");
+    return { uxp, fs };
+  }
+  async function getDataFolder2() {
+    const { fs } = await getUxpFs2();
+    return fs.getDataFolder();
+  }
+  async function ensureChildFolder(parent, name) {
+    if (typeof parent.getEntries === "function") {
+      try {
+        const entries = await parent.getEntries();
+        const existing = entries.find((e) => e?.name === name && e.isFolder);
+        if (existing) return existing;
+      } catch {
+      }
+    }
+    if (typeof parent.createFolder === "function") {
+      try {
+        return await parent.createFolder(name);
+      } catch (error) {
+        if (typeof parent.getEntries === "function") {
+          const entries = await parent.getEntries();
+          const existing = entries.find((e) => e?.name === name && e.isFolder);
+          if (existing) return existing;
+        }
+        throw error;
+      }
+    }
+    throw new Error(`createFolder fehlt f\xFCr ${name}`);
+  }
+  async function getChildEntry(parent, name) {
+    if (typeof parent.getEntries !== "function") return null;
+    try {
+      const entries = await parent.getEntries();
+      return entries.find((e) => e?.name === name) || null;
+    } catch {
+      return null;
+    }
+  }
+  async function deleteEntrySafe2(entry) {
+    if (!entry) return;
+    try {
+      if (typeof entry.delete === "function") await entry.delete();
+    } catch {
+    }
+  }
+  function toArrayBuffer(u82) {
+    if (u82 instanceof ArrayBuffer) return u82;
+    if (u82?.buffer instanceof ArrayBuffer) {
+      return u82.buffer.slice(u82.byteOffset, u82.byteOffset + u82.byteLength);
+    }
+    return new Uint8Array(u82).buffer;
+  }
+  async function writeRelativeFile(rootFolder, relativePath, bytes, uxp) {
+    const parts = String(relativePath).replace(/^\/+/, "").split("/").filter(Boolean);
+    if (!parts.length) return null;
+    let folder = rootFolder;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      folder = await ensureChildFolder(folder, parts[i]);
+    }
+    const fileName = parts[parts.length - 1];
+    const file = await folder.createFile(fileName, { overwrite: true });
+    await file.write(toArrayBuffer(bytes), { format: uxp.storage.formats.binary });
+    return file;
+  }
+  async function evictIfNeeded2(incomingBytes) {
+    let index = readIndex2();
+    const entries = Object.entries(index).sort((a, b) => (a[1].at || 0) - (b[1].at || 0));
+    let totalBytes = entries.reduce((sum, [, e]) => sum + (Number(e.bytes) || 0), 0);
+    let count = entries.length;
+    const needEvict = () => count >= OPEN_CUT_MAX_TREES || totalBytes + (incomingBytes || 0) > OPEN_CUT_MAX_BYTES;
+    if (!needEvict()) return;
+    const data = await getDataFolder2();
+    let openRoot;
+    try {
+      openRoot = await ensureChildFolder(data, ROOT_FOLDER);
+    } catch {
+      return;
+    }
+    for (const [key, entry] of entries) {
+      if (!needEvict()) break;
+      try {
+        if (entry?.folderName) {
+          const folder = await getChildEntry(openRoot, entry.folderName);
+          await deleteEntrySafe2(folder);
+        }
+      } catch {
+      }
+      delete index[key];
+      totalBytes -= Number(entry?.bytes) || 0;
+      count -= 1;
+    }
+    writeIndex2(index);
+  }
+  async function extractOpenCutZip(cacheKey, zipBuffer) {
+    if (!cacheKey || !zipBuffer) throw new Error("extractOpenCutZip: cacheKey/zip fehlen");
+    const folderName = sanitizeOpenCutFolder(cacheKey);
+    const u82 = zipBuffer instanceof Uint8Array ? zipBuffer : new Uint8Array(zipBuffer);
+    const unzipped = unzipSync(u82);
+    const paths = Object.keys(unzipped);
+    const xmlRel = pickXmlPathFromEntries(paths);
+    if (!xmlRel) throw new Error("ZIP enth\xE4lt keine .xml");
+    await evictIfNeeded2(u82.byteLength);
+    const { uxp } = await getUxpFs2();
+    const data = await getDataFolder2();
+    const openRoot = await ensureChildFolder(data, ROOT_FOLDER);
+    try {
+      const prev = await getChildEntry(openRoot, folderName);
+      await deleteEntrySafe2(prev);
+    } catch {
+    }
+    const extractRoot = await ensureChildFolder(openRoot, folderName);
+    let written = 0;
+    for (const [rel, bytes] of Object.entries(unzipped)) {
+      if (!bytes) continue;
+      if (rel.endsWith("/")) continue;
+      await writeRelativeFile(extractRoot, rel, bytes, uxp);
+      written += bytes.byteLength || 0;
+    }
+    let xmlEntry = null;
+    const xmlParts = xmlRel.replace(/^\/+/, "").split("/");
+    let cursor = extractRoot;
+    for (let i = 0; i < xmlParts.length - 1; i += 1) {
+      cursor = await ensureChildFolder(cursor, xmlParts[i]);
+    }
+    xmlEntry = await getChildEntry(cursor, xmlParts[xmlParts.length - 1]);
+    const xmlNativePath = xmlEntry?.nativePath || null;
+    const extractDir = extractRoot.nativePath || folderName;
+    if (!xmlNativePath) throw new Error("XML nativePath nicht aufl\xF6sbar");
+    const index = readIndex2();
+    index[cacheKey] = {
+      folderName,
+      xmlRel,
+      xmlPath: xmlNativePath,
+      extractDir,
+      at: Date.now(),
+      bytes: written || u82.byteLength
+    };
+    writeIndex2(index);
+    return {
+      extractDir,
+      xmlPath: xmlNativePath,
+      xmlNativePath,
+      bytes: written || u82.byteLength,
+      folderName,
+      xmlRel
+    };
+  }
+  async function clearOpenCutCache() {
+    const index = readIndex2();
+    let deleted = 0;
+    try {
+      const data = await getDataFolder2();
+      const openRoot = await ensureChildFolder(data, ROOT_FOLDER);
+      for (const entry of Object.values(index)) {
+        if (!entry?.folderName) continue;
+        try {
+          const folder = entry?.folderName ? await getChildEntry(openRoot, entry.folderName) : null;
+          if (folder) {
+            await deleteEntrySafe2(folder);
+            deleted += 1;
+          }
+        } catch {
+        }
+      }
+      if (typeof openRoot.getEntries === "function") {
+        const kids = await openRoot.getEntries();
+        for (const kid of kids || []) {
+          await deleteEntrySafe2(kid);
+          deleted += 1;
+        }
+      }
+    } catch {
+    }
+    writeIndex2({});
+    return { deleted };
+  }
+
+  // src/cuts-api.js
+  function authHeaders2(token) {
+    const headers = { Accept: "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  }
+  function base2(settings) {
+    return String(settings.productBaseUrl || "").replace(/\/$/, "");
+  }
+  async function parseError2(response) {
+    try {
+      const body = await response.json();
+      const msg = body?.error?.message || body?.message || body?.error;
+      const code = body?.error?.code;
+      if (typeof msg === "string" && code) return `${code}: ${msg}`;
+      if (typeof msg === "string") return msg;
+      return `${response.status} ${response.statusText}`;
+    } catch {
+      return `${response.status} ${response.statusText}`;
+    }
+  }
+  async function listCuts(settings, platformProjectId, signal) {
+    if (!platformProjectId) throw new Error("platformProjectId is required");
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(`${base2(settings)}/api/cuts?${params}`, {
+      headers: authHeaders2(settings.apiToken),
+      signal
+    });
+    if (!response.ok) throw new Error(await parseError2(response));
+    return normalizeCutsList(await response.json());
+  }
+  async function listCutExports(settings, cutId, platformProjectId, signal) {
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(
+      `${base2(settings)}/api/cuts/${encodeURIComponent(cutId)}/exports?${params}`,
+      { headers: authHeaders2(settings.apiToken), signal }
+    );
+    if (!response.ok) throw new Error(await parseError2(response));
+    const body = await response.json();
+    return Array.isArray(body?.exports) ? body.exports : [];
+  }
+  async function enqueuePremiereExport(settings, cutId, platformProjectId, idempotencyKey, signal) {
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(
+      `${base2(settings)}/api/cuts/${encodeURIComponent(cutId)}/exports?${params}`,
+      {
+        method: "POST",
+        headers: {
+          ...authHeaders2(settings.apiToken),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          format: "premiere_xml",
+          idempotencyKey: idempotencyKey || void 0
+        }),
+        signal
+      }
+    );
+    if (!response.ok) throw new Error(await parseError2(response));
+    const body = await response.json();
+    if (!body?.export?.id) throw new Error("Export enqueue ohne export.id");
+    return body.export;
+  }
+  async function getCutExport(settings, cutId, exportId, platformProjectId, signal) {
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(
+      `${base2(settings)}/api/cuts/${encodeURIComponent(cutId)}/exports/${encodeURIComponent(exportId)}?${params}`,
+      { headers: authHeaders2(settings.apiToken), signal }
+    );
+    if (!response.ok) throw new Error(await parseError2(response));
+    return response.json();
+  }
+  async function downloadExportZip(downloadUrl, signal) {
+    if (!downloadUrl) throw new Error("downloadUrl fehlt");
+    const response = await httpRequest(downloadUrl, {
+      signal,
+      responseType: "arraybuffer"
+    });
+    if (!response.ok) throw new Error(`ZIP download ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    if (!buffer?.byteLength) throw new Error("ZIP leer");
+    return buffer;
+  }
+  async function getCutDetail(settings, cutId, platformProjectId, signal) {
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(
+      `${base2(settings)}/api/cuts/${encodeURIComponent(cutId)}?${params}`,
+      { headers: authHeaders2(settings.apiToken), signal }
+    );
+    if (!response.ok) throw new Error(await parseError2(response));
+    return response.json();
+  }
+  async function listWorkspaceMedia(settings, platformProjectId, signal) {
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(`${base2(settings)}/api/media?${params}`, {
+      headers: authHeaders2(settings.apiToken),
+      signal
+    });
+    if (!response.ok) throw new Error(await parseError2(response));
+    const body = await response.json();
+    return Array.isArray(body?.items) ? body.items : Array.isArray(body) ? body : [];
+  }
+  async function restoreCutFromPushback(settings, cutId, platformProjectId, scenes, signal) {
+    const params = new URLSearchParams({ platformProjectId });
+    const response = await httpRequest(
+      `${base2(settings)}/api/cuts/${encodeURIComponent(cutId)}?${params}`,
+      {
+        method: "PATCH",
+        headers: {
+          ...authHeaders2(settings.apiToken),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: "restore", scenes }),
+        signal
+      }
+    );
+    if (!response.ok) throw new Error(await parseError2(response));
+    return response.json();
   }
 
   // src/host.js
@@ -1024,7 +1967,7 @@
   async function findClipMatchingPath(ppro, project, filePath) {
     const root = await project.getRootItem();
     const items = await walkProjectItems(ppro, root);
-    const base2 = pathBasename(filePath);
+    const base3 = pathBasename(filePath);
     for (const item of items) {
       const clip = ppro.ClipProjectItem?.cast?.(item);
       if (!clip) continue;
@@ -1035,7 +1978,7 @@
         mediaPath = null;
       }
       if (mediaPath && pathsLikelyMatch(mediaPath, filePath)) return clip;
-      if (!mediaPath && item.name && item.name === base2) return clip;
+      if (!mediaPath && item.name && item.name === base3) return clip;
     }
     for (const item of items) {
       const clip = ppro.ClipProjectItem?.cast?.(item);
@@ -1045,7 +1988,7 @@
         if (Array.isArray(matches) && matches.length) {
           return ppro.ClipProjectItem.cast(matches[0]) || matches[0];
         }
-        const byName = await clip.findItemsMatchingMediaPath(base2, true);
+        const byName = await clip.findItemsMatchingMediaPath(base3, true);
         if (Array.isArray(byName) && byName.length) {
           return ppro.ClipProjectItem.cast(byName[0]) || byName[0];
         }
@@ -1172,8 +2115,1097 @@
     }
   }
 
+  // src/premiere-open-cut.js
+  async function getPremiereApi2() {
+    try {
+      return await loadNativeModule("premierepro");
+    } catch {
+      return null;
+    }
+  }
+  async function copyToClipboard(text) {
+    try {
+      const uxp = await loadNativeModule("uxp");
+      if (uxp?.clipboard?.writeText) {
+        await uxp.clipboard.writeText(String(text));
+        return true;
+      }
+    } catch {
+    }
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(String(text));
+        return true;
+      }
+    } catch {
+    }
+    return false;
+  }
+  async function revealPath(path) {
+    if (!path) return false;
+    try {
+      const uxp = await loadNativeModule("uxp");
+      if (typeof uxp?.shell?.openPath === "function") {
+        await uxp.shell.openPath(path);
+        return true;
+      }
+      if (typeof uxp?.shell?.showItemInFolder === "function") {
+        await uxp.shell.showItemInFolder(path);
+        return true;
+      }
+    } catch (error) {
+      console.warn("[VIDEON] revealPath failed", error);
+    }
+    return false;
+  }
+  function sequenceKey(seq) {
+    if (!seq) return "";
+    try {
+      if (seq.guid != null) return String(seq.guid);
+    } catch {
+    }
+    try {
+      if (typeof seq.getId === "function") return String(seq.getId());
+    } catch {
+    }
+    return String(seq.name || "");
+  }
+  async function listSequenceSnapshot(project) {
+    if (typeof project.getSequences !== "function") return [];
+    try {
+      const list = await project.getSequences();
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+  async function revealAndPromptOpenCut(input) {
+    const hostInfo2 = input.hostInfo || { id: "PPRO" };
+    if (isAfterEffectsHost(hostInfo2) || hostInfo2.id === "AEFT") {
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: "Open Cut ist nur in Premiere Pro verf\xFCgbar."
+      };
+    }
+    const xmlPath = input.xmlPath;
+    if (!xmlPath) {
+      return { ok: false, mode: "unsupported", message: "XML-Pfad fehlt" };
+    }
+    const clipped = await copyToClipboard(xmlPath);
+    const revealed = await revealPath(input.extractDir || xmlPath);
+    const reason = input.reason ? `
+(${input.reason})` : "";
+    return {
+      ok: true,
+      mode: "reveal_and_prompt",
+      xmlPath,
+      extractDir: input.extractDir || null,
+      cutId: input.cutId,
+      exportId: input.exportId,
+      clipboard: clipped,
+      revealed,
+      banner: OPEN_CUT_HANDOFF_BANNER,
+      message: `${OPEN_CUT_HANDOFF_BANNER}
+${xmlPath}${reason}`
+    };
+  }
+  async function autoImportOpenCutXml(input) {
+    const { xmlPath, binName, cutName } = input;
+    let localPath;
+    try {
+      localPath = assertLocalImportPath(xmlPath);
+    } catch (error) {
+      return {
+        ok: false,
+        mode: "unavailable",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+    const ppro = await getPremiereApi2();
+    if (!ppro?.Project) {
+      return {
+        ok: false,
+        mode: "unavailable",
+        message: "premierepro Modul nicht verf\xFCgbar"
+      };
+    }
+    try {
+      const project = await ppro.Project.getActiveProject();
+      if (!project) {
+        return { ok: false, mode: "unavailable", message: "Kein aktives Premiere-Projekt" };
+      }
+      if (typeof project.importFiles !== "function") {
+        return {
+          ok: false,
+          mode: "unavailable",
+          message: "importFiles fehlt \u2014 Premiere UXP \u2265 25.6 n\xF6tig"
+        };
+      }
+      const before = await listSequenceSnapshot(project);
+      const beforeKeys = new Set(before.map(sequenceKey).filter(Boolean));
+      const bin = await ensureBin(ppro, project, binName || "VIDEON");
+      const imported = await project.importFiles([localPath], true, bin || null, false);
+      if (imported === false) {
+        return { ok: false, mode: "unavailable", message: "importFiles hat false zur\xFCckgegeben" };
+      }
+      await new Promise((r) => setTimeout(r, 200));
+      const after = await listSequenceSnapshot(project);
+      let created = after.find((seq) => {
+        const key = sequenceKey(seq);
+        return key && !beforeKeys.has(key);
+      });
+      if (!created && cutName) {
+        const want = String(cutName).toLowerCase();
+        created = after.find((seq) => String(seq?.name || "").toLowerCase().includes(want));
+      }
+      if (!created && after.length > before.length) {
+        created = after[after.length - 1];
+      }
+      if (created && typeof project.openSequence === "function") {
+        try {
+          await project.openSequence(created);
+        } catch (error) {
+          console.warn("[VIDEON] openSequence after Open Cut failed", error);
+        }
+      }
+      if (created && typeof project.setActiveSequence === "function") {
+        try {
+          await project.setActiveSequence(created);
+        } catch {
+        }
+      }
+      const sequenceName = created?.name || pathBasename(localPath).replace(/\.xml$/i, "") || cutName || null;
+      return {
+        ok: true,
+        mode: "auto_import",
+        sequenceName,
+        message: sequenceName ? `Sequenz importiert: ${sequenceName}` : `XMEML importiert (${pathBasename(localPath)}) \u2014 Sequenz in Projekt pr\xFCfen`
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        mode: "unavailable",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+  async function openCutInPremiere(input) {
+    const hostInfo2 = input.hostInfo || { id: "PPRO" };
+    if (isAfterEffectsHost(hostInfo2) || hostInfo2.id === "AEFT") {
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: "Open Cut ist nur in Premiere Pro verf\xFCgbar."
+      };
+    }
+    const auto = await autoImportOpenCutXml({
+      xmlPath: input.xmlPath,
+      binName: input.binName || "VIDEON",
+      cutName: input.cutName
+    });
+    if (auto.ok) {
+      return {
+        ok: true,
+        mode: "auto_import",
+        xmlPath: input.xmlPath,
+        extractDir: input.extractDir || null,
+        cutId: input.cutId,
+        exportId: input.exportId,
+        sequenceName: auto.sequenceName || null,
+        message: auto.message
+      };
+    }
+    console.warn("[VIDEON] auto_import failed \u2192 reveal_and_prompt", auto.message);
+    return revealAndPromptOpenCut({
+      ...input,
+      reason: `Auto-Import: ${auto.message}`
+    });
+  }
+
+  // src/open-cut.js
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error("aborted"));
+        return;
+      }
+      const t = setTimeout(resolve, ms);
+      if (signal) {
+        const prev = signal.onabort;
+        signal.onabort = (event) => {
+          try {
+            if (typeof prev === "function") prev.call(signal, event);
+          } catch {
+          }
+          clearTimeout(t);
+          reject(new Error("aborted"));
+        };
+      }
+    });
+  }
+  async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase) {
+    onPhase?.(OPEN_CUT_PHASE.export);
+    const existing = await listCutExports(settings, cut.id, platformProjectId, signal);
+    const reusable = pickReusablePremiereExport(cut, existing);
+    if (reusable) return reusable;
+    const enqueued = await enqueuePremiereExport(
+      settings,
+      cut.id,
+      platformProjectId,
+      openCutIdempotencyKey(cut),
+      signal
+    );
+    const started = Date.now();
+    let attempt = 0;
+    let current = enqueued;
+    while (current.status !== "succeeded") {
+      if (signal?.aborted) throw new Error("aborted");
+      if (current.status === "failed" || current.status === "cancelled") {
+        throw new Error(current.errorMessage || `Export ${current.status}`);
+      }
+      if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) {
+        throw new Error("Export Timeout (10 Min.)");
+      }
+      await sleep(nextPollDelayMs(attempt), signal);
+      attempt += 1;
+      const detail = await getCutExport(settings, cut.id, current.id, platformProjectId, signal);
+      current = detail?.export || current;
+      if (detail?.export?.status === "succeeded" && detail.downloadUrl) {
+        return { ...detail.export, _downloadUrl: detail.downloadUrl };
+      }
+    }
+    const finalDetail = await getCutExport(settings, cut.id, current.id, platformProjectId, signal);
+    return {
+      ...finalDetail?.export || current,
+      _downloadUrl: finalDetail?.downloadUrl || null
+    };
+  }
+  async function runOpenCut(input) {
+    const {
+      settings,
+      cut,
+      platformProjectId,
+      hostInfo: hostInfo2,
+      signal,
+      handoff = true,
+      onPhase
+    } = input;
+    const emit = (phase, extra) => {
+      onPhase?.(phase, phaseLabel(phase, extra));
+    };
+    if (isAfterEffectsHost(hostInfo2) || hostInfo2?.id === "AEFT") {
+      emit(OPEN_CUT_PHASE.error, "nur Premiere");
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: "Open Cut ist nur in Premiere Pro verf\xFCgbar."
+      };
+    }
+    if (!platformProjectId) {
+      emit(OPEN_CUT_PHASE.error, "Collection fehlt");
+      return { ok: false, mode: "unsupported", message: "Collection pinnen, dann Cuts \xF6ffnen." };
+    }
+    if (!cut?.id) {
+      emit(OPEN_CUT_PHASE.error, "Cut fehlt");
+      return { ok: false, mode: "unsupported", message: "Kein Cut gew\xE4hlt." };
+    }
+    try {
+      let exportJob = await ensurePremiereExport(settings, cut, platformProjectId, signal, emit);
+      let downloadUrl = exportJob._downloadUrl;
+      if (!downloadUrl) {
+        emit(OPEN_CUT_PHASE.export);
+        const detail = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal);
+        exportJob = detail?.export || exportJob;
+        downloadUrl = detail?.downloadUrl;
+        if (exportJob.status !== "succeeded") {
+          const started = Date.now();
+          let attempt = 0;
+          while (exportJob.status !== "succeeded") {
+            if (exportJob.status === "failed" || exportJob.status === "cancelled") {
+              throw new Error(exportJob.errorMessage || `Export ${exportJob.status}`);
+            }
+            if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error("Export Timeout");
+            await sleep(nextPollDelayMs(attempt), signal);
+            attempt += 1;
+            const again = await getCutExport(settings, cut.id, exportJob.id, platformProjectId, signal);
+            exportJob = again?.export || exportJob;
+            downloadUrl = again?.downloadUrl;
+          }
+        }
+      }
+      if (!downloadUrl) throw new Error("downloadUrl nach Export fehlt");
+      emit(OPEN_CUT_PHASE.download);
+      const zipBuffer = await downloadExportZip(downloadUrl, signal);
+      const cacheKey = openCutCacheKey(cut.id, exportJob.id, exportJob.bytes ?? zipBuffer.byteLength);
+      emit(OPEN_CUT_PHASE.extract);
+      const extracted = await extractOpenCutZip(cacheKey, zipBuffer);
+      if (!handoff) {
+        emit(OPEN_CUT_PHASE.done, "ZIP bereit");
+        return {
+          ok: true,
+          mode: "cache_only",
+          cutId: cut.id,
+          exportId: exportJob.id,
+          xmlPath: extracted.xmlNativePath,
+          extractDir: extracted.extractDir,
+          message: `ZIP bereit:
+${extracted.xmlNativePath}`
+        };
+      }
+      emit(OPEN_CUT_PHASE.import);
+      const opened = await openCutInPremiere({
+        xmlPath: extracted.xmlNativePath,
+        extractDir: extracted.extractDir,
+        cutId: cut.id,
+        exportId: exportJob.id,
+        hostInfo: hostInfo2,
+        binName: settings.binName || "VIDEON",
+        cutName: cut.name
+      });
+      if (!opened.ok) {
+        emit(OPEN_CUT_PHASE.error, opened.message || "import");
+        return opened;
+      }
+      if (opened.mode === "reveal_and_prompt") {
+        emit(OPEN_CUT_PHASE.handoff);
+      }
+      emit(OPEN_CUT_PHASE.done, opened.mode);
+      return {
+        ...opened,
+        message: opened.message
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "aborted") {
+        emit(OPEN_CUT_PHASE.error, "abgebrochen");
+        return { ok: false, mode: "unsupported", message: "Abgebrochen." };
+      }
+      emit(OPEN_CUT_PHASE.error, msg.slice(0, 80));
+      return { ok: false, mode: "error", message: msg };
+    }
+  }
+
+  // src/premiere-capture.js
+  async function getPremiereApi3() {
+    try {
+      return await loadNativeModule("premierepro");
+    } catch {
+      return null;
+    }
+  }
+  async function writePathInDataFolder(fileName) {
+    const uxp = await loadNativeModule("uxp");
+    const fs = uxp.storage?.localFileSystem;
+    if (!fs?.getDataFolder) throw new Error("UXP localFileSystem fehlt");
+    const folder = await fs.getDataFolder();
+    let pushRoot = folder;
+    try {
+      if (typeof folder.createFolder === "function") {
+        const entries = typeof folder.getEntries === "function" ? await folder.getEntries() : [];
+        const existing = entries.find((e) => e?.name === "pushback" && e.isFolder);
+        pushRoot = existing || await folder.createFolder("pushback");
+      }
+    } catch {
+      pushRoot = folder;
+    }
+    const file = await pushRoot.createFile(fileName, { overwrite: true });
+    try {
+      await file.write("", { format: uxp.storage.formats.utf8 });
+    } catch {
+      try {
+        await file.write(new ArrayBuffer(0), { format: uxp.storage.formats.binary });
+      } catch {
+      }
+    }
+    if (!file.nativePath) throw new Error("nativePath f\xFCr Export fehlt");
+    return file;
+  }
+  async function readUtf8File(file) {
+    const uxp = await loadNativeModule("uxp");
+    const data = await file.read({ format: uxp.storage.formats.utf8 });
+    return String(data || "");
+  }
+  async function captureActiveSequenceXml() {
+    const ppro = await getPremiereApi3();
+    if (!ppro) {
+      return { ok: false, mode: "unavailable", message: "premierepro Modul fehlt" };
+    }
+    try {
+      const project = await ppro.Project.getActiveProject();
+      if (!project) {
+        return { ok: false, mode: "unavailable", message: "Kein aktives Premiere-Projekt" };
+      }
+      const sequence = typeof project.getActiveSequence === "function" && await project.getActiveSequence() || null;
+      if (!sequence) {
+        return { ok: false, mode: "unavailable", message: "Keine aktive Sequenz" };
+      }
+      const Converter = ppro.ProjectConverter;
+      const exportFn = Converter && typeof Converter.exportAsFinalCutProXML === "function" && Converter.exportAsFinalCutProXML || typeof project.exportAsFinalCutProXML === "function" && project.exportAsFinalCutProXML.bind(project) || null;
+      if (exportFn) {
+        const stamp = Date.now();
+        const file = await writePathInDataFolder(`pushback-${stamp}.xml`);
+        const path = file.nativePath;
+        let ok;
+        if (Converter && exportFn === Converter.exportAsFinalCutProXML) {
+          ok = await Converter.exportAsFinalCutProXML(sequence, path, true);
+        } else {
+          ok = await exportFn(path, true);
+        }
+        if (ok === false) {
+          return {
+            ok: false,
+            mode: "unavailable",
+            message: "exportAsFinalCutProXML hat false zur\xFCckgegeben"
+          };
+        }
+        const xml = await readUtf8File(file);
+        if (!xml || xml.length < 40) {
+          return { ok: false, mode: "unavailable", message: "Export-XML leer" };
+        }
+        return { ok: true, mode: "host_export", xml, path, sequenceName: sequence.name || null };
+      }
+      return pickXmlFileFallback();
+    } catch (error) {
+      console.warn("[VIDEON] captureActiveSequenceXml failed", error);
+      return pickXmlFileFallback(error instanceof Error ? error.message : String(error));
+    }
+  }
+  async function pickXmlFileFallback(reason) {
+    try {
+      const uxp = await loadNativeModule("uxp");
+      const fs = uxp.storage?.localFileSystem;
+      if (typeof fs?.getFileForOpening !== "function") {
+        return {
+          ok: false,
+          mode: "unsupported",
+          message: (reason ? `${reason}. ` : "") + "Sequenz-Export API fehlt (Premiere \u2265 26.2) und kein Datei-Dialog."
+        };
+      }
+      const file = await fs.getFileForOpening({
+        types: ["xml"],
+        allowMultiple: false
+      });
+      if (!file) {
+        return { ok: false, mode: "unsupported", message: "Kein XML gew\xE4hlt." };
+      }
+      const xml = await readUtf8File(file);
+      if (!xml) return { ok: false, mode: "unsupported", message: "XML leer." };
+      return {
+        ok: true,
+        mode: "file_pick",
+        xml,
+        path: file.nativePath || null,
+        message: reason ? `Host-Export fehlgeschlagen (${reason}) \u2014 Datei verwendet.` : void 0
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  // src/xmeml-pushback.js
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function framesToMs(frames, fps) {
+    const rate = fps > 0 ? fps : 25;
+    const f = Number(frames);
+    if (!Number.isFinite(f)) return 0;
+    return Math.max(0, Math.round(f / rate * 1e3));
+  }
+  function pathBasenameFromUrl(pathurl) {
+    const raw = String(pathurl || "").replace(/^file:\/+/i, "").replace(/^localhost\/+/i, "").replace(/\\/g, "/");
+    const parts = raw.split("/").filter(Boolean);
+    const name = parts[parts.length - 1] || raw;
+    try {
+      return decodeURIComponent(name);
+    } catch {
+      return name;
+    }
+  }
+  function normalizeFilenameKey(name) {
+    const base3 = String(name || "").split(/[/\\]/).pop()?.trim();
+    if (!base3) return "";
+    try {
+      return decodeURIComponent(base3).toLowerCase();
+    } catch {
+      return base3.toLowerCase();
+    }
+  }
+  function firstMatch(xml, re) {
+    const m = String(xml || "").match(re);
+    return m ? m[1] : null;
+  }
+  function parseSequenceTimebase(xml) {
+    const tb = firstMatch(xml, /<sequence[\s\S]*?<rate>[\s\S]*?<timebase>(\d+)<\/timebase>/i) || firstMatch(xml, /<timebase>(\d+)<\/timebase>/i);
+    const n = Number(tb);
+    return Number.isFinite(n) && n > 0 ? n : 25;
+  }
+  function mediaAssetIdFromFileId(fileId) {
+    const raw = String(fileId || "").trim();
+    if (!raw) return null;
+    const stripped = raw.replace(/^file-/i, "").trim();
+    if (!stripped || stripped === raw) return null;
+    if (UUID_RE.test(stripped)) return stripped;
+    if (/^\d+$/.test(stripped)) return null;
+    if (stripped.length >= 8 && /[a-z]/i.test(stripped)) return stripped;
+    return null;
+  }
+  function extractFileRegistry(xml) {
+    const registry = {};
+    const re = /<file\b([^>]*)>([\s\S]*?)<\/file>/gi;
+    let m;
+    while (m = re.exec(String(xml || ""))) {
+      const attrs = m[1] || "";
+      const body = m[2] || "";
+      const id = firstMatch(attrs, /\bid\s*=\s*"([^"]+)"/i) || firstMatch(attrs, /\bid\s*=\s*'([^']+)'/i);
+      if (!id) continue;
+      if (!body.trim()) continue;
+      const pathurl = firstMatch(body, /<pathurl>([\s\S]*?)<\/pathurl>/i);
+      const name = (firstMatch(body, /<name>([\s\S]*?)<\/name>/i) || "").trim() || null;
+      const filename = pathBasenameFromUrl(pathurl) || name;
+      registry[id] = {
+        id,
+        name,
+        pathurl: pathurl || null,
+        filename: filename || null,
+        mediaAssetId: mediaAssetIdFromFileId(id)
+      };
+    }
+    return registry;
+  }
+  function trackLooksLikeVideo(openTag, body, name) {
+    const hasVideoClip = /premiereChannelType\s*=\s*["']video["']/i.test(body);
+    const hasAudioClipOnly = /premiereChannelType\s*=\s*["']audio["']/i.test(body) && !hasVideoClip;
+    if (hasAudioClipOnly) return false;
+    if (/premiereTrackType\s*=\s*["']Stereo["']/i.test(openTag) && !hasVideoClip) return false;
+    if (/^a\d+$/i.test(name) || /^audio\b/i.test(name)) return false;
+    if (hasVideoClip) return true;
+    if (/^v\d+$/i.test(name) || /^video\s*\d*$/i.test(name) || /^main$/i.test(name)) return true;
+    if (/<sourcetrack>[\s\S]*?<mediatype>\s*video\s*<\/mediatype>/i.test(body)) return true;
+    if (/<clipitem\b/i.test(body) && /<file\b/i.test(body) && !/<sourcetrack>[\s\S]*?<mediatype>\s*audio\s*<\/mediatype>/i.test(body)) {
+      return true;
+    }
+    return false;
+  }
+  function extractVideoTracks(xml) {
+    const tracks = [];
+    const re = /<track\b([^>]*)>([\s\S]*?)<\/track>/gi;
+    let m;
+    while (m = re.exec(String(xml || ""))) {
+      const openTag = m[0].slice(0, m[0].indexOf(">") + 1);
+      const body = m[2];
+      const name = (firstMatch(body, /<name>([\s\S]*?)<\/name>/i) || "").trim();
+      if (!/<clipitem\b/i.test(body)) continue;
+      if (!trackLooksLikeVideo(openTag, body, name)) continue;
+      tracks.push({ name, body });
+    }
+    tracks.sort((a, b) => {
+      const rank = (n) => /^v1$/i.test(n) ? 0 : /^v2$/i.test(n) ? 1 : /^video\s*1$/i.test(n) ? 0 : 2;
+      return rank(a.name) - rank(b.name);
+    });
+    return tracks;
+  }
+  function pickV1Track(tracks) {
+    if (!tracks?.length) return null;
+    const byName = tracks.find(
+      (t) => /^v1$/i.test(t.name) || /^video\s*1$/i.test(t.name) || /main/i.test(t.name)
+    );
+    return byName || tracks[0];
+  }
+  function extractClipItems(trackBody) {
+    const clips = [];
+    const re = /<clipitem\b[^>]*>([\s\S]*?)<\/clipitem>/gi;
+    let m;
+    while (m = re.exec(trackBody || "")) {
+      clips.push(m[1]);
+    }
+    return clips;
+  }
+  function parseClipItem(body, fps, fileRegistry) {
+    const name = (firstMatch(body, /<name>([\s\S]*?)<\/name>/i) || "").trim();
+    const start = Number(firstMatch(body, /<start>(-?\d+)<\/start>/i));
+    const end = Number(firstMatch(body, /<end>(-?\d+)<\/end>/i));
+    const inn = Number(firstMatch(body, /<in>(-?\d+)<\/in>/i));
+    const out = Number(firstMatch(body, /<out>(-?\d+)<\/out>/i));
+    const fileIdAttr = firstMatch(body, /<file\b[^>]*\bid="([^"]+)"/i) || firstMatch(body, /<file\b[^>]*\bid='([^']+)'/i);
+    const inlinePathurl = firstMatch(body, /<pathurl>([\s\S]*?)<\/pathurl>/i);
+    const inlineFileName = firstMatch(body, /<file\b[\s\S]*?<name>([\s\S]*?)<\/name>/i);
+    const enabledRaw = firstMatch(body, /<enabled>([\s\S]*?)<\/enabled>/i);
+    const enabled = !enabledRaw || /true/i.test(enabledRaw);
+    const fileMeta = fileIdAttr && fileRegistry?.[fileIdAttr] || null;
+    const pathurl = inlinePathurl || fileMeta?.pathurl || null;
+    const fileNameTag = (inlineFileName || "").trim() || fileMeta?.name || null;
+    let mediaAssetId = mediaAssetIdFromFileId(fileIdAttr) || fileMeta?.mediaAssetId || null;
+    const filename = pathBasenameFromUrl(pathurl) || fileNameTag || fileMeta?.filename || name || null;
+    if (!Number.isFinite(inn) || !Number.isFinite(out) || out <= inn) return null;
+    if (!enabled) return { skipped: true, reason: "disabled" };
+    if (start < 0 || end < 0) return { skipped: true, reason: "gap" };
+    return {
+      name,
+      filename,
+      mediaAssetId,
+      fileId: fileIdAttr,
+      pathurl: pathurl || null,
+      startMs: framesToMs(inn, fps),
+      endMs: framesToMs(out, fps),
+      timelineStartMs: framesToMs(start, fps),
+      timelineEndMs: framesToMs(end, fps)
+    };
+  }
+  function parsePremiereTimelineXml(xml) {
+    const ignored = [];
+    if (!xml || !/<xmeml|<xmeml\b|<fcpxml|<sequence/i.test(xml)) {
+      return { fps: 25, v1: [], ignored: ["not_xml_timeline"], trackName: null, fileCount: 0 };
+    }
+    if (/transitionitem/i.test(xml)) ignored.push("transitions");
+    if (/effect\b/i.test(xml) && /<effect/i.test(xml)) ignored.push("effects");
+    const fps = parseSequenceTimebase(xml);
+    const fileRegistry = extractFileRegistry(xml);
+    const tracks = extractVideoTracks(xml);
+    if (tracks.length > 1) {
+      const extra = tracks.slice(1).map((t) => t.name || "video");
+      if (extra.some((n) => /^v2$/i.test(n) || /^video\s*2$/i.test(n))) ignored.push("v2_not_applied_p0");
+      else if (extra.length) ignored.push("extra_video_tracks");
+    }
+    const v1Track = pickV1Track(tracks);
+    if (!v1Track) {
+      return {
+        fps,
+        v1: [],
+        ignored: [...ignored, "no_video_track"],
+        trackName: null,
+        fileCount: Object.keys(fileRegistry).length
+      };
+    }
+    const v1 = [];
+    for (const body of extractClipItems(v1Track.body)) {
+      const clip = parseClipItem(body, fps, fileRegistry);
+      if (!clip) {
+        ignored.push("unparsed_clip");
+        continue;
+      }
+      if (clip.skipped) {
+        ignored.push(clip.reason || "skipped_clip");
+        continue;
+      }
+      v1.push(clip);
+    }
+    return {
+      fps,
+      v1,
+      ignored: [...new Set(ignored)],
+      trackName: v1Track.name || "V1",
+      fileCount: Object.keys(fileRegistry).length
+    };
+  }
+  function catalogLookupKeys(clip) {
+    const keys = [];
+    for (const n of [clip.filename, clip.name, pathBasenameFromUrl(clip.pathurl)]) {
+      const k = normalizeFilenameKey(n);
+      if (k) keys.push(k);
+    }
+    return [...new Set(keys)];
+  }
+  function mapClipsToMedia(clips, catalog) {
+    const byFilename = catalog?.byFilename || {};
+    const byId = catalog?.byId || {};
+    const mapped = [];
+    const unmapped = [];
+    for (const clip of clips) {
+      let mediaAssetId = clip.mediaAssetId;
+      if (mediaAssetId && byId[mediaAssetId]) {
+        mapped.push({ ...clip, mediaAssetId, mapVia: "file_id" });
+        continue;
+      }
+      if (mediaAssetId && !byId[mediaAssetId]) {
+        mediaAssetId = null;
+      }
+      let fromName = null;
+      let hitKey = null;
+      for (const key of catalogLookupKeys(clip)) {
+        if (byFilename[key]) {
+          fromName = byFilename[key];
+          hitKey = key;
+          break;
+        }
+      }
+      if (fromName) {
+        mapped.push({
+          ...clip,
+          mediaAssetId: fromName,
+          mapVia: "filename",
+          mapKey: hitKey
+        });
+        continue;
+      }
+      unmapped.push(clip);
+    }
+    return { mapped, unmapped };
+  }
+  function normalizeCutDetailScenes(detail) {
+    if (Array.isArray(detail?.scenes) && detail.scenes.length) {
+      return detail.scenes;
+    }
+    if (Array.isArray(detail?.clips)) {
+      return detail.clips.map((row) => {
+        const scene = row?.scene || row;
+        if (!scene?.mediaAssetId && !row?.media?.id) return null;
+        return {
+          id: scene.id,
+          mediaAssetId: scene.mediaAssetId || row.media?.id,
+          startMs: scene.startMs,
+          endMs: scene.endMs,
+          timelineStartMs: scene.timelineStartMs,
+          originalFilename: row.media?.originalFilename || row.media?.filename || scene.originalFilename,
+          mediaFilename: row.media?.filename,
+          media: row.media
+        };
+      }).filter(Boolean);
+    }
+    return [];
+  }
+  function indexFilename(byFilename, name, id) {
+    const key = normalizeFilenameKey(name);
+    if (key) byFilename[key] = id;
+  }
+  function buildMediaCatalogFromCutDetail(detail) {
+    const byId = {};
+    const byFilename = {};
+    const scenes = normalizeCutDetailScenes(detail);
+    for (const scene of scenes) {
+      const id = scene?.mediaAssetId || scene?.media?.id;
+      if (!id) continue;
+      byId[id] = true;
+      const names = [
+        scene.originalFilename,
+        scene.mediaFilename,
+        scene.media?.originalFilename,
+        scene.media?.filename,
+        scene.filename
+      ];
+      for (const n of names) indexFilename(byFilename, n, id);
+    }
+    return { byId, byFilename };
+  }
+  function buildMediaCatalogFromMediaList(items) {
+    const byId = {};
+    const byFilename = {};
+    for (const item of items || []) {
+      const id = item?.id || item?.mediaAssetId;
+      if (!id) continue;
+      byId[id] = true;
+      for (const n of [item.originalFilename, item.filename, item.name]) {
+        indexFilename(byFilename, n, id);
+      }
+    }
+    return { byId, byFilename };
+  }
+  function mergeMediaCatalogs(...catalogs) {
+    const byId = {};
+    const byFilename = {};
+    for (const c of catalogs) {
+      Object.assign(byId, c?.byId || {});
+      Object.assign(byFilename, c?.byFilename || {});
+    }
+    return { byId, byFilename };
+  }
+  function diffV1Timelines(currentScenes, mappedClips) {
+    const current = (currentScenes || []).map((s) => ({
+      mediaAssetId: s.mediaAssetId,
+      startMs: s.startMs,
+      endMs: s.endMs,
+      timelineStartMs: s.timelineStartMs ?? 0
+    }));
+    const next = (mappedClips || []).map((c) => ({
+      mediaAssetId: c.mediaAssetId,
+      startMs: c.startMs,
+      endMs: c.endMs,
+      timelineStartMs: c.timelineStartMs ?? 0
+    }));
+    const sameLength = current.length === next.length;
+    let changed = current.length !== next.length;
+    const pairChanges = [];
+    const n = Math.min(current.length, next.length);
+    for (let i = 0; i < n; i += 1) {
+      const a = current[i];
+      const b = next[i];
+      if (a.mediaAssetId !== b.mediaAssetId || a.startMs !== b.startMs || a.endMs !== b.endMs || a.timelineStartMs !== b.timelineStartMs) {
+        changed = true;
+        pairChanges.push(i);
+      }
+    }
+    return {
+      currentCount: current.length,
+      nextCount: next.length,
+      changed,
+      sameLength,
+      changedIndexes: pairChanges,
+      summary: changed ? `V1: ${current.length} \u2192 ${next.length} Clips` + (pairChanges.length ? ` \xB7 ${pairChanges.length} ge\xE4ndert` : "") : "V1 unver\xE4ndert"
+    };
+  }
+  function newSceneId() {
+    const bytes = new Uint8Array(16);
+    if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+      crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < 16; i += 1) bytes[i] = Math.random() * 256 | 0;
+    }
+    bytes[6] = bytes[6] & 15 | 64;
+    bytes[8] = bytes[8] & 63 | 128;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  var MIN_PUSHBACK_CLIP_MS = 500;
+  function mappedClipsToRestoreScenes(mappedClips, newId = newSceneId) {
+    let clampedCount = 0;
+    const scenes = (mappedClips || []).map((clip, position) => {
+      const startMs = Math.max(0, Math.floor(Number(clip.startMs) || 0));
+      let endMs = Math.max(0, Math.floor(Number(clip.endMs) || 0));
+      if (endMs - startMs < MIN_PUSHBACK_CLIP_MS) {
+        endMs = startMs + MIN_PUSHBACK_CLIP_MS;
+        clampedCount += 1;
+      }
+      const timelineStartMs = Math.max(0, Math.floor(Number(clip.timelineStartMs) || 0));
+      return {
+        id: newId(),
+        position,
+        mediaAssetId: clip.mediaAssetId,
+        startMs,
+        endMs,
+        timelineStartMs
+      };
+    });
+    return { scenes, clampedCount };
+  }
+  function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedCount = 0) {
+    const lines = [diff.summary];
+    if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`);
+    if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf \u2265${MIN_PUSHBACK_CLIP_MS}ms angehoben`);
+    if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(", ")}`);
+    return lines.join("\n");
+  }
+  function formatUnmappedHint(unmapped) {
+    if (!unmapped?.length) return "";
+    const names = unmapped.slice(0, 4).map((c) => c.filename || c.name || c.fileId || "?").join(", ");
+    const more = unmapped.length > 4 ? ` (+${unmapped.length - 4})` : "";
+    return ` (${names}${more})`;
+  }
+
+  // src/cut-pushback.js
+  async function previewCutPushback(input) {
+    const { settings, cut, platformProjectId, hostInfo: hostInfo2, signal } = input;
+    if (isAfterEffectsHost(hostInfo2) || hostInfo2?.id === "AEFT") {
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: "Cut aktualisieren nur in Premiere Pro."
+      };
+    }
+    if (!platformProjectId || !cut?.id) {
+      return { ok: false, mode: "unsupported", message: "Collection/Cut fehlt." };
+    }
+    const captured = await captureActiveSequenceXml();
+    if (!captured.ok || !captured.xml) {
+      return {
+        ok: false,
+        mode: captured.mode || "unsupported",
+        message: captured.message || "Sequenz-Capture fehlgeschlagen."
+      };
+    }
+    const detail = await getCutDetail(settings, cut.id, platformProjectId, signal);
+    const mediaItems = await listWorkspaceMedia(settings, platformProjectId, signal).catch(() => []);
+    const catalog = mergeMediaCatalogs(
+      buildMediaCatalogFromCutDetail(detail),
+      buildMediaCatalogFromMediaList(mediaItems)
+    );
+    const parsed = parsePremiereTimelineXml(captured.xml);
+    if (!parsed.v1.length) {
+      return {
+        ok: false,
+        mode: "apply_rejected",
+        message: "Keine V1-Clips in der Sequenz-XML gefunden" + (parsed.ignored?.length ? ` (${parsed.ignored.join(", ")})` : "") + ".",
+        ignored: parsed.ignored,
+        unmapped: [],
+        captureMode: captured.mode
+      };
+    }
+    const { mapped, unmapped } = mapClipsToMedia(parsed.v1, catalog);
+    if (!mapped.length) {
+      return {
+        ok: false,
+        mode: "apply_rejected",
+        message: `Keine V1-Clips auf Collection-Medien mappbar${formatUnmappedHint(unmapped)}. Premiere schreibt oft file-1 statt file-{uuid} \u2014 Filename muss zur Mediathek passen.`,
+        ignored: parsed.ignored,
+        unmapped,
+        captureMode: captured.mode
+      };
+    }
+    if (unmapped.length) {
+      return {
+        ok: false,
+        mode: "apply_rejected",
+        message: `${unmapped.length} Clip(s) ohne mediaAssetId \u2014 Apply blockiert${formatUnmappedHint(unmapped)}.`,
+        ignored: parsed.ignored,
+        unmapped,
+        mapped,
+        captureMode: captured.mode
+      };
+    }
+    const scenes = normalizeCutDetailScenes(detail);
+    const diff = diffV1Timelines(scenes, mapped);
+    const { scenes: restoreScenes, clampedCount } = mappedClipsToRestoreScenes(mapped);
+    const message = formatPushbackDiffMessage(diff, parsed.ignored, 0, clampedCount);
+    return {
+      ok: true,
+      mode: "preview_diff",
+      message,
+      diff,
+      ignored: parsed.ignored,
+      mapped,
+      restoreScenes,
+      clampedCount,
+      captureMode: captured.mode,
+      sequenceName: captured.sequenceName || null,
+      needsParityRefresh: (parsed.ignored || []).length > 0 || clampedCount > 0,
+      cutId: cut.id,
+      platformProjectId
+    };
+  }
+  async function applyCutPushback(input) {
+    const { settings, cutId, platformProjectId, restoreScenes, signal } = input;
+    if (!restoreScenes?.length) {
+      return { ok: false, mode: "apply_rejected", message: "Keine Scenes zum Restore." };
+    }
+    const result = await restoreCutFromPushback(
+      settings,
+      cutId,
+      platformProjectId,
+      restoreScenes,
+      signal
+    );
+    return {
+      ok: true,
+      mode: "apply_replace",
+      message: "Cut aktualisiert.",
+      result
+    };
+  }
+
+  // src/cut-link-store.js
+  var KEY = "videon.adobe.cutSequenceLinks";
+  function readCutLinks() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
+      return raw && typeof raw === "object" ? raw : {};
+    } catch {
+      return {};
+    }
+  }
+  function writeCutLinks(map) {
+    localStorage.setItem(KEY, JSON.stringify(map));
+  }
+  function saveCutSequenceLink(link) {
+    if (!link?.cutId || !link?.platformProjectId) return null;
+    const map = readCutLinks();
+    const key = `${link.platformProjectId}:${link.cutId}`;
+    map[key] = {
+      cutId: link.cutId,
+      platformProjectId: link.platformProjectId,
+      sequenceName: link.sequenceName || null,
+      exportId: link.exportId || null,
+      openedAt: link.openedAt || (/* @__PURE__ */ new Date()).toISOString()
+    };
+    writeCutLinks(map);
+    return map[key];
+  }
+
+  // src/collections.js
+  function normalizeCollections(payload) {
+    const items = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : [];
+    const out = [];
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const id = typeof item.id === "string" ? item.id.trim() : "";
+      const name = typeof item.name === "string" ? item.name.trim() : "";
+      if (!id || !name) continue;
+      out.push({
+        id,
+        name,
+        status: typeof item.status === "string" ? item.status : "active"
+      });
+    }
+    return out;
+  }
+
+  // src/hit-model.js
+  function formatSceneHitClock(ms) {
+    const total = Math.max(0, Math.floor(ms / 1e3));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  function sceneHitTimingLabel(hit) {
+    if (hit.startMs != null && hit.endMs != null) {
+      return `${formatSceneHitClock(hit.startMs)}\u2013${formatSceneHitClock(hit.endMs)}`;
+    }
+    if (hit.startMs != null) return formatSceneHitClock(hit.startMs);
+    return null;
+  }
+  function sceneHitDurationLabel(hit) {
+    if (hit.startMs == null || hit.endMs == null || hit.endMs < hit.startMs) return null;
+    return formatSceneHitClock(hit.endMs - hit.startMs);
+  }
+  function formatRank(rank) {
+    const n = Number(rank);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return n.toFixed(2);
+  }
+  function buildHitHref(hit) {
+    if (!hit?.mediaAssetId || !hit?.platformProjectId) return null;
+    const params = new URLSearchParams({ platformProjectId: hit.platformProjectId });
+    if (hit.startMs != null && hit.startMs >= 0) params.set("t", String(Math.floor(hit.startMs)));
+    if (hit.sceneKey?.trim()) params.set("scene", hit.sceneKey.trim());
+    return `/media/${encodeURIComponent(hit.mediaAssetId)}?${params.toString()}`;
+  }
+  function normalizeSearchHit(raw) {
+    const mediaAssetId = String(raw.mediaAssetId || "");
+    const platformProjectId = String(raw.platformProjectId || "");
+    const startMs = raw.startMs == null ? null : Number(raw.startMs);
+    const endMs = raw.endMs == null ? null : Number(raw.endMs);
+    const sceneKey = raw.sceneKey == null ? null : String(raw.sceneKey);
+    const rank = raw.rank == null ? null : Number(raw.rank);
+    const hit = {
+      id: String(raw.id || `${mediaAssetId}:${sceneKey || "asset"}`),
+      mediaAssetId,
+      platformProjectId,
+      sceneKey,
+      mediaFilename: String(raw.mediaFilename || raw.filename || "Untitled"),
+      startMs: Number.isFinite(startMs) ? startMs : null,
+      endMs: Number.isFinite(endMs) ? endMs : null,
+      searchText: String(raw.searchText || "").slice(0, 400),
+      projectName: raw.projectName == null ? null : String(raw.projectName),
+      rank: Number.isFinite(rank) ? rank : null,
+      href: raw.href ? String(raw.href) : null
+    };
+    if (!hit.href) hit.href = buildHitHref(hit);
+    return hit;
+  }
+  function dedupeSearchHits(hits2) {
+    const byKey = /* @__PURE__ */ new Map();
+    for (const hit of hits2) {
+      if (!hit?.mediaAssetId) continue;
+      const key = `${hit.mediaAssetId}::${hit.sceneKey || ""}::${hit.startMs ?? ""}::${hit.endMs ?? ""}`;
+      const prev = byKey.get(key);
+      if (!prev || (hit.rank ?? 0) > (prev.rank ?? 0)) byKey.set(key, hit);
+    }
+    return [...byKey.values()];
+  }
+
   // src/index.js
-  var PANEL_VERSION = "0.1.15";
+  var PANEL_VERSION = "0.1.22";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
@@ -1216,7 +3248,20 @@
       insertBtn: document.getElementById("insert-btn"),
       selectedCount: document.getElementById("selected-count"),
       progress: document.getElementById("progress"),
-      progressBar: document.getElementById("progress-bar")
+      progressBar: document.getElementById("progress-bar"),
+      modeScenesBtn: document.getElementById("mode-scenes-btn"),
+      modeCutsBtn: document.getElementById("mode-cuts-btn"),
+      scenesMode: document.getElementById("scenes-mode"),
+      cutsMode: document.getElementById("cuts-mode"),
+      cutsBanner: document.getElementById("cuts-banner"),
+      cutsList: document.getElementById("cuts-list"),
+      cutsCount: document.getElementById("cuts-count"),
+      cutsRefreshBtn: document.getElementById("cuts-refresh-btn"),
+      pushbackConfirm: document.getElementById("pushback-confirm"),
+      pushbackDiff: document.getElementById("pushback-diff"),
+      pushbackApplyBtn: document.getElementById("pushback-apply-btn"),
+      pushbackRefreshBtn: document.getElementById("pushback-refresh-btn"),
+      pushbackCancelBtn: document.getElementById("pushback-cancel-btn")
     };
   }
   var REQUIRED_EL_IDS = [
@@ -1238,12 +3283,38 @@
   var blobUrls = [];
   var collections = [];
   var searchAbort = null;
+  var cutsAbort = null;
+  var openCutAbort = null;
+  var panelMode = "scenes";
+  var cuts = [];
+  var openCutBusy = false;
+  var pendingPushback = null;
   var hostInfo = { id: "PPRO", source: "default" };
   var aeCursorSec = 0;
   function showBanner(message, tone = "") {
-    els.banner.hidden = !message;
-    els.banner.textContent = message || "";
-    els.banner.className = `banner${tone ? ` ${tone}` : ""}`;
+    const target = panelMode === "cuts" ? els.cutsBanner : els.banner;
+    if (!target) return;
+    target.hidden = !message;
+    target.textContent = message || "";
+    target.className = `banner${tone ? ` ${tone}` : ""}`;
+  }
+  function setPanelMode(mode) {
+    panelMode = mode === "cuts" ? "cuts" : "scenes";
+    els.modeScenesBtn?.classList.toggle("is-active", panelMode === "scenes");
+    els.modeCutsBtn?.classList.toggle("is-active", panelMode === "cuts");
+    els.scenesMode?.classList.toggle("hidden", panelMode !== "scenes");
+    els.cutsMode?.classList.toggle("hidden", panelMode !== "cuts");
+    if (panelMode === "cuts") {
+      searchAbort?.abort();
+      openCutAbort?.abort();
+      openCutBusy = false;
+      void refreshCutsList();
+    } else {
+      cutsAbort?.abort();
+      openCutAbort?.abort();
+      openCutBusy = false;
+      hidePushbackConfirm();
+    }
   }
   function applyHostChrome() {
     const ae = isAfterEffectsHost(hostInfo);
@@ -1361,6 +3432,277 @@
     if (els.collectionSelectMain) els.collectionSelectMain.value = id;
     if (els.defaultProjectId) els.defaultProjectId.value = id;
     saveSettings({ defaultPlatformProjectId: id });
+    if (panelMode === "cuts") void refreshCutsList();
+  }
+  function showCutsBanner(message, tone = "") {
+    if (!els.cutsBanner) return;
+    els.cutsBanner.hidden = !message;
+    els.cutsBanner.textContent = message || "";
+    els.cutsBanner.className = `banner${tone ? ` ${tone}` : ""}`;
+  }
+  function updateCutRowStatus(cutId, text, isError = false) {
+    let card = null;
+    for (const node of els.cutsList?.querySelectorAll(".cut-card") || []) {
+      if (node.getAttribute("data-cut-id") === cutId) {
+        card = node;
+        break;
+      }
+    }
+    if (!card) return;
+    let status = card.querySelector(".cut-card-status");
+    if (!status) {
+      status = document.createElement("div");
+      status.className = "cut-card-status";
+      card.append(status);
+    }
+    status.textContent = text || "";
+    status.classList.toggle("is-error", Boolean(isError));
+    status.hidden = !text;
+    card.classList.toggle("is-busy", Boolean(text) && !isError && openCutBusy);
+  }
+  function buildCutCard(cut) {
+    const card = document.createElement("article");
+    card.className = "cut-card";
+    card.setAttribute("data-cut-id", cut.id);
+    const title = document.createElement("div");
+    title.className = "cut-card-title";
+    title.textContent = cut.name;
+    const meta = document.createElement("div");
+    meta.className = "cut-card-meta";
+    const parts = [canvasLabel(cut)];
+    if (cut.sceneCount != null) parts.push(`${cut.sceneCount} Szenen`);
+    parts.push(formatUpdatedAt(cut.updatedAt));
+    meta.textContent = parts.join(" \xB7 ");
+    const actions = document.createElement("div");
+    actions.className = "cut-card-actions";
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.className = "primary";
+    openBtn.textContent = "In Premiere \xF6ffnen";
+    on(openBtn, "click", (event) => {
+      event.stopPropagation?.();
+      void startOpenCut(cut, true);
+    });
+    const refreshBtn = document.createElement("button");
+    refreshBtn.type = "button";
+    refreshBtn.className = "ghost";
+    refreshBtn.textContent = "Premiere aktualisieren";
+    on(refreshBtn, "click", (event) => {
+      event.stopPropagation?.();
+      void startOpenCut(cut, true);
+    });
+    const cacheBtn = document.createElement("button");
+    cacheBtn.type = "button";
+    cacheBtn.className = "ghost";
+    cacheBtn.textContent = "ZIP cachen";
+    on(cacheBtn, "click", (event) => {
+      event.stopPropagation?.();
+      void startOpenCut(cut, false);
+    });
+    const pushBtn = document.createElement("button");
+    pushBtn.type = "button";
+    pushBtn.className = "ghost";
+    pushBtn.textContent = "Cut aktualisieren";
+    on(pushBtn, "click", (event) => {
+      event.stopPropagation?.();
+      void startCutPushback(cut);
+    });
+    actions.append(openBtn, refreshBtn, pushBtn, cacheBtn);
+    card.append(title, meta, actions);
+    return card;
+  }
+  function renderCutsList() {
+    if (!els.cutsList) return;
+    if (els.cutsCount) els.cutsCount.textContent = String(cuts.length);
+    if (!cuts.length) {
+      els.cutsList.innerHTML = '<p class="empty">Keine Cuts in dieser Collection.</p>';
+      return;
+    }
+    els.cutsList.innerHTML = "";
+    for (const cut of cuts) els.cutsList.append(buildCutCard(cut));
+  }
+  async function refreshCutsList() {
+    const settings = saveSettings(readFormSettings());
+    const platformProjectId = settings.defaultPlatformProjectId || "";
+    if (!platformProjectId) {
+      cuts = [];
+      if (els.cutsCount) els.cutsCount.textContent = "0";
+      if (els.cutsList) {
+        els.cutsList.innerHTML = '<p class="empty">Collection pinnen (nicht \u201Ealle\u201C), dann Cuts laden.</p>';
+      }
+      showCutsBanner("F\xFCr Cuts eine Collection w\xE4hlen.", "error");
+      return;
+    }
+    if (!settings.apiToken) {
+      showCutsBanner("API Token in den Einstellungen setzen.", "error");
+      return;
+    }
+    cutsAbort?.abort();
+    cutsAbort = new AbortController();
+    const { signal } = cutsAbort;
+    showCutsBanner("Cuts laden\u2026");
+    try {
+      cuts = await listCuts(settings, platformProjectId, signal);
+      if (signal.aborted) return;
+      renderCutsList();
+      showCutsBanner(cuts.length ? `${cuts.length} Cut(s)` : "Keine Cuts.", cuts.length ? "ok" : "");
+    } catch (error) {
+      if (signal.aborted) return;
+      const msg = error instanceof Error ? error.message : String(error);
+      showCutsBanner(msg, "error");
+    }
+  }
+  async function startOpenCut(cut, handoff) {
+    if (openCutBusy) {
+      showCutsBanner("Bitte warten \u2014 Open Cut l\xE4uft bereits.", "error");
+      return;
+    }
+    const settings = saveSettings(readFormSettings());
+    const platformProjectId = settings.defaultPlatformProjectId || "";
+    if (!platformProjectId) {
+      showCutsBanner("Collection pinnen.", "error");
+      return;
+    }
+    if (isAfterEffectsHost(hostInfo)) {
+      showCutsBanner("Open Cut ist nur in Premiere Pro verf\xFCgbar.", "error");
+      return;
+    }
+    openCutBusy = true;
+    openCutAbort?.abort();
+    openCutAbort = new AbortController();
+    const { signal } = openCutAbort;
+    const result = await runOpenCut({
+      settings,
+      cut,
+      platformProjectId,
+      hostInfo,
+      signal,
+      handoff,
+      onPhase: (_phase, label) => {
+        updateCutRowStatus(cut.id, label, false);
+        showCutsBanner(`${cut.name}: ${label}`);
+      }
+    });
+    openCutBusy = false;
+    if (result.ok) {
+      if (handoff && platformProjectId) {
+        saveCutSequenceLink({
+          cutId: cut.id,
+          platformProjectId,
+          sequenceName: result.sequenceName || cut.name,
+          exportId: result.exportId || null,
+          openedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      }
+      updateCutRowStatus(cut.id, result.message || "Fertig", false);
+      showCutsBanner(result.message || "Fertig", "ok");
+    } else {
+      updateCutRowStatus(cut.id, result.message || "Fehler", true);
+      showCutsBanner(result.message || "Fehler", "error");
+    }
+  }
+  function hidePushbackConfirm() {
+    pendingPushback = null;
+    els.pushbackConfirm?.classList.add("hidden");
+    if (els.pushbackDiff) els.pushbackDiff.textContent = "";
+  }
+  function showPushbackConfirm(preview) {
+    pendingPushback = preview;
+    if (els.pushbackDiff) els.pushbackDiff.textContent = preview.message || "";
+    els.pushbackConfirm?.classList.remove("hidden");
+  }
+  async function startCutPushback(cut) {
+    if (openCutBusy) {
+      showCutsBanner("Bitte warten\u2026", "error");
+      return;
+    }
+    const settings = saveSettings(readFormSettings());
+    const platformProjectId = settings.defaultPlatformProjectId || "";
+    if (!platformProjectId) {
+      showCutsBanner("Collection pinnen.", "error");
+      return;
+    }
+    if (isAfterEffectsHost(hostInfo)) {
+      showCutsBanner("Cut aktualisieren nur in Premiere.", "error");
+      return;
+    }
+    openCutBusy = true;
+    hidePushbackConfirm();
+    showCutsBanner(`${cut.name}: Sequenz lesen\u2026`);
+    updateCutRowStatus(cut.id, "Pushback\u2026", false);
+    try {
+      const preview = await previewCutPushback({
+        settings,
+        cut,
+        platformProjectId,
+        hostInfo
+      });
+      openCutBusy = false;
+      if (!preview.ok) {
+        updateCutRowStatus(cut.id, preview.message || "Fehler", true);
+        showCutsBanner(preview.message || "Fehler", "error");
+        return;
+      }
+      if (!preview.diff?.changed) {
+        updateCutRowStatus(cut.id, "Bereits gleich", false);
+        showCutsBanner("Cut entspricht der Sequenz (V1).", "ok");
+        return;
+      }
+      showPushbackConfirm(preview);
+      showCutsBanner("Diff pr\xFCfen und \xFCbernehmen.", "ok");
+      updateCutRowStatus(cut.id, preview.diff.summary, false);
+    } catch (error) {
+      openCutBusy = false;
+      const msg = error instanceof Error ? error.message : String(error);
+      updateCutRowStatus(cut.id, msg, true);
+      showCutsBanner(msg, "error");
+    }
+  }
+  async function confirmPushback(withParityRefresh) {
+    if (!pendingPushback?.restoreScenes?.length) {
+      hidePushbackConfirm();
+      return;
+    }
+    const preview = pendingPushback;
+    const settings = saveSettings(readFormSettings());
+    openCutBusy = true;
+    showCutsBanner("Cut wird geschrieben\u2026");
+    try {
+      const applied = await applyCutPushback({
+        settings,
+        cutId: preview.cutId,
+        platformProjectId: preview.platformProjectId,
+        restoreScenes: preview.restoreScenes
+      });
+      hidePushbackConfirm();
+      if (!applied.ok) {
+        openCutBusy = false;
+        showCutsBanner(applied.message || "Apply fehlgeschlagen", "error");
+        return;
+      }
+      const cut = cuts.find((c) => c.id === preview.cutId) || {
+        id: preview.cutId,
+        name: preview.cutId,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      if (withParityRefresh || preview.needsParityRefresh) {
+        showCutsBanner("Cut OK \u2014 Premiere wird neu geladen\u2026", "ok");
+        openCutBusy = false;
+        await startOpenCut({ ...cut, name: cut.name || preview.sequenceName || cut.id }, true);
+        showCutsBanner(
+          "Cut aktualisiert. Premiere neu geladen \u2014 beide Seiten gleich (Cut-Modell).",
+          "ok"
+        );
+        return;
+      }
+      openCutBusy = false;
+      updateCutRowStatus(preview.cutId, "Cut aktualisiert", false);
+      showCutsBanner("Cut entspricht der Sequenz.", "ok");
+    } catch (error) {
+      openCutBusy = false;
+      hidePushbackConfirm();
+      showCutsBanner(error instanceof Error ? error.message : String(error), "error");
+    }
   }
   function updateSelectionChrome() {
     els.selectedCount.textContent = String(selected.size);
@@ -1461,12 +3803,12 @@
     video.loop = true;
     video.autoplay = true;
     video.playsInline = true;
-    video.preload = "metadata";
+    video.preload = "auto";
     video.setAttribute("muted", "");
     video.setAttribute("loop", "");
     video.setAttribute("autoplay", "");
     video.setAttribute("playsinline", "");
-    video.hidden = true;
+    video.style.display = "none";
     const check = document.createElement("input");
     check.type = "checkbox";
     check.className = "hit-card-check";
@@ -1553,24 +3895,102 @@
     img.src = posterUrl;
     img.classList.remove("hit-ph");
   }
-  function applyPreviewToCard(hitId, previewUrl2) {
-    if (!previewUrl2) return;
+  function applyPreviewToCard(hitId, previewSrcOrList) {
+    const candidates = Array.isArray(previewSrcOrList) ? previewSrcOrList.filter(Boolean) : previewSrcOrList ? [previewSrcOrList] : [];
+    if (!candidates.length) return;
     const card = findHitCard(hitId);
     if (!card) return;
     const video = card.querySelector("video.hit-card-preview");
     const img = card.querySelector("img.hit-card-thumb");
     if (!video) return;
-    video.src = previewUrl2;
-    video.hidden = false;
-    if (img) img.classList.add("hit-thumb-under");
+    let attempt = 0;
+    let settled = false;
+    const hideVideo = () => {
+      video.style.display = "none";
+      video.classList.remove("is-visible");
+      if (img) img.classList.remove("hit-thumb-under");
+    };
+    const startPlayback = () => {
+      if (settled) return;
+      settled = true;
+      video.style.display = "block";
+      video.classList.add("is-visible");
+      if (img) img.classList.add("hit-thumb-under");
+      try {
+        void video.play?.();
+      } catch (error) {
+        console.warn("[VIDEON] video.play threw", hitId, error);
+        settled = false;
+        tryNext();
+      }
+    };
+    const tryNext = () => {
+      if (attempt >= candidates.length) {
+        hideVideo();
+        console.warn("[VIDEON] video: all src candidates failed", hitId, candidates);
+        return;
+      }
+      const src = candidates[attempt];
+      attempt += 1;
+      settled = false;
+      console.info("[VIDEON] video try src", hitId, src);
+      try {
+        video.pause?.();
+      } catch {
+      }
+      video.src = src;
+      try {
+        video.load?.();
+      } catch {
+      }
+      setTimeout(() => {
+        if (!settled && video.readyState >= 2) startPlayback();
+      }, 450);
+    };
+    video.onerror = () => {
+      console.warn(
+        "[VIDEON] video error",
+        hitId,
+        video.error?.message || video.error,
+        "src=",
+        video.src
+      );
+      if (settled) {
+        hideVideo();
+        return;
+      }
+      tryNext();
+    };
+    video.onloadeddata = () => startPlayback();
+    video.oncanplay = () => startPlayback();
+    tryNext();
+  }
+  async function loadPreviewForHit(settings, hit, signal) {
+    const key = previewCacheKey(hit);
     try {
-      const playResult = video.play?.();
-      if (playResult && typeof playResult.catch === "function") {
-        playResult.catch(() => {
+      const cached = await readCachedPreviewBlob(key);
+      if (cached) {
+        const materialized2 = await materializePreview({
+          cacheKey: key,
+          blob: cached,
+          filename: "preview.mp4"
         });
+        if (materialized2?.url) {
+          if (materialized2.via === "blob") blobUrls.push(materialized2.url);
+          return materialized2;
+        }
       }
     } catch {
     }
+    const blob = await fetchPreviewBlob(settings, hit, signal);
+    if (!blob) return null;
+    const materialized = await materializePreview({
+      cacheKey: key,
+      blob,
+      filename: "preview.mp4"
+    });
+    if (materialized?.via === "blob" && materialized.url) blobUrls.push(materialized.url);
+    return materialized;
   }
   async function renderHits(settings, signal) {
     revokeBlobs();
@@ -1606,12 +4026,11 @@
     void mapPool(hits, PREVIEW_CONCURRENCY, async (hit) => {
       if (signal?.aborted) return;
       try {
-        const blob = await fetchPreviewBlob(settings, hit, signal);
-        if (!blob || signal?.aborted) return;
-        const url = URL.createObjectURL(blob);
-        blobUrls.push(url);
-        applyPreviewToCard(hit.id, url);
-      } catch {
+        const materialized = await loadPreviewForHit(settings, hit, signal);
+        if (!materialized?.url || signal?.aborted) return;
+        applyPreviewToCard(hit.id, materialized.urls?.length ? materialized.urls : materialized.url);
+      } catch (error) {
+        console.warn("[VIDEON] preview load failed", hit.id, error);
       }
     });
   }
@@ -1818,6 +4237,21 @@
     })();
   }
   function bindPanel() {
+    on(els.modeScenesBtn, "click", () => setPanelMode("scenes"));
+    on(els.modeCutsBtn, "click", () => setPanelMode("cuts"));
+    on(els.cutsRefreshBtn, "click", () => {
+      void refreshCutsList();
+    });
+    on(els.pushbackApplyBtn, "click", () => {
+      void confirmPushback(false);
+    });
+    on(els.pushbackRefreshBtn, "click", () => {
+      void confirmPushback(true);
+    });
+    on(els.pushbackCancelBtn, "click", () => {
+      hidePushbackConfirm();
+      showCutsBanner("Pushback abgebrochen.");
+    });
     on(els.settingsToggle, "click", () => {
       els.settingsPanel?.classList.toggle("hidden");
       if (els.settingsPanel && !els.settingsPanel.classList.contains("hidden")) void refreshCacheUi(false);
@@ -1856,9 +4290,10 @@
         }
         try {
           const result = await clearCache();
+          const openCut = await clearOpenCutCache().catch(() => ({ deleted: 0 }));
           updateCacheStatsLabel({ count: 0, bytes: 0 });
           if (els.settingsStatus) {
-            els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`;
+            els.settingsStatus.textContent = `Cache geleert (${result.deleted} Media + ${openCut.deleted || 0} Open-Cut)`;
           }
         } catch (error) {
           if (els.settingsStatus) {

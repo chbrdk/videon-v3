@@ -14,8 +14,15 @@ esbuild
     bundle: true,
     outfile: path.join(root, 'src/panel.bundle.js'),
     format: 'iife',
-    platform: 'node',
+    // UXP is browser-like. `platform: 'node'` pulled fflate's Node entry
+    // (`createRequire` / `worker_threads`) and crashed the panel at load.
+    platform: 'browser',
     target: ['es2020'],
+    mainFields: ['browser', 'module', 'main'],
+    conditions: ['browser', 'import', 'default'],
+    alias: {
+      fflate: path.join(root, 'node_modules/fflate/esm/browser.js'),
+    },
     external: ['uxp', 'premierepro', 'aeft', 'aftereffects'],
     logLevel: 'info',
   })

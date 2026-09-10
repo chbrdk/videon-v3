@@ -111,6 +111,9 @@ describe('cut wave 4 contracts', () => {
     expect(src).toContain('videoClips: videoParsed.clips')
     expect(src).toContain('audioClips: audioParsed.clips')
     expect(src).toContain('timelineStartMs')
+    expect(src).toContain('MIN_CUT_CLIP_MS')
+    expect(src).toContain('randomUUID()')
+    expect(src).toContain('No valid scenes in restore payload')
   })
 
   it('restoreCutTimeline replaces video and audio lanes', () => {

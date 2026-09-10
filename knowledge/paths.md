@@ -88,12 +88,15 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Key / path | Meaning |
 |------------|---------|
 | Domain spec | `specs/domain/adobe-uxp-library-panel.md` — Premiere Wave 1, AE Wave 1.5 |
+| Open Cut wave | `specs/domain/adobe-uxp-open-cut-premiere.md` — Cut → Premiere sequence via `premiere_xml` ZIP |
 | Package | `tools/adobe-uxp-library-panel/` (UXP dual-host: Premiere Wave 1 + AE Wave 1.5) |
 | UDT External copy (macOS) | `~/Library/Application Support/Adobe/UXP/Plugins/External/videon.libraryPanel_<version>/` — frozen after Load; must Unload + Load / re-sync after every build |
-| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`) |
+| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`); current **0.1.22** |
+| Preview playback notes | `knowledge/adobe-uxp-panel-preview-playback.md` |
 | Auth | Settings API Bearer (`settings-api-tokens.md`); owner via `POST /api/tokens/verify`; table `api_tokens` |
 | Search | Same `GET /api/media/search` + `scene-hit-model.md` as `/chat` |
 | Posters | `GET /api/media/:id/frame` (`apiMediaFrame`) |
+| Card MP4 previews | `GET /api/media/:id/preview` → write into UXP data folder → `<video src>` via `file.url` / `getFsUrl` / `file://nativePath` (blob: unreliable for video in Premiere UXP) |
 | Insert media | `GET /api/media/:id/adobe-download` — `specs/api/media-adobe-download.md`; helper `paths.routes.apiMediaAdobeDownload` |
 | Legacy reference | `videon/tools/ae-uxp-plugin` (PrismVid; localhost path — do not reuse) |
 | Panel prefs (illustrative) | `videon.adobe.productBaseUrl` · `videon.adobe.apiToken` · `videon.adobe.defaultPlatformProjectId` · `videon.adobe.cacheDir` |
@@ -111,6 +114,8 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Reframe worker | Coolify `videon-v3:reframe-worker` `hydwudxhs3ovqdf3lpdk9gjz` · port **8092** · FQDN `https://hydwudxhs3ovqdf3lpdk9gjz.projects-a.plygrnd.tech` · `knowledge/staging-coolify-reframe-worker.md` |
 | Multi-source Cuts | `specs/domain/cut-multi-source-compose.md` · `specs/api/cuts.md` — `PATCH addScenes`; MCP `videon.cut_scenes_add` |
 | Cut export extras | `specs/domain/cut-export-extras.md` — canvas presets + Premiere ZIP (`premiere_xml`) |
+| Open Cut in Premiere (panel wave) | `specs/domain/adobe-uxp-open-cut-premiere.md` · `knowledge/adobe-uxp-open-cut-premiere.md` |
+| Cut pushback from Premiere (sketch) | `specs/domain/adobe-uxp-cut-pushback-premiere.md` · `knowledge/adobe-uxp-cut-pushback-premiere.md` — **manual parity** both directions; not live sync |
 | Cut multi-track | `specs/domain/cut-multi-track.md` — extra `audio_bus` / Voice-Over spur |
 
 ## V7 production rollout

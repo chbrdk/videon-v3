@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { apiError, apiJson } from '@/lib/api-response'
 import { hasDatabaseConfig } from '@/lib/db/client'
 import {
@@ -16,6 +17,7 @@ import {
   addScenesToCut,
   rollTrimCutBoundary,
   restoreCutTimeline,
+  MIN_CUT_CLIP_MS,
 } from '@/lib/db/cuts'
 import {
   addCutAudioClip,
@@ -375,6 +377,8 @@ async function applyCutPatch(input: {
     if (!rawRestoreScenes?.length) {
       return apiError(request, 400, 'invalid_payload', 'scenes is required for restore')
     }
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const restoreScenes: Array<{
       id: string
       position: number
@@ -387,18 +391,44 @@ async function applyCutPatch(input: {
     for (const entry of rawRestoreScenes) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
       const scene = entry as Record<string, unknown>
-      const id = typeof scene.id === 'string' ? scene.id.trim() : ''
+      const rawId = typeof scene.id === 'string' ? scene.id.trim() : ''
+      const id = uuidRe.test(rawId) ? rawId : randomUUID()
       const mediaId = typeof scene.mediaAssetId === 'string' ? scene.mediaAssetId.trim() : ''
       const position = typeof scene.position === 'number' ? scene.position : restoreScenes.length
-      const sceneStart = typeof scene.startMs === 'number' ? scene.startMs : null
-      const sceneEnd = typeof scene.endMs === 'number' ? scene.endMs : null
+      const sceneStart =
+        typeof scene.startMs === 'number' && Number.isFinite(scene.startMs)
+          ? Math.max(0, Math.floor(scene.startMs))
+          : null
+      const sceneEnd =
+        typeof scene.endMs === 'number' && Number.isFinite(scene.endMs)
+          ? Math.max(0, Math.floor(scene.endMs))
+          : null
       const sceneKey =
         typeof scene.sceneKey === 'string' && scene.sceneKey.trim() ? scene.sceneKey.trim() : null
       const timelineStartMs =
         typeof scene.timelineStartMs === 'number' && Number.isFinite(scene.timelineStartMs)
           ? Math.max(0, Math.floor(scene.timelineStartMs))
           : undefined
-      if (!id || !mediaId || sceneStart === null || sceneEnd === null) continue
+      if (!mediaId || sceneStart === null || sceneEnd === null) continue
+      if (sceneEnd <= sceneStart) {
+        return apiError(
+          request,
+          400,
+          'invalid_payload',
+          `restore scene endMs must be > startMs (got ${sceneStart}–${sceneEnd})`,
+        )
+      }
+      if (sceneEnd - sceneStart < MIN_CUT_CLIP_MS) {
+        return apiError(
+          request,
+          400,
+          'invalid_payload',
+          `Each restore scene must be at least ${MIN_CUT_CLIP_MS}ms (got ${sceneEnd - sceneStart}ms)`,
+        )
+      }
+      if (!uuidRe.test(mediaId)) {
+        return apiError(request, 400, 'invalid_payload', 'mediaAssetId must be a UUID')
+      }
       const media = await findMediaAsset(mediaId)
       if (!media || media.workspaceId !== workspaceId) {
         return apiError(request, 404, 'not_found', 'Media asset not found')
@@ -412,6 +442,14 @@ async function applyCutPatch(input: {
         ...(timelineStartMs !== undefined ? { timelineStartMs } : {}),
         sceneKey,
       })
+    }
+    if (restoreScenes.length === 0) {
+      return apiError(
+        request,
+        400,
+        'invalid_payload',
+        'No valid scenes in restore payload (need mediaAssetId, startMs, endMs)',
+      )
     }
 
     const parseOverlayClips = async (raw: unknown) => {
