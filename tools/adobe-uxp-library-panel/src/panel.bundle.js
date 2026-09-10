@@ -247,6 +247,97 @@
     };
   }
 
+  // src/http.js
+  function httpRequest(url, init = {}) {
+    const method = (init.method || "GET").toUpperCase();
+    const headers = init.headers || {};
+    const responseType = init.responseType || "";
+    if (typeof XMLHttpRequest === "function") {
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const xhr = new XMLHttpRequest();
+        try {
+          xhr.open(method, url, true);
+          if (responseType) xhr.responseType = responseType;
+        } catch (error) {
+          reject(error);
+          return;
+        }
+        for (const [key, value] of Object.entries(headers)) {
+          if (value != null) xhr.setRequestHeader(key, String(value));
+        }
+        const finish = (fn, arg) => {
+          if (settled) return;
+          settled = true;
+          fn(arg);
+        };
+        xhr.onload = () => {
+          const status = xhr.status || 0;
+          const raw = xhr.response;
+          const bodyText = typeof raw === "string" ? raw : raw == null || responseType === "arraybuffer" || responseType === "blob" ? "" : String(raw);
+          finish(resolve, {
+            ok: status >= 200 && status < 300,
+            status,
+            statusText: xhr.statusText || "",
+            json: async () => {
+              if (responseType === "json" && raw && typeof raw === "object") return raw;
+              const text = bodyText || (raw instanceof ArrayBuffer ? new TextDecoder().decode(raw) : "");
+              return text ? JSON.parse(text) : null;
+            },
+            text: async () => {
+              if (typeof raw === "string") return raw;
+              if (raw instanceof ArrayBuffer) return new TextDecoder().decode(raw);
+              return bodyText;
+            },
+            blob: async () => {
+              if (typeof Blob === "function" && raw instanceof Blob) return raw;
+              if (raw instanceof ArrayBuffer) return new Blob([raw]);
+              return new Blob([bodyText]);
+            },
+            arrayBuffer: async () => {
+              if (raw instanceof ArrayBuffer) return raw;
+              if (typeof Blob === "function" && raw instanceof Blob) return raw.arrayBuffer();
+              return new TextEncoder().encode(bodyText).buffer;
+            }
+          });
+        };
+        xhr.onerror = () => finish(reject, new Error(`Network error (${method} ${url})`));
+        xhr.onabort = () => finish(reject, new Error("Request aborted"));
+        if (init.signal) {
+          if (init.signal.aborted) {
+            xhr.abort();
+            return;
+          }
+          const prev = typeof init.signal.onabort === "function" ? init.signal.onabort : null;
+          init.signal.onabort = (event) => {
+            try {
+              if (prev) prev.call(init.signal, event);
+            } catch {
+            }
+            try {
+              xhr.abort();
+            } catch {
+            }
+          };
+        }
+        try {
+          xhr.send();
+        } catch (error) {
+          finish(reject, error);
+        }
+      });
+    }
+    return fetch(url, init).then(async (response) => ({
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      json: () => response.json(),
+      text: () => response.text(),
+      blob: () => response.blob(),
+      arrayBuffer: () => response.arrayBuffer()
+    }));
+  }
+
   // src/settings.js
   function normalizeProductBaseUrl(value) {
     const trimmed = String(value || "").trim().replace(/\/$/, "");
@@ -326,14 +417,14 @@
     }
   }
   async function testHealth(settings, signal) {
-    const response = await fetch(`${base(settings)}/api/health`, {
+    const response = await httpRequest(`${base(settings)}/api/health`, {
       headers: authHeaders(settings.apiToken),
       signal
     });
     return response.ok;
   }
   async function listCollections(settings, signal) {
-    const response = await fetch(`${base(settings)}/api/collections`, {
+    const response = await httpRequest(`${base(settings)}/api/collections`, {
       headers: authHeaders(settings.apiToken),
       signal
     });
@@ -348,7 +439,7 @@
     if (settings.defaultPlatformProjectId) {
       params.set("platformProjectId", settings.defaultPlatformProjectId);
     }
-    const response = await fetch(`${base(settings)}/api/media/search?${params}`, {
+    const response = await httpRequest(`${base(settings)}/api/media/search?${params}`, {
       headers: authHeaders(settings.apiToken),
       signal
     });
@@ -365,9 +456,10 @@
     return `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/frame?${params}`;
   }
   async function fetchFrameBlob(settings, hit, signal) {
-    const response = await fetch(frameUrl(settings, hit), {
+    const response = await httpRequest(frameUrl(settings, hit), {
       headers: authHeaders(settings.apiToken),
-      signal
+      signal,
+      responseType: "arraybuffer"
     });
     if (!response.ok) return null;
     return response.blob();
@@ -381,7 +473,7 @@
       kind: "source",
       mode: "json"
     });
-    const response = await fetch(
+    const response = await httpRequest(
       `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/adobe-download?${params}`,
       { headers: authHeaders(settings.apiToken), signal }
     );
@@ -580,7 +672,7 @@
     const folder = await getDataFolder();
     const fileName = cacheFileName(cacheKey, filename);
     const file = await folder.createFile(fileName, { overwrite: true });
-    const response = await fetch(downloadUrl);
+    const response = await httpRequest(downloadUrl, { responseType: "arraybuffer" });
     if (!response.ok) {
       throw new Error(`Download fehlgeschlagen: ${response.status} ${response.statusText}`);
     }
@@ -1044,7 +1136,7 @@
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.10";
+  var PANEL_VERSION = "0.1.11";
   var els = {};
   function queryEls() {
     return {
@@ -1277,11 +1369,11 @@
     const check = document.createElement("input");
     check.type = "checkbox";
     check.checked = selected.has(hit.id);
-    check.onchange = () => {
+    on(check, "change", () => {
       if (check.checked) selected.add(hit.id);
       else selected.delete(hit.id);
       updateSelectionChrome();
-    };
+    });
     const img = document.createElement("img");
     img.alt = "";
     if (posterUrl) img.src = posterUrl;
@@ -1310,14 +1402,14 @@
     const open = document.createElement("button");
     open.type = "button";
     open.textContent = "In VIDEON \xF6ffnen";
-    open.onclick = () => {
+    on(open, "click", () => {
       const href = absoluteProductHref(settings, hit.href);
       if (!href) {
         showBanner("Kein Deep Link am Treffer.", "error");
         return;
       }
       void openExternal(href);
-    };
+    });
     actions.append(open);
     body.append(title, meta, snippet, actions);
     row.append(check, img, body);
@@ -1487,17 +1579,54 @@
   }
   function on(el, eventName, handler) {
     if (!el) return;
-    const key = `on${eventName}`;
-    const previous = typeof el[key] === "function" ? el[key] : null;
-    el[key] = (event) => {
+    const wrapped = (event) => {
       try {
-        if (previous) previous.call(el, event);
         handler(event);
       } catch (error) {
         console.error("[VIDEON] handler", eventName, error);
         showBanner(error instanceof Error ? error.message : String(error), "error");
       }
     };
+    const key = `on${eventName}`;
+    try {
+      el[key] = wrapped;
+      return;
+    } catch (assignError) {
+      console.warn("[VIDEON] on* assign failed", eventName, assignError);
+    }
+    try {
+      if (typeof el.addEventListener === "function") {
+        el.addEventListener(eventName, wrapped);
+      }
+    } catch (listenError) {
+      console.error("[VIDEON] addEventListener failed", eventName, listenError);
+      showBanner(
+        `Event-Bind fehlgeschlagen (${eventName}): ${listenError instanceof Error ? listenError.message : String(listenError)}`,
+        "error"
+      );
+    }
+  }
+  function runTestConnection() {
+    void (async () => {
+      const settings = saveSettings(readFormSettings());
+      if (els.settingsStatus) {
+        els.settingsStatus.hidden = false;
+        els.settingsStatus.textContent = `Teste\u2026 (v${PANEL_VERSION})`;
+      }
+      try {
+        const ok = await testHealth(settings);
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = ok ? `Health OK (v${PANEL_VERSION})` : `Health fehlgeschlagen (v${PANEL_VERSION})`;
+        }
+        if (ok) await refreshCollections(false);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = `${msg} (v${PANEL_VERSION})`;
+        }
+        showBanner(msg, "error");
+      }
+    })();
   }
   function bindPanel() {
     on(els.settingsToggle, "click", () => {
@@ -1522,24 +1651,7 @@
       }
     });
     on(els.testConnection, "click", () => {
-      void (async () => {
-        const settings = saveSettings(readFormSettings());
-        if (els.settingsStatus) {
-          els.settingsStatus.hidden = false;
-          els.settingsStatus.textContent = "Teste\u2026";
-        }
-        try {
-          const ok = await testHealth(settings);
-          if (els.settingsStatus) {
-            els.settingsStatus.textContent = ok ? "Health OK" : "Health fehlgeschlagen";
-          }
-          if (ok) await refreshCollections(false);
-        } catch (error) {
-          if (els.settingsStatus) {
-            els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
-          }
-        }
-      })();
+      runTestConnection();
     });
     on(els.reloadCollections, "click", () => {
       void refreshCollections(true);
@@ -1594,61 +1706,10 @@
     on(els.insertBtn, "click", () => {
       void runInsert();
     });
-    try {
-      globalThis.videonPanel = {
-        toggleSettings() {
-          els.settingsPanel?.classList.toggle("hidden");
-          if (els.settingsPanel && !els.settingsPanel.classList.contains("hidden")) void refreshCacheUi(false);
-        },
-        saveSettings() {
-          const draft = readFormSettings();
-          const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl);
-          if (!urlCheck.ok) {
-            if (els.settingsStatus) {
-              els.settingsStatus.hidden = false;
-              els.settingsStatus.textContent = urlCheck.error;
-            }
-            return;
-          }
-          const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value });
-          applySettingsToForm(settings);
-          if (els.settingsStatus) {
-            els.settingsStatus.hidden = false;
-            els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken) ? "Gespeichert." : "Gespeichert \u2014 Token-Format pr\xFCfen (videon_\u2026).";
-          }
-        },
-        testConnection() {
-          void (async () => {
-            const settings = saveSettings(readFormSettings());
-            if (els.settingsStatus) {
-              els.settingsStatus.hidden = false;
-              els.settingsStatus.textContent = "Teste\u2026";
-            }
-            try {
-              const ok = await testHealth(settings);
-              if (els.settingsStatus) {
-                els.settingsStatus.textContent = ok ? "Health OK" : "Health fehlgeschlagen";
-              }
-              if (ok) await refreshCollections(false);
-            } catch (error) {
-              if (els.settingsStatus) {
-                els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
-              }
-            }
-          })();
-        },
-        reloadCollections() {
-          void refreshCollections(true);
-        },
-        search() {
-          void runSearch();
-        }
-      };
-    } catch {
-    }
   }
   function bootPanel() {
     els = queryEls();
+    if (els.panelVersion) els.panelVersion.textContent = `v${PANEL_VERSION}`;
     const missing = missingRequiredEls();
     if (missing.length) {
       const msg = `Panel-DOM unvollst\xE4ndig (${missing.join(", ")}). Bundle neu bauen / Plugin neu laden.`;
@@ -1659,8 +1720,17 @@
       }
       return false;
     }
-    bindPanel();
-    if (els.panelVersion) els.panelVersion.textContent = `v${PANEL_VERSION}`;
+    try {
+      bindPanel();
+    } catch (error) {
+      const msg = `Boot-Bind fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`;
+      console.error("[VIDEON]", msg, error);
+      if (els.bootStatus) {
+        els.bootStatus.hidden = false;
+        els.bootStatus.textContent = msg;
+      }
+      return false;
+    }
     applySettingsToForm(loadSettings());
     if (els.searchInput) els.searchInput.value = loadLastQuery();
     updateCacheStatsLabel(getCacheStats());
@@ -1673,15 +1743,35 @@
       void refreshCollections(false);
     }
     if (els.bootStatus) {
-      els.bootStatus.hidden = true;
-      els.bootStatus.textContent = "";
+      els.bootStatus.hidden = false;
+      els.bootStatus.textContent = `Bereit \xB7 v${PANEL_VERSION}`;
+      setTimeout(() => {
+        if (els.bootStatus && els.bootStatus.textContent === `Bereit \xB7 v${PANEL_VERSION}`) {
+          els.bootStatus.hidden = true;
+          els.bootStatus.textContent = "";
+        }
+      }, 2500);
     }
     return true;
   }
   function scheduleBoot(attempt = 0) {
-    if (bootPanel()) return;
+    try {
+      if (bootPanel()) return;
+    } catch (error) {
+      console.error("[VIDEON] bootPanel threw", error);
+      const boot = document.getElementById("boot-status");
+      if (boot) {
+        boot.hidden = false;
+        boot.textContent = `Boot-Crash: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
     if (attempt >= 40) {
       console.error("[VIDEON] Panel boot failed after retries");
+      const boot = document.getElementById("boot-status");
+      if (boot) {
+        boot.hidden = false;
+        boot.textContent = `Boot fehlgeschlagen nach Retries \xB7 v${PANEL_VERSION}`;
+      }
       return;
     }
     setTimeout(() => scheduleBoot(attempt + 1), 50);

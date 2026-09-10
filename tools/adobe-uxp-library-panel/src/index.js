@@ -35,7 +35,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.10'
+const PANEL_VERSION = '0.1.11'
 
 /** @type {Record<string, HTMLElement | null>} */
 let els = {}
@@ -306,11 +306,11 @@ function buildHitRow(settings, hit, posterUrl) {
   const check = document.createElement('input')
   check.type = 'checkbox'
   check.checked = selected.has(hit.id)
-  check.onchange = () => {
+  on(check, 'change', () => {
     if (check.checked) selected.add(hit.id)
     else selected.delete(hit.id)
     updateSelectionChrome()
-  }
+  })
 
   const img = document.createElement('img')
   img.alt = ''
@@ -346,14 +346,14 @@ function buildHitRow(settings, hit, posterUrl) {
   const open = document.createElement('button')
   open.type = 'button'
   open.textContent = 'In VIDEON öffnen'
-  open.onclick = () => {
+  on(open, 'click', () => {
     const href = absoluteProductHref(settings, hit.href)
     if (!href) {
       showBanner('Kein Deep Link am Treffer.', 'error')
       return
     }
     void openExternal(href)
-  }
+  })
   actions.append(open)
 
   body.append(title, meta, snippet, actions)
@@ -544,20 +544,66 @@ async function runInsert() {
   }
 }
 
-/** UXP: never call addEventListener — use on* properties only (domjs throws otherwise). */
+/**
+ * Bind DOM events.
+ * Prefer element `on*` properties (UXP-safe). Never call document.addEventListener.
+ * Element.addEventListener is tried only when on* assignment is unavailable.
+ */
 function on(el, eventName, handler) {
   if (!el) return
-  const key = `on${eventName}`
-  const previous = typeof el[key] === 'function' ? el[key] : null
-  el[key] = (event) => {
+  const wrapped = (event) => {
     try {
-      if (previous) previous.call(el, event)
       handler(event)
     } catch (error) {
       console.error('[VIDEON] handler', eventName, error)
       showBanner(error instanceof Error ? error.message : String(error), 'error')
     }
   }
+  const key = `on${eventName}`
+  try {
+    el[key] = wrapped
+    return
+  } catch (assignError) {
+    console.warn('[VIDEON] on* assign failed', eventName, assignError)
+  }
+  try {
+    if (typeof el.addEventListener === 'function') {
+      el.addEventListener(eventName, wrapped)
+    }
+  } catch (listenError) {
+    console.error('[VIDEON] addEventListener failed', eventName, listenError)
+    showBanner(
+      `Event-Bind fehlgeschlagen (${eventName}): ${
+        listenError instanceof Error ? listenError.message : String(listenError)
+      }`,
+      'error',
+    )
+  }
+}
+
+function runTestConnection() {
+  void (async () => {
+    const settings = saveSettings(readFormSettings())
+    if (els.settingsStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = `Teste… (v${PANEL_VERSION})`
+    }
+    try {
+      const ok = await testHealth(settings)
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = ok
+          ? `Health OK (v${PANEL_VERSION})`
+          : `Health fehlgeschlagen (v${PANEL_VERSION})`
+      }
+      if (ok) await refreshCollections(false)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = `${msg} (v${PANEL_VERSION})`
+      }
+      showBanner(msg, 'error')
+    }
+  })()
 }
 
 function bindPanel() {
@@ -587,24 +633,7 @@ function bindPanel() {
   })
 
   on(els.testConnection, 'click', () => {
-    void (async () => {
-      const settings = saveSettings(readFormSettings())
-      if (els.settingsStatus) {
-        els.settingsStatus.hidden = false
-        els.settingsStatus.textContent = 'Teste…'
-      }
-      try {
-        const ok = await testHealth(settings)
-        if (els.settingsStatus) {
-          els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
-        }
-        if (ok) await refreshCollections(false)
-      } catch (error) {
-        if (els.settingsStatus) {
-          els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
-        }
-      }
-    })()
+    runTestConnection()
   })
 
   on(els.reloadCollections, 'click', () => {
@@ -665,67 +694,12 @@ function bindPanel() {
   on(els.insertBtn, 'click', () => {
     void runInsert()
   })
-
-  // HTML-attribute backup for UXP (inline onclick → globalThis.videonPanel)
-  try {
-    globalThis.videonPanel = {
-      toggleSettings() {
-        els.settingsPanel?.classList.toggle('hidden')
-        if (els.settingsPanel && !els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
-      },
-      saveSettings() {
-        const draft = readFormSettings()
-        const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl)
-        if (!urlCheck.ok) {
-          if (els.settingsStatus) {
-            els.settingsStatus.hidden = false
-            els.settingsStatus.textContent = urlCheck.error
-          }
-          return
-        }
-        const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value })
-        applySettingsToForm(settings)
-        if (els.settingsStatus) {
-          els.settingsStatus.hidden = false
-          els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken)
-            ? 'Gespeichert.'
-            : 'Gespeichert — Token-Format prüfen (videon_…).'
-        }
-      },
-      testConnection() {
-        void (async () => {
-          const settings = saveSettings(readFormSettings())
-          if (els.settingsStatus) {
-            els.settingsStatus.hidden = false
-            els.settingsStatus.textContent = 'Teste…'
-          }
-          try {
-            const ok = await testHealth(settings)
-            if (els.settingsStatus) {
-              els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
-            }
-            if (ok) await refreshCollections(false)
-          } catch (error) {
-            if (els.settingsStatus) {
-              els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
-            }
-          }
-        })()
-      },
-      reloadCollections() {
-        void refreshCollections(true)
-      },
-      search() {
-        void runSearch()
-      },
-    }
-  } catch {
-    /* ignore */
-  }
 }
 
 function bootPanel() {
   els = queryEls()
+  if (els.panelVersion) els.panelVersion.textContent = `v${PANEL_VERSION}`
+
   const missing = missingRequiredEls()
   if (missing.length) {
     const msg = `Panel-DOM unvollständig (${missing.join(', ')}). Bundle neu bauen / Plugin neu laden.`
@@ -737,8 +711,18 @@ function bootPanel() {
     return false
   }
 
-  bindPanel()
-  if (els.panelVersion) els.panelVersion.textContent = `v${PANEL_VERSION}`
+  try {
+    bindPanel()
+  } catch (error) {
+    const msg = `Boot-Bind fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`
+    console.error('[VIDEON]', msg, error)
+    if (els.bootStatus) {
+      els.bootStatus.hidden = false
+      els.bootStatus.textContent = msg
+    }
+    return false
+  }
+
   applySettingsToForm(loadSettings())
   if (els.searchInput) els.searchInput.value = loadLastQuery()
   updateCacheStatsLabel(getCacheStats())
@@ -751,17 +735,37 @@ function bootPanel() {
     void refreshCollections(false)
   }
   if (els.bootStatus) {
-    els.bootStatus.hidden = true
-    els.bootStatus.textContent = ''
+    els.bootStatus.hidden = false
+    els.bootStatus.textContent = `Bereit · v${PANEL_VERSION}`
+    setTimeout(() => {
+      if (els.bootStatus && els.bootStatus.textContent === `Bereit · v${PANEL_VERSION}`) {
+        els.bootStatus.hidden = true
+        els.bootStatus.textContent = ''
+      }
+    }, 2500)
   }
   return true
 }
 
 /** UXP: never use document DOMContentLoaded listeners — domjs throws. */
 function scheduleBoot(attempt = 0) {
-  if (bootPanel()) return
+  try {
+    if (bootPanel()) return
+  } catch (error) {
+    console.error('[VIDEON] bootPanel threw', error)
+    const boot = document.getElementById('boot-status')
+    if (boot) {
+      boot.hidden = false
+      boot.textContent = `Boot-Crash: ${error instanceof Error ? error.message : String(error)}`
+    }
+  }
   if (attempt >= 40) {
     console.error('[VIDEON] Panel boot failed after retries')
+    const boot = document.getElementById('boot-status')
+    if (boot) {
+      boot.hidden = false
+      boot.textContent = `Boot fehlgeschlagen nach Retries · v${PANEL_VERSION}`
+    }
     return
   }
   setTimeout(() => scheduleBoot(attempt + 1), 50)

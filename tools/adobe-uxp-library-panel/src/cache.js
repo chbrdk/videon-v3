@@ -17,6 +17,7 @@ import {
   pickEvictionKeys,
   removeKeysFromIndex,
 } from './cache-index.js'
+import { httpRequest } from './http.js'
 import { loadNativeModule } from './native.js'
 import { isHttpUrl } from './premiere-path.js'
 
@@ -184,7 +185,7 @@ export async function materializeDownload(input) {
   const fileName = cacheFileName(cacheKey, filename)
   const file = await folder.createFile(fileName, { overwrite: true })
 
-  const response = await fetch(downloadUrl)
+  const response = await httpRequest(downloadUrl, { responseType: 'arraybuffer' })
   if (!response.ok) {
     throw new Error(`Download fehlgeschlagen: ${response.status} ${response.statusText}`)
   }

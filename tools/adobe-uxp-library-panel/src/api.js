@@ -3,6 +3,7 @@
  * Spec: adobe-uxp-library-panel.md · media-adobe-download.md
  */
 
+import { httpRequest } from './http.js'
 import { normalizeProductBaseUrl } from './settings.js'
 
 const STORAGE_KEY = 'videon.adobe.settings'
@@ -74,7 +75,7 @@ async function parseError(response) {
 }
 
 export async function testHealth(settings, signal) {
-  const response = await fetch(`${base(settings)}/api/health`, {
+  const response = await httpRequest(`${base(settings)}/api/health`, {
     headers: authHeaders(settings.apiToken),
     signal,
   })
@@ -82,7 +83,7 @@ export async function testHealth(settings, signal) {
 }
 
 export async function listCollections(settings, signal) {
-  const response = await fetch(`${base(settings)}/api/collections`, {
+  const response = await httpRequest(`${base(settings)}/api/collections`, {
     headers: authHeaders(settings.apiToken),
     signal,
   })
@@ -98,7 +99,7 @@ export async function searchMedia(settings, query, limit = 40, signal) {
   if (settings.defaultPlatformProjectId) {
     params.set('platformProjectId', settings.defaultPlatformProjectId)
   }
-  const response = await fetch(`${base(settings)}/api/media/search?${params}`, {
+  const response = await httpRequest(`${base(settings)}/api/media/search?${params}`, {
     headers: authHeaders(settings.apiToken),
     signal,
   })
@@ -117,9 +118,10 @@ export function frameUrl(settings, hit, width = 240) {
 }
 
 export async function fetchFrameBlob(settings, hit, signal) {
-  const response = await fetch(frameUrl(settings, hit), {
+  const response = await httpRequest(frameUrl(settings, hit), {
     headers: authHeaders(settings.apiToken),
     signal,
+    responseType: 'arraybuffer',
   })
   if (!response.ok) return null
   return response.blob()
@@ -134,7 +136,7 @@ export async function requestAdobeDownload(settings, hit, signal) {
     kind: 'source',
     mode: 'json',
   })
-  const response = await fetch(
+  const response = await httpRequest(
     `${base(settings)}/api/media/${encodeURIComponent(hit.mediaAssetId)}/adobe-download?${params}`,
     { headers: authHeaders(settings.apiToken), signal },
   )

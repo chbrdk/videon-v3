@@ -19,11 +19,11 @@ Premiere keeps that **frozen** copy. Repo edits alone do nothing until you:
 1. `npm run build` in `tools/adobe-uxp-library-panel`
 2. UDT → **Unload** the old plugin (check version)
 3. **Load** the repo folder again (or sync into a new `…_<newVersion>` External folder)
-4. Confirm the panel header shows **`v0.1.10`** (or current) — if you still see `v?` / no version / old behavior, you are on a stale External copy
+4. Confirm the panel header shows **`v0.1.11`** (or current) and briefly **`Bereit · v0.1.11`** — if you still see an older `v0.1.x` / `v?`, you are on a stale load (UDT watches the **repo** folder: `tools/adobe-uxp-library-panel`)
 
 **UXP path quirk:** `main` is `src/index.html`, but CSS/JS hrefs resolve from the **plugin root**. Use `src/styles.css` and `src/panel.bundle.js` (not bare `styles.css`).
 
-Panel JS MUST poll for DOM nodes via `setTimeout` — never `document.addEventListener`. Never call element `addEventListener` either (UXP domjs throws); use `on*` properties + optional HTML `onclick="videonPanel…"`.
+Panel JS MUST poll for DOM nodes via `setTimeout` — never `document.addEventListener`. Prefer element `on*` properties; fall back to element `addEventListener` only if needed. Do **not** use HTML inline `onclick` (needs `allowCodeGenerationFromStrings`). Network calls use XHR `onload`/`onerror` via `src/http.js`.
 
 ## Browser preview
 
