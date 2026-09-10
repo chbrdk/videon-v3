@@ -16,5 +16,6 @@ export function normalizeProductBaseUrl(value) {
 
 export function looksLikeApiToken(token) {
   const t = String(token || '').trim()
-  return t.startsWith('videon_') && t.length > 20
+  // videon_ + 32 bytes hex = 71 chars (paths.apiTokenPrefix + apiTokenBytes*2)
+  return /^videon_[a-fA-F0-9]{64}$/.test(t)
 }

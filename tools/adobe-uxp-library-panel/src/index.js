@@ -271,6 +271,17 @@ function setBusy(busy) {
   els.insertBtn.disabled = busy
 }
 
+function authErrorHint(message) {
+  const text = String(message || '')
+  if (/service_unauthorized/i.test(text) || /Authentication required/i.test(text)) {
+    return (
+      `${text} — Token ungültig oder nach Server-Restart weg (In-Memory-Store). ` +
+      `In VIDEON Settings neuen Token erzeugen (videon_…), hier einfügen, Speichern.`
+    )
+  }
+  return text
+}
+
 async function refreshCollections(showStatus = true) {
   const settings = saveSettings(readFormSettings())
   if (!settings.apiToken) {
@@ -278,6 +289,15 @@ async function refreshCollections(showStatus = true) {
       els.settingsStatus.hidden = false
       els.settingsStatus.textContent = 'Token setzen, dann Collections laden.'
     }
+    return
+  }
+  if (!looksLikeApiToken(settings.apiToken)) {
+    const msg = 'Token-Format prüfen: videon_ + 64 Hex-Zeichen'
+    if (showStatus) {
+      els.settingsStatus.hidden = false
+      els.settingsStatus.textContent = msg
+    }
+    showBanner(msg, 'error')
     return
   }
   if (showStatus) {
@@ -292,10 +312,12 @@ async function refreshCollections(showStatus = true) {
       els.settingsStatus.textContent = `${collections.length} Collection(s)`
     }
   } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error)
+    const msg = authErrorHint(raw)
     if (showStatus) {
-      els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+      els.settingsStatus.textContent = msg
     }
-    showBanner(error instanceof Error ? error.message : String(error), 'error')
+    showBanner(msg, 'error')
   }
 }
 
@@ -589,15 +611,25 @@ function runTestConnection() {
       els.settingsStatus.textContent = `Teste… (v${PANEL_VERSION})`
     }
     try {
-      const ok = await testHealth(settings)
-      if (els.settingsStatus) {
-        els.settingsStatus.textContent = ok
-          ? `Health OK (v${PANEL_VERSION})`
-          : `Health fehlgeschlagen (v${PANEL_VERSION})`
+      if (!settings.apiToken) {
+        throw new Error('Kein API Token — in Settings einfügen (videon_…)')
       }
-      if (ok) await refreshCollections(false)
+      if (!looksLikeApiToken(settings.apiToken)) {
+        throw new Error('Token-Format prüfen: videon_ + 64 Hex-Zeichen')
+      }
+      const ok = await testHealth(settings)
+      if (!ok) {
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = `Health fehlgeschlagen (v${PANEL_VERSION})`
+        }
+        return
+      }
+      if (els.settingsStatus) {
+        els.settingsStatus.textContent = `Health OK — prüfe Token… (v${PANEL_VERSION})`
+      }
+      await refreshCollections(true)
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
+      const msg = authErrorHint(error instanceof Error ? error.message : String(error))
       if (els.settingsStatus) {
         els.settingsStatus.textContent = `${msg} (v${PANEL_VERSION})`
       }
