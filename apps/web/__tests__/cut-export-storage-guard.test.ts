@@ -17,7 +17,9 @@ describe('cut export download storage guard', () => {
   it('maps missing media keys to clear premiere export errors', () => {
     const src = readFileSync(join(__dirname, '../lib/pipeline/export-cut.ts'), 'utf8')
     expect(src).toContain('Source media file missing in storage')
-    expect(src).toContain('Track media file missing in storage')
+    expect(src).toContain('downloadMediaSourceToFile')
+    expect(src).toContain('resolveMediaSourceStorageKey')
+    expect(src).toContain('Re-upload this media')
   })
 
   it('S3ObjectStore exposes objectExists', () => {

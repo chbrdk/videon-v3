@@ -354,6 +354,23 @@ export async function deleteMediaAssetForWorkspace(
   return purgeMediaAssetForWorkspace(mediaAssetId, workspaceId)
 }
 
+export async function updateMediaStorageKey(input: {
+  mediaAssetId: string
+  workspaceId: string
+  storageKey: string
+}): Promise<MediaAsset | null> {
+  const result = await databasePool().query<MediaRow>(
+    `update media_assets
+        set storage_key = $3,
+            updated_at = now()
+      where id = $1
+        and workspace_id = $2
+    returning ${MEDIA_SELECT_COLUMNS}`,
+    [input.mediaAssetId, input.workspaceId, input.storageKey],
+  )
+  return result.rows[0] ? mapMedia(result.rows[0]) : null
+}
+
 export async function createUploadingMediaAsset(input: {
   id: string
   workspace: ProvisionedWorkspace

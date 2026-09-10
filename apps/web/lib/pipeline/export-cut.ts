@@ -18,9 +18,36 @@ import { buildProgramExportSlices, busClipsEndMs } from '@/lib/cut-export-progra
 import { buildPremiereXmeml, assignPremiereZipMediaNames, premierePackageReadme, sanitizePremiereXmlFilename } from '@/lib/pipeline/export-premiere-xml'
 import { safeUnlink, writePremiereExportZip } from '@/lib/pipeline/export-premiere-zip'
 import { cutExportStorageKey } from '@/lib/storage/object-store'
+import { resolveMediaSourceStorageKey } from '@/lib/storage/resolve-media-source'
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 
 const execFileAsync = promisify(execFile)
+
+async function downloadMediaSourceToFile(input: {
+  store: S3ObjectStore
+  media: Pick<MediaAssetDetail, 'id' | 'workspaceId' | 'storageKey' | 'originalFilename'>
+  destinationPath: string
+}): Promise<string> {
+  const storageKey = await resolveMediaSourceStorageKey({
+    store: input.store,
+    workspaceId: input.media.workspaceId,
+    mediaAssetId: input.media.id,
+    storageKey: input.media.storageKey,
+  })
+  if (!storageKey) {
+    const label = input.media.originalFilename || input.media.id
+    throw new Error(
+      `Source media file missing in storage for ${label}. ` +
+        `Re-upload this media in the Collection library.`,
+    )
+  }
+  await input.store.downloadObjectToFile({
+    workspaceId: input.media.workspaceId,
+    storageKey,
+    destinationPath: input.destinationPath,
+  })
+  return storageKey
+}
 
 function seconds(ms: number): string {
   return (ms / 1000).toFixed(3)
@@ -364,18 +391,7 @@ async function runPremiereXmlExport(input: {
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
-      try {
-        await store.downloadObjectToFile({
-          workspaceId: media.workspaceId,
-          storageKey: media.storageKey,
-          destinationPath: sourcePath,
-        })
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error)
-        throw new Error(
-          `Source media file missing in storage for ${media.originalFilename || media.id} (${detail})`,
-        )
-      }
+      await downloadMediaSourceToFile({ store, media, destinationPath: sourcePath })
       sourceCache.set(media.id, sourcePath)
     }
 
@@ -387,18 +403,7 @@ async function runPremiereXmlExport(input: {
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-premiere-source-${media.id}-${randomUUID()}`)
-      try {
-        await store.downloadObjectToFile({
-          workspaceId: media.workspaceId,
-          storageKey: media.storageKey,
-          destinationPath: sourcePath,
-        })
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error)
-        throw new Error(
-          `Track media file missing in storage for ${media.originalFilename || media.id} (${detail})`,
-        )
-      }
+      await downloadMediaSourceToFile({ store, media, destinationPath: sourcePath })
       sourceCache.set(media.id, sourcePath)
     }
 
@@ -536,11 +541,7 @@ export async function runCutExport(exportId: string): Promise<void> {
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-export-source-${scene.mediaAssetId}-${randomUUID()}`)
-      await store.downloadObjectToFile({
-        workspaceId: media.workspaceId,
-        storageKey: media.storageKey,
-        destinationPath: sourcePath,
-      })
+      await downloadMediaSourceToFile({ store, media, destinationPath: sourcePath })
       sourceCache.set(scene.mediaAssetId, sourcePath)
     }
 
@@ -552,11 +553,7 @@ export async function runCutExport(exportId: string): Promise<void> {
       }
       mediaById.set(media.id, media)
       const sourcePath = join(tmpdir(), `videon-export-source-${clip.mediaAssetId}-${randomUUID()}`)
-      await store.downloadObjectToFile({
-        workspaceId: media.workspaceId,
-        storageKey: media.storageKey,
-        destinationPath: sourcePath,
-      })
+      await downloadMediaSourceToFile({ store, media, destinationPath: sourcePath })
       sourceCache.set(clip.mediaAssetId, sourcePath)
     }
 

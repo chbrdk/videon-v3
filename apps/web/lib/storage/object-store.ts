@@ -7,6 +7,62 @@ export function mediaSourceStorageKey(workspaceId: string, mediaAssetId: string)
   return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/source`
 }
 
+/** True when key is exactly the canonical source object path. */
+export function isCanonicalMediaSourceKey(
+  storageKey: string,
+  workspaceId: string,
+  mediaAssetId: string,
+): boolean {
+  try {
+    return storageKey === mediaSourceStorageKey(workspaceId, mediaAssetId)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Detect broken pointers like `workspaceId/` (prefix only) that pass workspace scoping
+ * but never point at an uploaded source object.
+ */
+export function isCorruptMediaSourceKey(
+  storageKey: string,
+  workspaceId: string,
+  mediaAssetId?: string,
+): boolean {
+  const key = String(storageKey || '').trim()
+  const ws = String(workspaceId || '').trim()
+  if (!key || !ws) return true
+  const prefix = `${ws}/`
+  if (key === ws || key === prefix) return true
+  if (!key.startsWith(prefix)) return true
+  if (!key.includes('/media/')) return true
+  if (mediaAssetId && !key.includes(`/media/${mediaAssetId}/`)) return true
+  if (!/\/source$/.test(key)) return true
+  return false
+}
+
+/**
+ * Ordered candidates for reading a media source: stored key (if sane) then canonical.
+ */
+export function mediaSourceStorageKeyCandidates(input: {
+  workspaceId: string
+  mediaAssetId: string
+  storageKey?: string | null
+}): string[] {
+  const canonical = mediaSourceStorageKey(input.workspaceId, input.mediaAssetId)
+  const stored = String(input.storageKey || '').trim()
+  const out: string[] = []
+  if (
+    stored &&
+    !isCorruptMediaSourceKey(stored, input.workspaceId, input.mediaAssetId) &&
+    stored !== canonical
+  ) {
+    out.push(stored)
+  }
+  out.push(canonical)
+  return out
+}
+
 export function mediaStemStorageKey(
   workspaceId: string,
   mediaAssetId: string,

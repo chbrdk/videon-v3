@@ -125,6 +125,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | `specs/domain/v7-production-rollout.md` | Domain acceptance / EARS |
 | `knowledge/v7-production-runbook.md` | Operator SoT (deploy, canary, rollback, retention) |
 | `knowledge/legacy-migration-opt-in.md` | Mapping report `videon.legacy-migration.v1` |
+| `knowledge/media-storage-key-corrupt.md` | Corrupt `storage_key` (e.g. `workspaceId/` only) → export heal + re-upload |
 | `knowledge/v7-staging-exercise-log.md` | Exercise evidence (E1–E6) |
 | Coolify main-app | `mi0j3pyjrel80jodebwvhgvi` |
 | Coolify MCP | `pjupngbkompeyfjqocgsi0jy` |
