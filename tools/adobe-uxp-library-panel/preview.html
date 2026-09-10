@@ -14,14 +14,15 @@
       {
         "imports": {
           "uxp": "./src/shims/uxp-browser.js",
-          "premierepro": "./src/shims/premierepro-browser.js"
+          "premierepro": "./src/shims/premierepro-browser.js",
+          "aeft": "./src/shims/aeft-browser.js"
         }
       }
     </script>
     <link rel="stylesheet" href="src/styles.css" />
     <style>
       body::before {
-        content: "Browser-Preview (ohne Premiere) — Token + Staging; Einfügen = Stub";
+        content: "Browser-Preview (ohne Host) — Token + Staging; Einfügen = Stub. AE: ?host=AEFT";
         display: block;
         padding: 8px 12px;
         background: #333;

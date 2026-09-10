@@ -54,4 +54,21 @@ export const shell = {
   },
 }
 
-export default { storage, shell }
+function previewHostName() {
+  try {
+    const q = new URLSearchParams(window.location.search).get('host')
+    if (q && /aeft|aftereffects|ae/i.test(q)) return 'AEFT'
+  } catch {
+    /* ignore */
+  }
+  return 'PPRO'
+}
+
+export const host = {
+  get name() {
+    return previewHostName()
+  },
+  __videonPreview: true,
+}
+
+export default { storage, shell, host }

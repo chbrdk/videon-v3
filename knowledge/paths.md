@@ -86,7 +86,7 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Key / path | Meaning |
 |------------|---------|
 | Domain spec | `specs/domain/adobe-uxp-library-panel.md` — Premiere Wave 1, AE Wave 1.5 |
-| Package | `tools/adobe-uxp-library-panel/` (UXP panel; Product API client; Premiere Wave 1) |
+| Package | `tools/adobe-uxp-library-panel/` (UXP dual-host: Premiere Wave 1 + AE Wave 1.5) |
 | Auth | Settings API Bearer (`settings-api-tokens.md`); not MCP service-secret |
 | Search | Same `GET /api/media/search` + `scene-hit-model.md` as `/chat` |
 | Posters | `GET /api/media/:id/frame` (`apiMediaFrame`) |

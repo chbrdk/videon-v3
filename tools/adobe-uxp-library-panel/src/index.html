@@ -32,9 +32,13 @@
           Collection-ID (Fallback)
           <input id="default-project-id" type="text" placeholder="uuid" />
         </label>
-        <label>
+        <label id="premiere-bin-label">
           Premiere Bin
           <input id="bin-name" type="text" value="VIDEON" />
+        </label>
+        <label id="ae-comp-label" class="host-ae hidden">
+          After Effects Comp
+          <input id="comp-name" type="text" value="VIDEON" />
         </label>
         <div class="cache-box">
           <div class="cache-meta">
@@ -85,10 +89,21 @@
       </section>
 
       <section id="insert-bar" class="insert-bar hidden">
-        <label class="check">
+        <p id="host-badge" class="host-badge" hidden></p>
+        <label id="premiere-insert-opts" class="check">
           <input id="append-sequence" type="checkbox" />
           Auch auf aktive Sequence (wenn Host-API erlaubt)
         </label>
+        <div id="ae-insert-opts" class="host-ae hidden">
+          <label class="check">
+            <input id="ae-sequential" type="checkbox" checked />
+            Sequenziell platzieren
+          </label>
+          <label>
+            Gap (Frames)
+            <input id="ae-gap-frames" type="number" min="0" step="1" value="0" />
+          </label>
+        </div>
         <div class="row">
           <button type="button" id="dry-run-btn" class="ghost">
             Download prüfen

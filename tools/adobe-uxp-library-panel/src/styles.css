@@ -235,10 +235,29 @@ button:disabled {
 }
 
 .check {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 8px;
   color: var(--text);
+  font-size: 0.85rem;
+}
+
+.host-badge {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.host-ae label {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.host-ae input[type='number'] {
+  width: 5rem;
+  margin-left: 0.35rem;
 }
 
 .insert-bar {

@@ -111,9 +111,12 @@ Hard limit Wave 1: ≤ **40** hits returned to the panel UI. Product `GET /api/m
 
 ### After Effects (Wave 1.5)
 
-1. Import footage; place layer in target Comp (existing or new).
-2. Trim layer in/out to scene range; support sequential placement + gap (port Legacy behavior).
-3. Do not require the old `videoFilePath` localhost field.
+1. Panel MUST detect host (`PPRO` vs `AEFT`) and route insert to the AE adapter when running in After Effects.
+2. Manifest MUST declare both Premiere and After Effects hosts (dual-host package).
+3. Import footage from the **local cache path** (same `adobe-download` + cache as Premiere); never use search `downloadUrl` or legacy localhost `videoFilePath`.
+4. Place a layer in the target Comp (existing by name or create); trim to scene `startMs`/`endMs` using footage FPS for source timing; support sequential placement + gap frames (Legacy port, corrected layer math).
+5. WHERE Adobe has not yet shipped public AE UXP DOM APIs THEN the adapter MUST: (a) try ExtendScript-style `app.project` when available in-host; (b) otherwise return a structured placement plan + clear `mode: 'plan'` / `unsupported` message — MUST NOT pretend success without an insert.
+6. Panel UX on AE: Comp name + sequential + gap controls (not Premiere Bin/Sequence checkboxes).
 
 ## Panel UX (Wave 1)
 
@@ -184,8 +187,10 @@ Product routes remain those in `apps/web/lib/paths.ts` (`apiMediaSearch`, `apiMe
 
 ### Wave 1.5 — After Effects
 
-1. Same search/auth core; AE adapter inserts trimmed layers into a Comp.
-2. Legacy CEP not required for install.
+1. Same search/auth/cache core; dual-host manifest (`PPRO` + `AEFT`).
+2. AE adapter: placement planner unit-tested; ExtendScript `app.project` insert when available; otherwise explicit plan/`unsupported` (public AE UXP DOM still pending Adobe).
+3. Panel switches Comp / sequential / gap UI when host is After Effects.
+4. Legacy CEP not required for install.
 
 ### Wave 2 — Hardening
 

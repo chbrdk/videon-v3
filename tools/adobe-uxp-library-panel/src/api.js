@@ -13,6 +13,9 @@ const DEFAULTS = {
   apiToken: '',
   defaultPlatformProjectId: '',
   binName: 'VIDEON',
+  compName: 'VIDEON',
+  aeSequential: true,
+  aeGapFrames: 0,
 }
 
 export function loadSettings() {

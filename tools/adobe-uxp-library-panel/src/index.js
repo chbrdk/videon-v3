@@ -1,3 +1,4 @@
+import { insertHitIntoAfterEffects } from './aftereffects.js'
 import {
   absoluteProductHref,
   fetchFrameBlob,
@@ -28,6 +29,7 @@ import {
   sceneHitDurationLabel,
   sceneHitTimingLabel,
 } from './hit-model.js'
+import { detectHostApp, isAfterEffectsHost } from './host.js'
 import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
@@ -40,6 +42,9 @@ const els = {
   collectionSelectMain: document.getElementById('collection-select-main'),
   defaultProjectId: document.getElementById('default-project-id'),
   binName: document.getElementById('bin-name'),
+  compName: document.getElementById('comp-name'),
+  premiereBinLabel: document.getElementById('premiere-bin-label'),
+  aeCompLabel: document.getElementById('ae-comp-label'),
   settingsSave: document.getElementById('settings-save'),
   testConnection: document.getElementById('test-connection'),
   reloadCollections: document.getElementById('reload-collections'),
@@ -55,7 +60,12 @@ const els = {
   selectAllBtn: document.getElementById('select-all-btn'),
   selectNoneBtn: document.getElementById('select-none-btn'),
   insertBar: document.getElementById('insert-bar'),
+  hostBadge: document.getElementById('host-badge'),
+  premiereInsertOpts: document.getElementById('premiere-insert-opts'),
+  aeInsertOpts: document.getElementById('ae-insert-opts'),
   appendSequence: document.getElementById('append-sequence'),
+  aeSequential: document.getElementById('ae-sequential'),
+  aeGapFrames: document.getElementById('ae-gap-frames'),
   dryRunBtn: document.getElementById('dry-run-btn'),
   insertBtn: document.getElementById('insert-btn'),
   selectedCount: document.getElementById('selected-count'),
@@ -73,11 +83,29 @@ const blobUrls = []
 let collections = []
 /** @type {AbortController | null} */
 let searchAbort = null
+/** @type {{ id: 'PPRO' | 'AEFT', source: string }} */
+let hostInfo = { id: 'PPRO', source: 'default' }
+/** @type {number} */
+let aeCursorSec = 0
 
 function showBanner(message, tone = '') {
   els.banner.hidden = !message
   els.banner.textContent = message || ''
   els.banner.className = `banner${tone ? ` ${tone}` : ''}`
+}
+
+function applyHostChrome() {
+  const ae = isAfterEffectsHost(hostInfo)
+  els.premiereBinLabel?.classList.toggle('hidden', ae)
+  els.aeCompLabel?.classList.toggle('hidden', !ae)
+  els.premiereInsertOpts?.classList.toggle('hidden', ae)
+  els.aeInsertOpts?.classList.toggle('hidden', !ae)
+  if (els.hostBadge) {
+    els.hostBadge.hidden = false
+    els.hostBadge.textContent = ae
+      ? `Host: After Effects (${hostInfo.source})`
+      : `Host: Premiere Pro (${hostInfo.source})`
+  }
 }
 
 function updateCacheStatsLabel(stats) {
@@ -171,7 +199,10 @@ function syncCollectionUi(selectedId) {
 function applySettingsToForm(settings) {
   els.productBaseUrl.value = settings.productBaseUrl || ''
   els.apiToken.value = settings.apiToken || ''
-  els.binName.value = settings.binName || 'VIDEON'
+  if (els.binName) els.binName.value = settings.binName || 'VIDEON'
+  if (els.compName) els.compName.value = settings.compName || 'VIDEON'
+  if (els.aeSequential) els.aeSequential.checked = settings.aeSequential !== false
+  if (els.aeGapFrames) els.aeGapFrames.value = String(settings.aeGapFrames ?? 0)
   syncCollectionUi(settings.defaultPlatformProjectId || '')
 }
 
@@ -184,7 +215,10 @@ function readFormSettings() {
     productBaseUrl: els.productBaseUrl.value.trim(),
     apiToken: els.apiToken.value.trim(),
     defaultPlatformProjectId: fromSelect,
-    binName: els.binName.value.trim() || 'VIDEON',
+    binName: els.binName?.value.trim() || 'VIDEON',
+    compName: els.compName?.value.trim() || 'VIDEON',
+    aeSequential: els.aeSequential ? els.aeSequential.checked : true,
+    aeGapFrames: els.aeGapFrames ? Math.max(0, Number(els.aeGapFrames.value) || 0) : 0,
   }
 }
 
@@ -431,6 +465,9 @@ async function runInsert() {
   setBusy(true)
 
   const notes = []
+  const ae = isAfterEffectsHost(hostInfo)
+  if (ae) aeCursorSec = 0
+
   try {
     for (let i = 0; i < chosen.length; i += 1) {
       const hit = chosen[i]
@@ -442,13 +479,31 @@ async function runInsert() {
         filename: download.filename,
       })
       showBanner(`Import ${i + 1}/${chosen.length}: ${hit.mediaFilename}`)
-      const result = await insertHitIntoPremiere({
-        filePath,
-        binName: settings.binName,
-        hit,
-        appendToSequence: els.appendSequence.checked,
-      })
+      const result = ae
+        ? await insertHitIntoAfterEffects({
+            filePath,
+            compName: settings.compName,
+            hit,
+            sequential: settings.aeSequential !== false,
+            gapFrames: settings.aeGapFrames,
+            startAtSec: aeCursorSec,
+            allowPlan: hostInfo.source === 'preview',
+          })
+        : await insertHitIntoPremiere({
+            filePath,
+            binName: settings.binName,
+            hit,
+            appendToSequence: els.appendSequence?.checked,
+          })
       if (!result.ok) throw new Error(result.message)
+      if (ae && result.plan && settings.aeSequential !== false) {
+        const duration =
+          result.plan.durationSec != null
+            ? result.plan.durationSec
+            : Math.max(0, ((hit.endMs ?? 0) - (hit.startMs ?? 0)) / 1000) || 1
+        const gapSec = (Number(settings.aeGapFrames) || 0) / 25
+        aeCursorSec = result.plan.compTimeSec + duration + gapSec
+      }
       notes.push(result.message)
       els.progressBar.style.width = `${Math.round(((i + 1) / chosen.length) * 100)}%`
     }
@@ -551,6 +606,10 @@ applySettingsToForm(loadSettings())
 els.searchInput.value = loadLastQuery()
 updateCacheStatsLabel(getCacheStats())
 void refreshCacheUi(false)
+void detectHostApp().then((info) => {
+  hostInfo = info
+  applyHostChrome()
+})
 if (loadSettings().apiToken) {
   void refreshCollections(false)
 }

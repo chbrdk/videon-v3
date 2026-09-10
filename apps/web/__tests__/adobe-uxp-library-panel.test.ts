@@ -25,6 +25,13 @@ import {
   parseCacheIndex,
   pickEvictionKeys,
 } from '../../../tools/adobe-uxp-library-panel/src/cache-index.js'
+import {
+  aeLayerTiming,
+  msToSeconds,
+  planAeInserts,
+  sceneSourceWindowSec,
+} from '../../../tools/adobe-uxp-library-panel/src/ae-placement.js'
+import { insertHitIntoAfterEffects } from '../../../tools/adobe-uxp-library-panel/src/aftereffects.js'
 import { msToFrames, sceneInOutFrames } from '../../../tools/adobe-uxp-library-panel/src/time.js'
 
 describe('adobe uxp library panel contracts', () => {
@@ -70,17 +77,24 @@ describe('adobe uxp library panel contracts', () => {
     expect(source).toMatch(/searchMediaForAccessibleProjects\(\{[\s\S]*limit/)
   })
 
-  it('panel scaffold ships Premiere UXP manifest ≥ 25.6 + browser preview', () => {
+  it('panel scaffold ships dual-host UXP manifest (PPRO ≥ 25.6 + AEFT) + browser preview', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'))
     expect(manifest.id).toBe('videon.libraryPanel')
-    expect(manifest.host.app).toBe('PPRO')
-    expect(manifest.host.minVersion).toBe('25.6')
+    expect(Array.isArray(manifest.host)).toBe(true)
+    expect(manifest.host).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ app: 'PPRO', minVersion: '25.6' }),
+        expect.objectContaining({ app: 'AEFT' }),
+      ]),
+    )
     expect(manifest.entrypoints?.[0]?.type).toBe('panel')
     expect(readFileSync(join(root, 'preview.html'), 'utf8')).toContain('importmap')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('collection-select')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('select-all-btn')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('ae-sequential')
     expect(readFileSync(join(root, 'src/aftereffects.js'), 'utf8')).toContain('insertHitIntoAfterEffects')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('insertHitIntoAfterEffects')
   })
 
   it('premiere path helpers reject signed URLs for import', () => {
@@ -195,5 +209,62 @@ describe('adobe uxp library panel contracts', () => {
     expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('resolveCachedPath')
     expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('readCachedPosterBlob')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('clearCache')
+  })
+
+  it('AE placement planner sequential + gap + corrected layer timing', () => {
+    expect(msToSeconds(2500)).toBe(2.5)
+    expect(sceneSourceWindowSec({ startMs: 1000, endMs: 3000 })).toEqual({
+      inPointSec: 1,
+      outPointSec: 3,
+      durationSec: 2,
+    })
+    const timing = aeLayerTiming({ startMs: 1000, endMs: 3000 }, 5)
+    expect(timing).toMatchObject({
+      startTime: 4,
+      inPoint: 5,
+      outPoint: 7,
+      durationSec: 2,
+      fullFootage: false,
+    })
+    const plan = planAeInserts(
+      [
+        { id: 'a', startMs: 0, endMs: 2000 },
+        { id: 'b', startMs: 500, endMs: 1500 },
+      ],
+      { sequential: true, gapFrames: 25, fps: 25, startAtSec: 0 },
+    )
+    expect(plan[0].compTimeSec).toBe(0)
+    expect(plan[1].compTimeSec).toBe(3) // 2s clip + 1s gap
+  })
+
+  it('AE adapter returns explicit unsupported without host scripting', async () => {
+    const result = await insertHitIntoAfterEffects({
+      filePath: '/tmp/clip.mp4',
+      compName: 'VIDEON',
+      hit: { id: 'h1', startMs: 0, endMs: 1000, mediaFilename: 'clip.mp4' },
+      allowPlan: false,
+    })
+    expect(result.ok).toBe(false)
+    expect(result.mode).toBe('unsupported')
+    expect(result.plan?.compTimeSec).toBe(0)
+
+    const planOnly = await insertHitIntoAfterEffects({
+      filePath: '/tmp/clip.mp4',
+      compName: 'VIDEON',
+      hit: { id: 'h1', startMs: 0, endMs: 1000 },
+      allowPlan: true,
+    })
+    expect(planOnly.ok).toBe(true)
+    expect(planOnly.mode).toBe('plan')
+  })
+
+  it('domain spec locks Wave 1.5 AE honesty (no fake insert)', () => {
+    const domain = readFileSync(
+      join(__dirname, '../../../specs/domain/adobe-uxp-library-panel.md'),
+      'utf8',
+    )
+    expect(domain).toContain('Wave 1.5')
+    expect(domain).toContain('MUST NOT pretend success')
+    expect(domain).toContain('dual-host')
   })
 })
