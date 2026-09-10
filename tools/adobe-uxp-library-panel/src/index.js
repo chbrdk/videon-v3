@@ -36,7 +36,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.13'
+const PANEL_VERSION = '0.1.14'
 
 /** @type {Record<string, HTMLElement | null>} */
 let els = {}
@@ -335,15 +335,22 @@ function buildHitRow(settings, hit, posterUrl) {
   media.className = 'hit-card-media'
 
   const img = document.createElement('img')
+  img.className = 'hit-card-thumb'
   img.alt = hit.mediaFilename || 'Szene'
-  if (posterUrl) img.src = posterUrl
-  else img.classList.add('hit-ph')
+  if (posterUrl) {
+    img.src = posterUrl
+  } else {
+    img.classList.add('hit-ph')
+  }
 
   const check = document.createElement('input')
   check.type = 'checkbox'
   check.className = 'hit-card-check'
   check.checked = selected.has(hit.id)
   check.title = 'Auswählen'
+  on(check, 'click', (event) => {
+    event.stopPropagation?.()
+  })
   on(check, 'change', () => {
     if (check.checked) selected.add(hit.id)
     else selected.delete(hit.id)
@@ -405,6 +412,9 @@ function buildHitRow(settings, hit, posterUrl) {
   on(row, 'click', (event) => {
     const target = event.target
     if (target === check || target === open || (target && open.contains?.(target))) return
+    if (target && media.contains?.(target) && target !== media && target !== img) {
+      /* badge clicks still toggle */
+    }
     check.checked = !check.checked
     if (check.checked) selected.add(hit.id)
     else selected.delete(hit.id)
@@ -413,6 +423,22 @@ function buildHitRow(settings, hit, posterUrl) {
   })
 
   return row
+}
+
+function applyPosterToCard(hitId, posterUrl) {
+  if (!posterUrl || !els.resultsList) return
+  let card = null
+  for (const node of els.resultsList.querySelectorAll('.hit-card') || []) {
+    if (node.getAttribute('data-hit-id') === hitId) {
+      card = node
+      break
+    }
+  }
+  if (!card) return
+  const img = card.querySelector('img.hit-card-thumb')
+  if (!img) return
+  img.src = posterUrl
+  img.classList.remove('hit-ph')
 }
 
 async function renderHits(settings, signal) {
@@ -424,27 +450,33 @@ async function renderHits(settings, signal) {
     return
   }
 
+  // Paint cards immediately — never wait on posters (UXP/502 would leave an empty list).
   els.resultsList.innerHTML = ''
-  const posters = await Promise.all(
+  const fragment = document.createDocumentFragment?.() || null
+  const nodes = hits.map((hit) => buildHitRow(settings, hit, null))
+  if (fragment) {
+    for (const node of nodes) fragment.append(node)
+    els.resultsList.append(fragment)
+  } else {
+    for (const node of nodes) els.resultsList.append(node)
+  }
+  updateSelectionChrome()
+
+  // Progressive poster fill; failures stay as placeholders.
+  void Promise.all(
     hits.map(async (hit) => {
+      if (signal?.aborted) return
       try {
         const blob = await loadPosterForHit(settings, hit, signal)
-        if (!blob) return null
+        if (!blob || signal?.aborted) return
         const url = URL.createObjectURL(blob)
         blobUrls.push(url)
-        return url
+        applyPosterToCard(hit.id, url)
       } catch {
-        return null
+        /* placeholder remains */
       }
     }),
   )
-
-  if (signal?.aborted) return
-
-  hits.forEach((hit, index) => {
-    els.resultsList.append(buildHitRow(settings, hit, posters[index]))
-  })
-  updateSelectionChrome()
 }
 
 async function runSearch() {

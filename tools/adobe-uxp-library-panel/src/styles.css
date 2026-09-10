@@ -181,48 +181,54 @@ button:disabled {
 }
 
 .results-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  align-content: flex-start;
   max-height: 54vh;
   overflow: auto;
   padding: 2px;
 }
 
+.results-list > .empty {
+  flex: 1 1 100%;
+}
+
 .hit-card {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  flex: 1 1 150px;
+  max-width: calc(50% - 5px);
+  min-width: 140px;
   border: 1px solid var(--stroke);
   border-radius: 8px;
-  background: var(--bg);
+  background: #1a1a1a;
   overflow: hidden;
   cursor: pointer;
-  min-width: 0;
 }
 
 .hit-card.selected {
-  border-color: #8a8a8a;
-  box-shadow: inset 0 0 0 1px #8a8a8a;
+  border-color: #9a9a9a;
 }
 
 .hit-card-media {
   position: relative;
-  aspect-ratio: 16 / 9;
-  background: #111;
+  width: 100%;
+  height: 84px;
+  background: #0d0d0d;
+  flex-shrink: 0;
 }
 
-.hit-card-media img,
-.hit-card-media .hit-ph {
+.hit-card-thumb {
   display: block;
   width: 100%;
-  height: 100%;
+  height: 84px;
   object-fit: cover;
-  border-radius: 0;
+  background: #0d0d0d;
 }
 
 .hit-ph {
-  background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+  background: #222;
 }
 
 .hit-card-check {
@@ -232,7 +238,7 @@ button:disabled {
   margin: 0;
   width: 14px;
   height: 14px;
-  z-index: 1;
+  z-index: 2;
 }
 
 .hit-card-badge {
@@ -241,10 +247,12 @@ button:disabled {
   bottom: 6px;
   padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(0, 0, 0, 0.72);
+  background: #000;
   color: #f2f2f2;
   font-size: 10px;
   line-height: 1.2;
+  z-index: 2;
+  opacity: 0.85;
 }
 
 .hit-card-body {
@@ -261,6 +269,7 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text);
 }
 
 .hit-meta {
@@ -269,17 +278,15 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--muted);
 }
 
 .hit-snippet {
   font-size: 10px;
   line-height: 1.35;
   color: var(--muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  max-height: 2.7em;
   overflow: hidden;
-  min-height: 2.7em;
 }
 
 .hit-meta,

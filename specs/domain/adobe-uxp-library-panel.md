@@ -124,7 +124,7 @@ Minimum surface:
 
 1. Settings: Product base URL (from env/docs, no hardcode in source defaults beyond staging documented in `knowledge/paths.md`), API token, default Collection, default Bin/Comp name, cache path reveal/clear.
 2. Search field + Enter; loading and empty states.
-3. Result **card grid**: 16:9 poster thumbnail, filename, project, scene/timing badge, snippet (2 lines), score/rank if present; multi-select via checkbox or card click.
+3. Result **card grid** (UXP-safe flex wrap): fixed-height 16:9-ish poster (84px), filename, project, scene/timing badge, snippet, score/rank if present; multi-select via checkbox or card click. Cards render **before** poster fetch — placeholders stay if frames fail (e.g. 502).
 4. Insert options: Bin only vs Bin+Sequence (Premiere); target Comp (AE); sequential + gap.
 5. Progress for multi-insert downloads.
 
