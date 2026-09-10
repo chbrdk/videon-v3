@@ -1275,11 +1275,11 @@
     const check = document.createElement("input");
     check.type = "checkbox";
     check.checked = selected.has(hit.id);
-    check.addEventListener("change", () => {
+    check.onchange = () => {
       if (check.checked) selected.add(hit.id);
       else selected.delete(hit.id);
       updateSelectionChrome();
-    });
+    };
     const img = document.createElement("img");
     img.alt = "";
     if (posterUrl) img.src = posterUrl;
@@ -1308,14 +1308,14 @@
     const open = document.createElement("button");
     open.type = "button";
     open.textContent = "In VIDEON \xF6ffnen";
-    open.addEventListener("click", () => {
+    open.onclick = () => {
       const href = absoluteProductHref(settings, hit.href);
       if (!href) {
         showBanner("Kein Deep Link am Treffer.", "error");
         return;
       }
       void openExternal(href);
-    });
+    };
     actions.append(open);
     body.append(title, meta, snippet, actions);
     row.append(check, img, body);
@@ -1485,16 +1485,16 @@
   }
   function on(el, eventName, handler) {
     if (!el) return;
-    try {
-      el.addEventListener(eventName, handler);
-      return;
-    } catch {
-    }
     const key = `on${eventName}`;
     const previous = typeof el[key] === "function" ? el[key] : null;
     el[key] = (event) => {
-      if (previous) previous.call(el, event);
-      handler(event);
+      try {
+        if (previous) previous.call(el, event);
+        handler(event);
+      } catch (error) {
+        console.error("[VIDEON] handler", eventName, error);
+        showBanner(error instanceof Error ? error.message : String(error), "error");
+      }
     };
   }
   function bindPanel() {
@@ -1519,23 +1519,25 @@
         els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken) ? "Gespeichert." : "Gespeichert \u2014 Token-Format pr\xFCfen (videon_\u2026).";
       }
     });
-    on(els.testConnection, "click", async () => {
-      const settings = saveSettings(readFormSettings());
-      if (els.settingsStatus) {
-        els.settingsStatus.hidden = false;
-        els.settingsStatus.textContent = "Teste\u2026";
-      }
-      try {
-        const ok = await testHealth(settings);
+    on(els.testConnection, "click", () => {
+      void (async () => {
+        const settings = saveSettings(readFormSettings());
         if (els.settingsStatus) {
-          els.settingsStatus.textContent = ok ? "Health OK" : "Health fehlgeschlagen";
+          els.settingsStatus.hidden = false;
+          els.settingsStatus.textContent = "Teste\u2026";
         }
-        if (ok) await refreshCollections(false);
-      } catch (error) {
-        if (els.settingsStatus) {
-          els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
+        try {
+          const ok = await testHealth(settings);
+          if (els.settingsStatus) {
+            els.settingsStatus.textContent = ok ? "Health OK" : "Health fehlgeschlagen";
+          }
+          if (ok) await refreshCollections(false);
+        } catch (error) {
+          if (els.settingsStatus) {
+            els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
+          }
         }
-      }
+      })();
     });
     on(els.reloadCollections, "click", () => {
       void refreshCollections(true);
@@ -1543,22 +1545,24 @@
     on(els.cacheRefresh, "click", () => {
       void refreshCacheUi(true);
     });
-    on(els.cacheClear, "click", async () => {
-      if (els.settingsStatus) {
-        els.settingsStatus.hidden = false;
-        els.settingsStatus.textContent = "Cache wird geleert\u2026";
-      }
-      try {
-        const result = await clearCache();
-        updateCacheStatsLabel({ count: 0, bytes: 0 });
+    on(els.cacheClear, "click", () => {
+      void (async () => {
         if (els.settingsStatus) {
-          els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`;
+          els.settingsStatus.hidden = false;
+          els.settingsStatus.textContent = "Cache wird geleert\u2026";
         }
-      } catch (error) {
-        if (els.settingsStatus) {
-          els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
+        try {
+          const result = await clearCache();
+          updateCacheStatsLabel({ count: 0, bytes: 0 });
+          if (els.settingsStatus) {
+            els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`;
+          }
+        } catch (error) {
+          if (els.settingsStatus) {
+            els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
+          }
         }
-      }
+      })();
     });
     on(els.collectionSelect, "change", onCollectionChange);
     on(els.collectionSelectMain, "change", onCollectionChange);
@@ -1588,6 +1592,58 @@
     on(els.insertBtn, "click", () => {
       void runInsert();
     });
+    try {
+      globalThis.videonPanel = {
+        toggleSettings() {
+          els.settingsPanel?.classList.toggle("hidden");
+          if (els.settingsPanel && !els.settingsPanel.classList.contains("hidden")) void refreshCacheUi(false);
+        },
+        saveSettings() {
+          const draft = readFormSettings();
+          const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl);
+          if (!urlCheck.ok) {
+            if (els.settingsStatus) {
+              els.settingsStatus.hidden = false;
+              els.settingsStatus.textContent = urlCheck.error;
+            }
+            return;
+          }
+          const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value });
+          applySettingsToForm(settings);
+          if (els.settingsStatus) {
+            els.settingsStatus.hidden = false;
+            els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken) ? "Gespeichert." : "Gespeichert \u2014 Token-Format pr\xFCfen (videon_\u2026).";
+          }
+        },
+        testConnection() {
+          void (async () => {
+            const settings = saveSettings(readFormSettings());
+            if (els.settingsStatus) {
+              els.settingsStatus.hidden = false;
+              els.settingsStatus.textContent = "Teste\u2026";
+            }
+            try {
+              const ok = await testHealth(settings);
+              if (els.settingsStatus) {
+                els.settingsStatus.textContent = ok ? "Health OK" : "Health fehlgeschlagen";
+              }
+              if (ok) await refreshCollections(false);
+            } catch (error) {
+              if (els.settingsStatus) {
+                els.settingsStatus.textContent = error instanceof Error ? error.message : String(error);
+              }
+            }
+          })();
+        },
+        reloadCollections() {
+          void refreshCollections(true);
+        },
+        search() {
+          void runSearch();
+        }
+      };
+    } catch {
+    }
   }
   function bootPanel() {
     els = queryEls();

@@ -302,11 +302,11 @@ function buildHitRow(settings, hit, posterUrl) {
   const check = document.createElement('input')
   check.type = 'checkbox'
   check.checked = selected.has(hit.id)
-  check.addEventListener('change', () => {
+  check.onchange = () => {
     if (check.checked) selected.add(hit.id)
     else selected.delete(hit.id)
     updateSelectionChrome()
-  })
+  }
 
   const img = document.createElement('img')
   img.alt = ''
@@ -342,14 +342,14 @@ function buildHitRow(settings, hit, posterUrl) {
   const open = document.createElement('button')
   open.type = 'button'
   open.textContent = 'In VIDEON öffnen'
-  open.addEventListener('click', () => {
+  open.onclick = () => {
     const href = absoluteProductHref(settings, hit.href)
     if (!href) {
       showBanner('Kein Deep Link am Treffer.', 'error')
       return
     }
     void openExternal(href)
-  })
+  }
   actions.append(open)
 
   body.append(title, meta, snippet, actions)
@@ -540,19 +540,19 @@ async function runInsert() {
   }
 }
 
+/** UXP: never call addEventListener — use on* properties only (domjs throws otherwise). */
 function on(el, eventName, handler) {
   if (!el) return
-  try {
-    el.addEventListener(eventName, handler)
-    return
-  } catch {
-    /* UXP DOM sometimes rejects addEventListener options / document events */
-  }
   const key = `on${eventName}`
   const previous = typeof el[key] === 'function' ? el[key] : null
   el[key] = (event) => {
-    if (previous) previous.call(el, event)
-    handler(event)
+    try {
+      if (previous) previous.call(el, event)
+      handler(event)
+    } catch (error) {
+      console.error('[VIDEON] handler', eventName, error)
+      showBanner(error instanceof Error ? error.message : String(error), 'error')
+    }
   }
 }
 
@@ -582,23 +582,25 @@ function bindPanel() {
     }
   })
 
-  on(els.testConnection, 'click', async () => {
-    const settings = saveSettings(readFormSettings())
-    if (els.settingsStatus) {
-      els.settingsStatus.hidden = false
-      els.settingsStatus.textContent = 'Teste…'
-    }
-    try {
-      const ok = await testHealth(settings)
+  on(els.testConnection, 'click', () => {
+    void (async () => {
+      const settings = saveSettings(readFormSettings())
       if (els.settingsStatus) {
-        els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
+        els.settingsStatus.hidden = false
+        els.settingsStatus.textContent = 'Teste…'
       }
-      if (ok) await refreshCollections(false)
-    } catch (error) {
-      if (els.settingsStatus) {
-        els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+      try {
+        const ok = await testHealth(settings)
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
+        }
+        if (ok) await refreshCollections(false)
+      } catch (error) {
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+        }
       }
-    }
+    })()
   })
 
   on(els.reloadCollections, 'click', () => {
@@ -609,22 +611,24 @@ function bindPanel() {
     void refreshCacheUi(true)
   })
 
-  on(els.cacheClear, 'click', async () => {
-    if (els.settingsStatus) {
-      els.settingsStatus.hidden = false
-      els.settingsStatus.textContent = 'Cache wird geleert…'
-    }
-    try {
-      const result = await clearCache()
-      updateCacheStatsLabel({ count: 0, bytes: 0 })
+  on(els.cacheClear, 'click', () => {
+    void (async () => {
       if (els.settingsStatus) {
-        els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`
+        els.settingsStatus.hidden = false
+        els.settingsStatus.textContent = 'Cache wird geleert…'
       }
-    } catch (error) {
-      if (els.settingsStatus) {
-        els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+      try {
+        const result = await clearCache()
+        updateCacheStatsLabel({ count: 0, bytes: 0 })
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = `Cache geleert (${result.deleted} Datei(en) entfernt)`
+        }
+      } catch (error) {
+        if (els.settingsStatus) {
+          els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+        }
       }
-    }
+    })()
   })
 
   on(els.collectionSelect, 'change', onCollectionChange)
@@ -657,6 +661,63 @@ function bindPanel() {
   on(els.insertBtn, 'click', () => {
     void runInsert()
   })
+
+  // HTML-attribute backup for UXP (inline onclick → globalThis.videonPanel)
+  try {
+    globalThis.videonPanel = {
+      toggleSettings() {
+        els.settingsPanel?.classList.toggle('hidden')
+        if (els.settingsPanel && !els.settingsPanel.classList.contains('hidden')) void refreshCacheUi(false)
+      },
+      saveSettings() {
+        const draft = readFormSettings()
+        const urlCheck = normalizeProductBaseUrl(draft.productBaseUrl)
+        if (!urlCheck.ok) {
+          if (els.settingsStatus) {
+            els.settingsStatus.hidden = false
+            els.settingsStatus.textContent = urlCheck.error
+          }
+          return
+        }
+        const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value })
+        applySettingsToForm(settings)
+        if (els.settingsStatus) {
+          els.settingsStatus.hidden = false
+          els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken)
+            ? 'Gespeichert.'
+            : 'Gespeichert — Token-Format prüfen (videon_…).'
+        }
+      },
+      testConnection() {
+        void (async () => {
+          const settings = saveSettings(readFormSettings())
+          if (els.settingsStatus) {
+            els.settingsStatus.hidden = false
+            els.settingsStatus.textContent = 'Teste…'
+          }
+          try {
+            const ok = await testHealth(settings)
+            if (els.settingsStatus) {
+              els.settingsStatus.textContent = ok ? 'Health OK' : 'Health fehlgeschlagen'
+            }
+            if (ok) await refreshCollections(false)
+          } catch (error) {
+            if (els.settingsStatus) {
+              els.settingsStatus.textContent = error instanceof Error ? error.message : String(error)
+            }
+          }
+        })()
+      },
+      reloadCollections() {
+        void refreshCollections(true)
+      },
+      search() {
+        void runSearch()
+      },
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function bootPanel() {
@@ -691,7 +752,7 @@ function bootPanel() {
   return true
 }
 
-/** UXP: never use document.addEventListener(DOMContentLoaded) — it throws in domjs. */
+/** UXP: never use document DOMContentLoaded listeners — domjs throws. */
 function scheduleBoot(attempt = 0) {
   if (bootPanel()) return
   if (attempt >= 40) {

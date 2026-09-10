@@ -4,14 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VIDEON Library</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <div id="app">
       <header class="header">
         <div class="brand">VIDEON</div>
-        <button type="button" id="settings-toggle" class="ghost">Einstellungen</button>
+        <button type="button" id="settings-toggle" class="ghost" onclick="globalThis.videonPanel && videonPanel.toggleSettings()">Einstellungen</button>
       </header>
+      <p id="boot-status" class="status">Panel wird geladen…</p>
 
       <section id="settings-panel" class="settings hidden">
         <label>
@@ -51,9 +52,9 @@
           </div>
         </div>
         <div class="row">
-          <button type="button" id="settings-save" class="primary">Speichern</button>
-          <button type="button" id="test-connection" class="ghost">Verbindung testen</button>
-          <button type="button" id="reload-collections" class="ghost">Collections laden</button>
+          <button type="button" id="settings-save" class="primary" onclick="globalThis.videonPanel && videonPanel.saveSettings()">Speichern</button>
+          <button type="button" id="test-connection" class="ghost" onclick="globalThis.videonPanel && videonPanel.testConnection()">Verbindung testen</button>
+          <button type="button" id="reload-collections" class="ghost" onclick="globalThis.videonPanel && videonPanel.reloadCollections()">Collections laden</button>
         </div>
         <p id="settings-status" class="status" hidden></p>
       </section>
@@ -69,7 +70,7 @@
 
       <section class="search">
         <input id="search-input" type="search" placeholder="Szenen suchen…" />
-        <button type="button" id="search-btn" class="primary">Suchen</button>
+        <button type="button" id="search-btn" class="primary" onclick="globalThis.videonPanel && videonPanel.search()">Suchen</button>
       </section>
 
       <p id="banner" class="banner" hidden></p>
@@ -117,6 +118,6 @@
         </div>
       </section>
     </div>
-    <script type="module" src="index.js"></script>
+    <script src="src/panel.bundle.js"></script>
   </body>
 </html>

@@ -94,9 +94,11 @@ describe('adobe uxp library panel contracts', () => {
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/await import\("uxp"\)/)
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('scheduleBoot')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('function on(el, eventName, handler)')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toMatch(/document\.addEventListener\(\s*['"]DOMContentLoaded['"]/)
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toMatch(/\.addEventListener\s*\(/)
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('videonPanel')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('videonPanel.testConnection')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('scheduleBoot')
-    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/document\.addEventListener\(\s*['"]DOMContentLoaded['"]/)
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/\.addEventListener\s*\(/)
   })
 
   it('premiere path helpers reject signed URLs for import', () => {

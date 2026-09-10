@@ -1,10 +1,14 @@
 {
   "name": "@videon-v3/adobe-uxp-library-panel",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.8",
   "description": "VIDEON Premiere UXP Library Panel — specs/domain/adobe-uxp-library-panel.md",
   "scripts": {
+    "build": "node build.cjs",
     "preview": "npx --yes serve -p 4173",
-    "typecheck": "node -e \"require('fs').accessSync('manifest.json'); console.log('scaffold ok')\""
+    "typecheck": "node -e \"require('fs').accessSync('src/panel.bundle.js'); console.log('bundle ok')\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }
