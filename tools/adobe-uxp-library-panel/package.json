@@ -1,7 +1,7 @@
 {
   "name": "@videon-v3/adobe-uxp-library-panel",
   "private": true,
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "VIDEON Premiere UXP Library Panel — specs/domain/adobe-uxp-library-panel.md",
   "scripts": {
     "build": "node build.cjs",

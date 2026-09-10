@@ -1,6 +1,6 @@
 # Adobe UXP — Update Cut from Premiere (pushback sketch)
 
-**Status:** Draft — 2026-09-10 (manual parity **P1/P2 panel MVP ≥ 0.1.24** — V1 restore; linked-sequence replace; host XML export ≥ 26.2 or file pick; V2/VO apply later)  
+**Status:** Draft — 2026-09-10 (manual parity **P1/P2 panel MVP ≥ 0.1.26** — V1 restore; linked-sequence replace; effects/transitions **Wave P3 product-required**; V2/VO apply later)  
 **Product:** VIDEON v3  
 **Federation:** `2026-05-plexon-federation-v3`  
 **Companions:**  
@@ -8,8 +8,8 @@
 - `specs/domain/cut-export-extras.md` (XMEML outbound SSOT)  
 - `specs/domain/cut-multi-track.md` (V1 / V2 / VO model)  
 - `specs/domain/cut-multi-source-compose.md` · `specs/api/cuts.md`  
-**Knowledge:** `knowledge/paths.md` · `knowledge/adobe-uxp-cut-pushback-premiere.md`  
-**Implements:** `tools/adobe-uxp-library-panel/` — `cut-pushback.js` · `xmeml-pushback.js` · `premiere-capture.js` · `cut-link-store.js` · `premiere-open-cut.js` replace-linked (panel ≥ 0.1.24)
+**Knowledge:** `knowledge/paths.md` · `knowledge/adobe-uxp-cut-pushback-premiere.md` · `knowledge/adobe-uxp-pushback-effects-backlog.md`  
+**Implements:** `tools/adobe-uxp-library-panel/` — `cut-pushback.js` · `xmeml-pushback.js` · `premiere-capture.js` · `cut-link-store.js` · `premiere-open-cut.js` replace-linked (panel ≥ 0.1.26)
 
 ## Purpose
 
@@ -29,7 +29,8 @@ This is **not** live sync. It is **on-demand round-trip parity**.
 1. Manual trigger is enough — no continuous sync.
 2. WHEN a sync action reports success THEN mapped V1 (/ V2 / VO) timeline state MUST be equivalent on both sides (same media assets, source in/out, order, timeline placement within tolerance).
 3. WHEN Premiere contains features outside the Cut model THEN the UI MUST either (a) list them as dropped and require confirm before Cut apply, and/or (b) offer **Premiere aus Cut neu laden** so the NLE is brought back to Cut truth (parity by discarding unsupported NLE-only work).
-4. “Gleich” means **Cut-model equality**, not pixel-identical Premiere project (no promise to preserve transitions/effects).
+4. Through Wave **P2**, “Gleich” means **Cut-model equality** (clips / source windows / placement) — not pixel-identical Premiere (effects/transitions not stored on Cut yet).
+5. Wave **P3** is **product-required**: operators MUST eventually round-trip Premiere effects/transitions without losing them on Cut ↔ Premiere sync (see Waves). Until P3 ships, the panel MUST warn when effects/transitions would be dropped.
 
 ## Problem
 
@@ -45,16 +46,18 @@ Open Cut lands editorial intent in Premiere. Finishing continues in the NLE. Wit
 
 Recommended UX after successful pushback: primary CTA **Premiere aus Cut neu laden** so both sides share the same clean artifact (outbound ZIP), not a half-migrated sequence with leftover effects.
 
-## Non-goals (hard)
+## Non-goals (hard) — Waves P0–P2
 
 - Live / background / continuous sync while editing.
-- Claiming full Premiere project identity (effects, transitions, nests, titles, …).
+- Claiming full Premiere project identity **before Wave P3** (effects, transitions, nests, titles, …).
 - Silent overwrite without diff + confirm when anything would be dropped or remapped.
 - Treating arbitrary Premiere projects as Cuts (only sequences linkable to Collection media).
 - Creating a new Cut from a random sequence in P0 (optional later — “Save as new Cut”).
 - AE / FCP / Resolve.
 - Using pushback as the only Cut editor for daily VIDEON work.
 - Shipping a parser that claims parity when required clips are unmapped.
+
+**Not a forever non-goal:** Premiere **effects / transitions** round-trip — deferred only to **Wave P3** (product-required).
 
 ## Honesty ladder
 
@@ -125,7 +128,7 @@ Aligned with `cut-multi-track.md` / outbound XMEML:
 | Video track `V2` clipitems | `cut_video_clips` on overlay track | **Yes** if present |
 | Audio `VO` / bus pair | `cut_audio_clips` on `audio_bus` | **Yes** if present |
 | Linked V1 stereo under V1 | Derived / ignored on pushback (Cut derives stems from media) | Ignore |
-| Transitions, effects, titles, nests | — | **Drop** (list in diff) |
+| Transitions, effects, titles, nests | — | **P0–P2 Drop** (list in diff); **P3** effects/transitions round-trip **required** |
 | Unknown track names | — | **Drop** or reject apply if they hold the only clips |
 
 ### Media identity
@@ -173,9 +176,10 @@ Alternative: reuse existing PATCH scene batch APIs after client-side mapping —
 6. WHEN required V1 clips cannot map to `mediaAssetId` THEN apply MUST fail closed (unless explicit skip policy is confirmed in a later wave).
 7. WHEN apply succeeds THEN Cut `updatedAt` MUST advance and prior `premiere_xml` exports MUST be treated as stale for Open Cut reuse.
 8. WHEN host cannot capture sequence THEN file-pick or `unsupported` — MUST NOT invent timeline data.
-9. WHEN transitions/effects/nests are present THEN they MUST NOT be written into the Cut as fake scenes.
+9. WHEN transitions/effects/nests are present in Waves P0–P2 THEN they MUST NOT be written into the Cut as fake scenes AND the UI MUST warn that round-trip to Premiere will drop them until Wave P3.
+10. WHEN Wave P3 ships THEN effects/transitions that were applied in Premiere MUST survive Cut aktualisieren and a subsequent Premiere aktualisieren for mapped V1 clips (exact persistence model TBD in P3 spike).
 
-## Waves (proposed — unscheduled)
+## Waves (proposed)
 
 ### Wave P0 — Spec + spike
 
@@ -193,8 +197,32 @@ Alternative: reuse existing PATCH scene batch APIs after client-side mapping —
 
 - [x] Confirm → Product `restore` for **V1**
 - [x] CTA **Übernehmen + Premiere neu laden** (`parity_refresh` via Open Cut)
-- [ ] Staging smoke: edit either side → manual sync → both match on V1
-- [ ] V2 / VO lane apply (still ignored in P0 mapper with diff note)
+- [x] Staging smoke: edit either side → manual sync → both match on V1 (operator-confirmed 2026-09-10)
+- [x] Corrupt-key / duplicate-filename harden + stream heal (panel ≥ 0.1.25)
+- [x] Explicit effects/transitions loss warning in diff (panel ≥ 0.1.26)
+- [ ] V2 / VO lane apply (still ignored in mapper with diff note) — Wave P2.1
+
+### Wave P3 — Effects / transitions round-trip (**product-required**)
+
+**Why:** Editors apply Premiere effects, sync Cut ↔ Premiere, and expect effects to survive. Today they are listed as `ignored: effects|transitions` and stripped on outbound ZIP re-import.
+
+**Intent (spike before code):**
+
+1. Capture effect/transition descriptors from XMEML (or host API) per clipitem.
+2. Persist on Cut without inventing fake scenes — likely clip-attached sidecar (`cut_scene_effects` / export package metadata) **or** opaque Premiere effect blob keyed by `mediaAssetId` + source window.
+3. Outbound `premiere_xml` MUST re-emit preserved effects onto matching clipitems.
+4. Diff MUST show effects add/remove/change; nests/titles MAY remain out of scope in P3.0.
+5. Knowledge: `knowledge/adobe-uxp-pushback-effects-backlog.md`
+
+- [ ] Spike: which effect classes survive XMEML round-trip in Premiere 25/26
+- [ ] Domain model + API for effect sidecar
+- [ ] Panel parse → store → re-export
+- [ ] Tests + staging smoke: effect survives Cut aktualisieren → Premiere aktualisieren
+
+### Wave P2.1 — V2 / VO apply
+
+- [ ] Map Premiere V2 → `cut_video_clips`
+- [ ] Map VO/bus → `cut_audio_clips`
 
 ## Open questions
 

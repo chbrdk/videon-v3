@@ -528,7 +528,28 @@ export function formatPushbackDiffMessage(diff, ignored, unmappedCount, clampedC
   if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`)
   if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf ≥${MIN_PUSHBACK_CLIP_MS}ms angehoben`)
   if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(', ')}`)
+  const effectsWarning = formatEffectsLossWarning(ignored)
+  if (effectsWarning) lines.push(effectsWarning)
   return lines.join('\n')
+}
+
+/**
+ * Product-required Wave P3 will round-trip effects; until then warn operators.
+ * @param {string[]|undefined} ignored
+ */
+export function formatEffectsLossWarning(ignored) {
+  const set = new Set((ignored || []).map((x) => String(x).toLowerCase()))
+  const hasEffects = set.has('effects')
+  const hasTransitions = set.has('transitions')
+  if (!hasEffects && !hasTransitions) return ''
+  const what = [hasEffects ? 'Effekte' : null, hasTransitions ? 'Transitions' : null]
+    .filter(Boolean)
+    .join('/')
+  return (
+    `Achtung: ${what} bleiben nur in Premiere — Cut speichert sie (noch) nicht. ` +
+    `„Übernehmen“ = nur Clips/Zeiten. „Sequenz ersetzen“ / zurück nach Premiere entfernt ${what}. ` +
+    `(Wave P3: Effekte-Roundtrip — product-required.)`
+  )
 }
 
 export function formatUnmappedHint(unmapped) {

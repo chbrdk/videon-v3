@@ -49,7 +49,7 @@ import { insertHitIntoPremiere } from './premiere.js'
 import { looksLikeApiToken, normalizeProductBaseUrl } from './settings.js'
 
 /** Keep in sync with manifest.json / package.json — shown in panel chrome. */
-const PANEL_VERSION = '0.1.25'
+const PANEL_VERSION = '0.1.26'
 
 /** Max concurrent MP4 preview fetches (Product route ≤3s each). */
 const PREVIEW_CONCURRENCY = 2
@@ -526,6 +526,14 @@ function showPushbackConfirm(preview) {
   pendingPushback = preview
   if (els.pushbackDiff) els.pushbackDiff.textContent = preview.message || ''
   els.pushbackConfirm?.classList.remove('hidden')
+  const ignored = preview.ignored || []
+  const effectsRisk = ignored.some((x) => /effect|transition/i.test(String(x)))
+  if (effectsRisk) {
+    showCutsBanner(
+      'Diff enthält Effekte/Transitions — bleiben nur in Premiere bis Wave P3.',
+      'error',
+    )
+  }
 }
 
 async function startCutPushback(cut) {
@@ -619,18 +627,24 @@ async function confirmPushback(withSequenceReplace) {
         { ...cut, updatedAt: nowIso, name: cut.name || preview.sequenceName || cut.id },
         { handoff: true, replaceLinked: true, forceFreshExport: true },
       )
+      const droppedFx = (preview.ignored || []).some((x) => /effect|transition/i.test(String(x)))
       showCutsBanner(
-        'Cut aktualisiert. Sequenz ersetzt — beide Seiten gleich (Cut-Modell).',
-        'ok',
+        droppedFx
+          ? 'Cut aktualisiert + Sequenz ersetzt (Cut-Modell). Premiere-Effekte/Transitions sind dabei entfernt — Wave P3 folgt.'
+          : 'Cut aktualisiert. Sequenz ersetzt — beide Seiten gleich (Cut-Modell).',
+        droppedFx ? 'error' : 'ok',
       )
       return
     }
 
     openCutBusy = false
     updateCutRowStatus(preview.cutId, 'Cut aktualisiert', false)
+    const droppedFx = (preview.ignored || []).some((x) => /effect|transition/i.test(String(x)))
     showCutsBanner(
-      'Cut entspricht der Sequenz. (Premiere bleibt — kein neuer Import.)',
-      'ok',
+      droppedFx
+        ? 'Cut entspricht der Sequenz (V1). Premiere behält Effekte — bis Wave P3 nicht zurücksyncen wenn du sie behalten willst.'
+        : 'Cut entspricht der Sequenz. (Premiere bleibt — kein neuer Import.)',
+      droppedFx ? 'error' : 'ok',
     )
   } catch (error) {
     openCutBusy = false

@@ -2,11 +2,12 @@
 
 **Spec:** `specs/domain/adobe-uxp-cut-pushback-premiere.md`  
 **Updated:** 2026-09-10  
-**Panel:** ≥ **0.1.25**
+**Panel:** ≥ **0.1.26**
 
 ## Product ask
 
-Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.
+Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.  
+**Effects/transitions round-trip = Wave P3 product-required** — see `knowledge/adobe-uxp-pushback-effects-backlog.md`.
 
 ## Buttons (Cuts tab)
 
@@ -16,6 +17,10 @@ Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.
 | **Premiere aktualisieren** | Fresh ZIP → import → **delete prior linked sequences** (no duplicates) |
 | **Cut aktualisieren → Übernehmen** | Premiere → Cut only (**no** ZIP / no new sequence) |
 | **Übernehmen + Sequenz ersetzen** | Apply Cut, then same as Premiere aktualisieren |
+
+## Effects (until P3)
+
+Diff lists `Ignoriert: effects`. Panel warns. Do **not** Sequenz ersetzen if you still need Premiere FX on that sequence.
 
 ## Why “alte Version” / zig Sequenzen happened
 
@@ -27,13 +32,14 @@ Manual buttons; after sync, **Cut-Modell** gleich (V1 now). Not live sync.
 1. `ProjectConverter.exportAsFinalCutProXML` (Premiere ≥ 26.2)  
 2. Else file picker for exported XML  
 
-Mapping: `file-{mediaAssetId}` when preserved; after Premiere re-export resolve `<file>` registry + filename vs Cut/Collection media (`file-1` is not a media id).
+Mapping: `file-{mediaAssetId}` when preserved; after Premiere re-export resolve `<file>` registry + filename vs Cut/Collection media (`file-1` is not a media id). Prefer **Cut** media over Mediathek duplicates (`mergePushbackMediaCatalog`).
 
 ## Operator
 
-UDT Unload → Load → **v0.1.25** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → **Übernehmen** (stay on same sequence). Only use **Sequenz ersetzen** when the Cut editor is ahead.
+UDT Unload → Load → **v0.1.26** → Collection pin → Cuts → open → edit in Premiere → **Cut aktualisieren** → **Übernehmen** (stay on same sequence). Only use **Sequenz ersetzen** when the Cut editor is ahead **and** you accept dropping unsupported Premiere-only FX.
 
 ## Restore constraints
 
 - `cut_scenes.id` / `media_asset_id` are UUIDs (panel emits UUID v4; server replaces invalid ids).
 - Min clip duration **500ms** (`MIN_CUT_CLIP_MS`); pushback clamps shorter Premiere clips before apply.
+- Restore rejects media whose source object is missing in storage.

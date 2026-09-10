@@ -8,6 +8,8 @@ import {
   buildMediaCatalogFromMediaList,
   diffV1Timelines,
   extractFileRegistry,
+  formatEffectsLossWarning,
+  formatPushbackDiffMessage,
   mapClipsToMedia,
   mappedClipsToRestoreScenes,
   mediaAssetIdFromFileId,
@@ -228,7 +230,7 @@ describe('xmeml pushback parser', () => {
     )
   })
 
-  it('panel ships pushback modules in 0.1.25', () => {
+  it('panel ships pushback modules in 0.1.26', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('previewCutPushback')
     expect(readFileSync(join(root, 'src/cut-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
@@ -238,12 +240,30 @@ describe('xmeml pushback parser', () => {
     expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('MIN_PUSHBACK_CLIP_MS')
     expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('ticksToMs')
     expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('mergePushbackMediaCatalog')
+    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('formatEffectsLossWarning')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Cut aktualisieren')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('confirmPushback')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('withSequenceReplace')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.25'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.26'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Wave P3')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('pushback-confirm')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Sequenz ersetzen')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Wave P3')
+  })
+
+  it('warns when effects or transitions would be dropped', () => {
+    expect(formatEffectsLossWarning(['effects'])).toMatch(/Effekte/)
+    expect(formatEffectsLossWarning(['transitions'])).toMatch(/Transitions/)
+    expect(formatEffectsLossWarning(['effects', 'transitions'])).toMatch(/Wave P3/)
+    expect(formatEffectsLossWarning([])).toBe('')
+    const msg = formatPushbackDiffMessage(
+      { summary: 'V1: 1 → 1 Clips · 1 geändert' },
+      ['effects'],
+      0,
+      0,
+    )
+    expect(msg).toContain('Ignoriert: effects')
+    expect(msg).toContain('Wave P3')
   })
 
   it('prefers Cut media over Mediathek duplicates for the same filename', () => {

@@ -3184,7 +3184,17 @@ ${extracted.xmlNativePath}`
     if (unmappedCount) lines.push(`Unmapped: ${unmappedCount} Clip(s)`);
     if (clampedCount) lines.push(`Hinweis: ${clampedCount} Clip(s) auf \u2265${MIN_PUSHBACK_CLIP_MS}ms angehoben`);
     if (ignored?.length) lines.push(`Ignoriert: ${ignored.join(", ")}`);
+    const effectsWarning = formatEffectsLossWarning(ignored);
+    if (effectsWarning) lines.push(effectsWarning);
     return lines.join("\n");
+  }
+  function formatEffectsLossWarning(ignored) {
+    const set = new Set((ignored || []).map((x) => String(x).toLowerCase()));
+    const hasEffects = set.has("effects");
+    const hasTransitions = set.has("transitions");
+    if (!hasEffects && !hasTransitions) return "";
+    const what = [hasEffects ? "Effekte" : null, hasTransitions ? "Transitions" : null].filter(Boolean).join("/");
+    return `Achtung: ${what} bleiben nur in Premiere \u2014 Cut speichert sie (noch) nicht. \u201E\xDCbernehmen\u201C = nur Clips/Zeiten. \u201ESequenz ersetzen\u201C / zur\xFCck nach Premiere entfernt ${what}. (Wave P3: Effekte-Roundtrip \u2014 product-required.)`;
   }
   function formatUnmappedHint(unmapped) {
     if (!unmapped?.length) return "";
@@ -3411,7 +3421,7 @@ ${extracted.xmlNativePath}`
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.25";
+  var PANEL_VERSION = "0.1.26";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
@@ -3824,6 +3834,14 @@ ${extracted.xmlNativePath}`
     pendingPushback = preview;
     if (els.pushbackDiff) els.pushbackDiff.textContent = preview.message || "";
     els.pushbackConfirm?.classList.remove("hidden");
+    const ignored = preview.ignored || [];
+    const effectsRisk = ignored.some((x) => /effect|transition/i.test(String(x)));
+    if (effectsRisk) {
+      showCutsBanner(
+        "Diff enth\xE4lt Effekte/Transitions \u2014 bleiben nur in Premiere bis Wave P3.",
+        "error"
+      );
+    }
   }
   async function startCutPushback(cut) {
     if (openCutBusy) {
@@ -3909,17 +3927,19 @@ ${extracted.xmlNativePath}`
           { ...cut, updatedAt: nowIso, name: cut.name || preview.sequenceName || cut.id },
           { handoff: true, replaceLinked: true, forceFreshExport: true }
         );
+        const droppedFx2 = (preview.ignored || []).some((x) => /effect|transition/i.test(String(x)));
         showCutsBanner(
-          "Cut aktualisiert. Sequenz ersetzt \u2014 beide Seiten gleich (Cut-Modell).",
-          "ok"
+          droppedFx2 ? "Cut aktualisiert + Sequenz ersetzt (Cut-Modell). Premiere-Effekte/Transitions sind dabei entfernt \u2014 Wave P3 folgt." : "Cut aktualisiert. Sequenz ersetzt \u2014 beide Seiten gleich (Cut-Modell).",
+          droppedFx2 ? "error" : "ok"
         );
         return;
       }
       openCutBusy = false;
       updateCutRowStatus(preview.cutId, "Cut aktualisiert", false);
+      const droppedFx = (preview.ignored || []).some((x) => /effect|transition/i.test(String(x)));
       showCutsBanner(
-        "Cut entspricht der Sequenz. (Premiere bleibt \u2014 kein neuer Import.)",
-        "ok"
+        droppedFx ? "Cut entspricht der Sequenz (V1). Premiere beh\xE4lt Effekte \u2014 bis Wave P3 nicht zur\xFCcksyncen wenn du sie behalten willst." : "Cut entspricht der Sequenz. (Premiere bleibt \u2014 kein neuer Import.)",
+        droppedFx ? "error" : "ok"
       );
     } catch (error) {
       openCutBusy = false;
