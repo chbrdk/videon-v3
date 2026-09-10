@@ -958,8 +958,8 @@ export function CutTimeline({
     const sameMedia = nextClip?.scene.mediaAssetId === item.scene.mediaAssetId
     const mediaDurationMs =
       sourceDurationMsByMediaId[item.scene.mediaAssetId] ?? Math.max(item.scene.endMs, item.durationMs)
-    // Edge resize defaults to duration change even if toolbar mode is Slip.
-    const mode = trimMode === 'roll' ? 'roll' : 'ripple'
+    // Slip (trim) keeps timeline duration; Resize/Roll change edges as before.
+    const mode = trimMode
     trimRef.current = {
       sceneId: item.scene.id,
       edge,
@@ -994,11 +994,12 @@ export function CutTimeline({
       if (!preview) return
       let startMs = preview.startMs
       let endMs = preview.endMs
-      let timelineStartMs =
-        trim.edge === 'start'
-          ? Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
-          : trim.timelineStartMs
-      if (trim.edge === 'start') {
+      let timelineStartMs = trim.timelineStartMs
+      if (mode === 'trim') {
+        // Slip: timeline placement stays fixed.
+        setSnapGuideMs(null)
+      } else if (trim.edge === 'start') {
+        timelineStartMs = Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
         const snapped = snapEdit(timelineStartMs, { lane: 'v1', id: item.scene.id })
         const adjust = snapped.ms - timelineStartMs
         if (endMs - (startMs + adjust) >= MIN_CUT_CLIP_MS) {
@@ -1009,6 +1010,7 @@ export function CutTimeline({
           setSnapGuideMs(null)
         }
       } else {
+        timelineStartMs = trim.timelineStartMs
         const timelineEndMs = timelineStartMs + (endMs - startMs)
         const snapped = snapEdit(timelineEndMs, { lane: 'v1', id: item.scene.id })
         const adjust = snapped.ms - timelineEndMs
@@ -1316,13 +1318,14 @@ export function CutTimeline({
       previewTimelineStartMs: clip.timelineStartMs,
       mediaDurationMs,
     }
+    const v2Mode = trimMode === 'trim' ? 'trim' : 'ripple'
     v2TrimRef.current = trimState
     const onMove = (moveEvent: PointerEvent) => {
       const trim = v2TrimRef.current
       if (!trim || trim.clipId !== clip.id) return
       const deltaMs = Math.round((moveEvent.clientX - trim.pointerStartX) * msPerPixel)
       const preview = computeTrimPreview({
-        mode: 'ripple',
+        mode: v2Mode,
         edge: trim.edge,
         startMs: trim.startMs,
         endMs: trim.endMs,
@@ -1333,11 +1336,11 @@ export function CutTimeline({
       if (!preview) return
       let startMs = preview.startMs
       let endMs = preview.endMs
-      let timelineStartMs =
-        trim.edge === 'start'
-          ? Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
-          : trim.timelineStartMs
-      if (trim.edge === 'start') {
+      let timelineStartMs = trim.timelineStartMs
+      if (v2Mode === 'trim') {
+        setSnapGuideMs(null)
+      } else if (trim.edge === 'start') {
+        timelineStartMs = Math.max(0, trim.timelineStartMs + (preview.startMs - trim.startMs))
         const snapped = snapEdit(timelineStartMs, { lane: 'v2', id: clip.id })
         const adjust = snapped.ms - timelineStartMs
         if (endMs - (startMs + adjust) >= MIN_CUT_CLIP_MS) {
@@ -2102,9 +2105,28 @@ export function CutTimeline({
                                 endMs: clip.endMs,
                                 timelineStartMs: clip.timelineStartMs,
                                 pointerX: event.clientX,
+                                mediaDurationMs:
+                                  sourceDurationMsByMediaId[clip.mediaAssetId] ??
+                                  Math.max(clip.endMs, MIN_CUT_CLIP_MS),
                               }
+                              const slip = trimMode === 'trim'
                               const onMove = (moveEvent: PointerEvent) => {
                                 const delta = Math.round((moveEvent.clientX - origin.pointerX) * msPerPixel)
+                                if (slip) {
+                                  const preview = computeTrimPreview({
+                                    mode: 'trim',
+                                    edge: 'start',
+                                    startMs: origin.startMs,
+                                    endMs: origin.endMs,
+                                    sourceDelta: delta,
+                                    mediaDurationMs: origin.mediaDurationMs,
+                                    nextClip: null,
+                                  })
+                                  if (!preview) return
+                                  setSnapGuideMs(null)
+                                  onTrimAudioClip(clip.id, preview.startMs, preview.endMs, origin.timelineStartMs)
+                                  return
+                                }
                                 let timelineStartMs = Math.max(0, origin.timelineStartMs + delta)
                                 let startMs = origin.startMs + delta
                                 let endMs = origin.endMs
@@ -2131,9 +2153,33 @@ export function CutTimeline({
                             onPointerDown={(event) => {
                               event.stopPropagation()
                               if (disabled || !onTrimAudioClip || lockedSet.has(clip.id)) return
-                              const origin = { startMs: clip.startMs, endMs: clip.endMs, timelineStartMs: clip.timelineStartMs, pointerX: event.clientX }
+                              const origin = {
+                                startMs: clip.startMs,
+                                endMs: clip.endMs,
+                                timelineStartMs: clip.timelineStartMs,
+                                pointerX: event.clientX,
+                                mediaDurationMs:
+                                  sourceDurationMsByMediaId[clip.mediaAssetId] ??
+                                  Math.max(clip.endMs, MIN_CUT_CLIP_MS),
+                              }
+                              const slip = trimMode === 'trim'
                               const onMove = (moveEvent: PointerEvent) => {
                                 const delta = Math.round((moveEvent.clientX - origin.pointerX) * msPerPixel)
+                                if (slip) {
+                                  const preview = computeTrimPreview({
+                                    mode: 'trim',
+                                    edge: 'end',
+                                    startMs: origin.startMs,
+                                    endMs: origin.endMs,
+                                    sourceDelta: delta,
+                                    mediaDurationMs: origin.mediaDurationMs,
+                                    nextClip: null,
+                                  })
+                                  if (!preview) return
+                                  setSnapGuideMs(null)
+                                  onTrimAudioClip(clip.id, preview.startMs, preview.endMs, origin.timelineStartMs)
+                                  return
+                                }
                                 let endMs = origin.endMs + delta
                                 const timelineEnd = origin.timelineStartMs + (endMs - origin.startMs)
                                 const snapped = snapEdit(timelineEnd, { lane: 'audio', id: clip.id })

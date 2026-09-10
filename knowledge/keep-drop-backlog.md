@@ -32,4 +32,5 @@
 5. **Wave C (done):** Timeline DS shell — `TimelineRuler` / `TimelineClip` / `Waveform` without rewriting edit math  
 6. **Deferred:** Mediathek browse polish (Wave A) — not editor-critical  
 7. **Wave A (in progress):** Mediathek Browse — thumbs, duration, FilterRow, analysis status  
-8. **Done (Wave 1–4):** Cut editor load performance — Frame posters, eager S3 warm, direct img cache, mixPeaks + idle backfill, monitor poster-first (`specs/domain/cut-editor-load-performance.md`). Remaining: staging smoke / Bin regression. 
+8. **Done (Wave 1–4):** Cut editor load performance — Frame posters, eager S3 warm, direct img cache, mixPeaks + idle backfill, monitor poster-first (`specs/domain/cut-editor-load-performance.md`). Remaining: staging smoke / Bin regression.
+9. **Done (Wave 4 edit fidelity):** Slip commit + multilayer undo (`specs/domain/cut-timeline-edit-ux-wave4.md`).

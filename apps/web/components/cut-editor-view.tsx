@@ -46,7 +46,7 @@ import {
 import { findProgramVideoAtCutMs } from '@/lib/cut-program-hit'
 import { effectiveStemMutes } from '@/lib/cut-lane-aware-audio'
 import {
-  snapshotFromClips,
+  snapshotCutEditor,
   type CutEditorSnapshot,
 } from '@/lib/cut-editor-history'
 import { EditorTransport } from '@/components/editor-transport'
@@ -371,11 +371,28 @@ export function CutEditorView({
 
   const rememberSnapshot = useCallback(() => {
     if (restoringRef.current || clips.length === 0) return
-    const snapshot = snapshotFromClips(clips, cutPlayheadRef.current, activeIndex)
+    const snapshot = snapshotCutEditor({
+      clips,
+      videoClips,
+      audioClips,
+      cutPlayheadMs: cutPlayheadRef.current,
+      activeIndex,
+    })
     setUndoStack((stack) => [...stack, snapshot].slice(-40))
     setRedoStack([])
-  }, [activeIndex, clips])
+  }, [activeIndex, audioClips, clips, videoClips])
 
+  const currentSnapshot = useCallback(
+    () =>
+      snapshotCutEditor({
+        clips,
+        videoClips,
+        audioClips,
+        cutPlayheadMs: cutPlayheadMs,
+        activeIndex,
+      }),
+    [activeIndex, audioClips, clips, cutPlayheadMs, videoClips],
+  )
   const load = useCallback(async () => {
     const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), { cache: 'no-store' })
     const body = (await response.json()) as {
@@ -556,7 +573,12 @@ export function CutEditorView({
       const response = await fetch(paths.routes.apiCutDetail(cutId, platformProjectId), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'restore', scenes: snapshot.scenes }),
+        body: JSON.stringify({
+          action: 'restore',
+          scenes: snapshot.scenes,
+          videoClips: snapshot.videoClips,
+          audioClips: snapshot.audioClips,
+        }),
       })
       const body = (await response.json()) as { error?: { message?: string } }
       if (!response.ok) throw new Error(body.error?.message || 'Rückgängig fehlgeschlagen')
@@ -1044,7 +1066,7 @@ export function CutEditorView({
   const undo = () => {
     if (!canUndo) return
     const snapshot = undoStack[undoStack.length - 1]
-    const current = snapshotFromClips(clips, cutPlayheadMs, activeIndex)
+    const current = currentSnapshot()
     setUndoStack((stack) => stack.slice(0, -1))
     setRedoStack((stack) => [...stack, current])
     void restoreSnapshot(snapshot)
@@ -1053,7 +1075,7 @@ export function CutEditorView({
   const redo = () => {
     if (!canRedo) return
     const snapshot = redoStack[redoStack.length - 1]
-    const current = snapshotFromClips(clips, cutPlayheadMs, activeIndex)
+    const current = currentSnapshot()
     setRedoStack((stack) => stack.slice(0, -1))
     setUndoStack((stack) => [...stack, current])
     void restoreSnapshot(snapshot)

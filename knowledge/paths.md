@@ -22,6 +22,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | `apps/web/lib/msqdx-ui-client.ts` | Client overlays barrel |
 | `hubIndexLayoutKey` | Session storage for cards/list hub layout |
 | `videon.cut.lockedClipIds.<cutId>` | localStorage JSON string[] of UI-locked clip ids (Wave 3) |
+| Cut edit Wave 4 | `specs/domain/cut-timeline-edit-ux-wave4.md` — Slip commit + multilayer undo |
 | `defaultTheme` | `light` → SSR `data-theme=msqdx` via `resolveThemeId` |
 | `themeStorageKey` / `localeStorageKey` / `accentStorageKey` | `videon.v3.*` prefs |
 | `knowledge/i18n.md` | DE/EN UI dictionaries |

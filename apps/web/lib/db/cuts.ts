@@ -666,6 +666,22 @@ export async function addScenesToCut(input: {
   }
 }
 
+export type CutRestoreClip = {
+  id: string
+  trackId: string
+  position: number
+  mediaAssetId: string
+  startMs: number
+  endMs: number
+  timelineStartMs: number
+}
+
+export type CutRestoreResult = {
+  scenes: CutScene[]
+  videoClips: Awaited<ReturnType<typeof import('./cut-video').listCutVideoClips>>
+  audioClips: Awaited<ReturnType<typeof import('./cut-audio').listCutAudioClips>>
+}
+
 export async function restoreCutTimeline(input: {
   cutId: string
   scenes: Array<{
@@ -677,10 +693,24 @@ export async function restoreCutTimeline(input: {
     timelineStartMs?: number
     sceneKey?: string | null
   }>
-}): Promise<CutScene[] | null> {
+  videoClips?: CutRestoreClip[]
+  audioClips?: CutRestoreClip[]
+}): Promise<CutRestoreResult | null> {
   if (input.scenes.length === 0) return null
   for (const scene of input.scenes) {
     if (scene.endMs - scene.startMs < MIN_CLIP_MS) return null
+  }
+  if (input.videoClips) {
+    for (const clip of input.videoClips) {
+      if (clip.endMs - clip.startMs < MIN_CLIP_MS) return null
+      if (!clip.id?.trim() || !clip.trackId?.trim() || !clip.mediaAssetId?.trim()) return null
+    }
+  }
+  if (input.audioClips) {
+    for (const clip of input.audioClips) {
+      if (clip.endMs - clip.startMs < MIN_CLIP_MS) return null
+      if (!clip.id?.trim() || !clip.trackId?.trim() || !clip.mediaAssetId?.trim()) return null
+    }
   }
 
   const client = await databasePool().connect()
@@ -711,9 +741,78 @@ export async function restoreCutTimeline(input: {
       )
       timelineCursor = timelineStartMs + duration
     }
+
+    if (input.videoClips) {
+      await client.query(`delete from cut_video_clips where cut_id = $1`, [input.cutId])
+      const orderedVideo = [...input.videoClips].sort((a, b) => a.position - b.position)
+      for (const [position, clip] of orderedVideo.entries()) {
+        const track = await client.query<{ id: string }>(
+          `select id from cut_tracks where id = $1 and cut_id = $2 and kind = 'video_overlay'`,
+          [clip.trackId, input.cutId],
+        )
+        if (!track.rows[0]) {
+          await client.query('rollback')
+          return null
+        }
+        await client.query(
+          `insert into cut_video_clips (
+             id, track_id, cut_id, position, media_asset_id, timeline_start_ms, start_ms, end_ms
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            clip.id,
+            clip.trackId,
+            input.cutId,
+            position,
+            clip.mediaAssetId,
+            Math.max(0, Math.floor(clip.timelineStartMs)),
+            Math.floor(clip.startMs),
+            Math.floor(clip.endMs),
+          ],
+        )
+      }
+    }
+
+    if (input.audioClips) {
+      await client.query(`delete from cut_audio_clips where cut_id = $1`, [input.cutId])
+      const orderedAudio = [...input.audioClips].sort((a, b) => a.position - b.position)
+      for (const [position, clip] of orderedAudio.entries()) {
+        const track = await client.query<{ id: string }>(
+          `select id from cut_tracks where id = $1 and cut_id = $2 and kind = 'audio_bus'`,
+          [clip.trackId, input.cutId],
+        )
+        if (!track.rows[0]) {
+          await client.query('rollback')
+          return null
+        }
+        await client.query(
+          `insert into cut_audio_clips (
+             id, track_id, cut_id, position, media_asset_id, timeline_start_ms, start_ms, end_ms
+           ) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            clip.id,
+            clip.trackId,
+            input.cutId,
+            position,
+            clip.mediaAssetId,
+            Math.max(0, Math.floor(clip.timelineStartMs)),
+            Math.floor(clip.startMs),
+            Math.floor(clip.endMs),
+          ],
+        )
+      }
+    }
+
     await client.query(`update cuts set updated_at = now() where id = $1`, [input.cutId])
     await client.query('commit')
-    return listScenesForCut(input.cutId)
+    const [{ listCutVideoClips }, { listCutAudioClips }] = await Promise.all([
+      import('./cut-video'),
+      import('./cut-audio'),
+    ])
+    return {
+      scenes: await listScenesForCut(input.cutId),
+      videoClips: await listCutVideoClips(input.cutId),
+      audioClips: await listCutAudioClips(input.cutId),
+    }
   } catch (error) {
     await client.query('rollback')
     throw error

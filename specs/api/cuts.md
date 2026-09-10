@@ -50,7 +50,54 @@ Create a Cut.
 
 - Sets `cut_scenes.timeline_start_ms` (≥ 0). Gaps and overlaps allowed.
 - `trim` MAY also send `timelineStartMs` when the start edge is resized (anchor right edge).
+- WHEN Slip mode commits (`TrimMode` `trim`) THEN `startMs`/`endMs` MUST move together and `timelineStartMs` MUST stay unchanged — see `cut-timeline-edit-ux-wave4.md`.
 - Returns `{ scenes }` with `timelineStartMs` on each scene.
+
+### `restore` (multilayer)
+
+```json
+{
+  "action": "restore",
+  "scenes": [
+    {
+      "id": "<sceneId>",
+      "position": 0,
+      "mediaAssetId": "…",
+      "startMs": 0,
+      "endMs": 5000,
+      "timelineStartMs": 12000,
+      "sceneKey": null
+    }
+  ],
+  "videoClips": [
+    {
+      "id": "<videoClipId>",
+      "trackId": "<trackId>",
+      "position": 0,
+      "mediaAssetId": "…",
+      "startMs": 0,
+      "endMs": 2000,
+      "timelineStartMs": 1000
+    }
+  ],
+  "audioClips": [
+    {
+      "id": "<audioClipId>",
+      "trackId": "<trackId>",
+      "position": 0,
+      "mediaAssetId": "…",
+      "startMs": 0,
+      "endMs": 3000,
+      "timelineStartMs": 500
+    }
+  ]
+}
+```
+
+- `scenes` MUST be non-empty (V1 timeline).
+- `videoClips` / `audioClips` MAY be omitted (leave those lanes unchanged) or sent as arrays (including `[]`) to replace the lane contents in the same transaction.
+- Each scene MUST honor `timelineStartMs` when provided.
+- Returns `{ scenes, videoClips, audioClips }`.
 
 ### New: `moveClips` (batch + optional ripple)
 

@@ -111,7 +111,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 1. WHEN the cut timeline renders ticks THEN it MUST compose `TimelineRuler` (percent offsets); seek/trim math MAY stay pixel-based in app code.
 2. WHEN video/transcript/audio clips render THEN they MUST use `TimelineClip` (and `Waveform` for audio peaks) — edit handlers stay app-local.
 3. `TimelineTrack` dual-column chrome is optional while VIDEON keeps the two-column header + lanes layout.
-4. WHEN the operator drags a V1 clip body THEN the editor MUST call `moveScene` (free arrange on `timeline_start_ms`). Edge handles MUST resize clip duration (source trim); Slip/Roll remain optional toolbar modes.
+4. WHEN the operator drags a V1 clip body THEN the editor MUST call `moveScene` (free arrange on `timeline_start_ms`). Edge handles MUST resize clip duration (source trim) in Resize mode; **Slip** and **Roll** MUST follow `cut-timeline-edit-ux-wave4.md` (Slip is required, not optional).
 5. WHEN V1 clips overlap THEN the clip with higher `position` MUST win program video at that Cut time **unless** an unmuted V2 overlay clip covers the same time (then V2 wins — `cut-multi-track.md`).
 6. WHEN the Cut timeline renders THEN lane order MUST be **V1 → A1/A2/TX → V2 → V2-A1/V2-A2/V2-TX → VO**. Bin drop / body drag / edge resize on V2 MUST call `addVideoClip` / `moveVideoClip` / `trimVideoClip`.
 7. WHEN the operator drags a clip body from V1 onto V2 (or V2 onto V1) THEN the editor MUST call `moveClipLane` and relocate the clip (not copy).
@@ -127,6 +127,7 @@ Normative IA for Collection-bound VIDEON hubs and editor chrome. Behaviour for f
 13. Extended Cut timeline edit UX (audio-bus snap, snap toggle `N`, marks, fit, inertia, nudge, multi-select, trim precue) MUST follow `cut-timeline-edit-ux.md`.
 14. Wave 2 Cut timeline edit UX (ripple, tools, snap filter, minimap, shuttle, marquee, lock, link, `moveClips`, cull) MUST follow `cut-timeline-edit-ux-wave2.md`.
 15. Cut keyboard help MUST follow `cut-editor-shortcuts.md`. Wave 3 polish (V2/VO marquee, minimap window drag, localStorage clip locks) extends Wave 2.
+16. Wave 4 Slip + multilayer undo MUST follow `cut-timeline-edit-ux-wave4.md`.
 
 ## Acceptance
 

@@ -381,6 +381,7 @@ async function applyCutPatch(input: {
       mediaAssetId: string
       startMs: number
       endMs: number
+      timelineStartMs?: number
       sceneKey?: string | null
     }> = []
     for (const entry of rawRestoreScenes) {
@@ -393,6 +394,10 @@ async function applyCutPatch(input: {
       const sceneEnd = typeof scene.endMs === 'number' ? scene.endMs : null
       const sceneKey =
         typeof scene.sceneKey === 'string' && scene.sceneKey.trim() ? scene.sceneKey.trim() : null
+      const timelineStartMs =
+        typeof scene.timelineStartMs === 'number' && Number.isFinite(scene.timelineStartMs)
+          ? Math.max(0, Math.floor(scene.timelineStartMs))
+          : undefined
       if (!id || !mediaId || sceneStart === null || sceneEnd === null) continue
       const media = await findMediaAsset(mediaId)
       if (!media || media.workspaceId !== workspaceId) {
@@ -404,12 +409,70 @@ async function applyCutPatch(input: {
         mediaAssetId: mediaId,
         startMs: sceneStart,
         endMs: sceneEnd,
+        ...(timelineStartMs !== undefined ? { timelineStartMs } : {}),
         sceneKey,
       })
     }
-    const scenes = await restoreCutTimeline({ cutId: cut.id, scenes: restoreScenes })
-    if (!scenes) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
-    return apiJson(request, { scenes })
+
+    const parseOverlayClips = async (raw: unknown) => {
+      if (!Array.isArray(raw)) return undefined
+      const clips: Array<{
+        id: string
+        trackId: string
+        position: number
+        mediaAssetId: string
+        startMs: number
+        endMs: number
+        timelineStartMs: number
+      }> = []
+      for (const entry of raw) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+        const row = entry as Record<string, unknown>
+        const id = typeof row.id === 'string' ? row.id.trim() : ''
+        const trackId = typeof row.trackId === 'string' ? row.trackId.trim() : ''
+        const mediaId = typeof row.mediaAssetId === 'string' ? row.mediaAssetId.trim() : ''
+        const position = typeof row.position === 'number' ? row.position : clips.length
+        const clipStart = typeof row.startMs === 'number' ? row.startMs : null
+        const clipEnd = typeof row.endMs === 'number' ? row.endMs : null
+        const timelineStartMs =
+          typeof row.timelineStartMs === 'number' && Number.isFinite(row.timelineStartMs)
+            ? Math.max(0, Math.floor(row.timelineStartMs))
+            : 0
+        if (!id || !trackId || !mediaId || clipStart === null || clipEnd === null) continue
+        const media = await findMediaAsset(mediaId)
+        if (!media || media.workspaceId !== workspaceId) {
+          return { error: 'Media asset not found' as const }
+        }
+        clips.push({
+          id,
+          trackId,
+          position,
+          mediaAssetId: mediaId,
+          startMs: clipStart,
+          endMs: clipEnd,
+          timelineStartMs,
+        })
+      }
+      return { clips }
+    }
+
+    const videoParsed = await parseOverlayClips(record.videoClips)
+    if (videoParsed && 'error' in videoParsed) {
+      return apiError(request, 404, 'not_found', videoParsed.error ?? 'Media asset not found')
+    }
+    const audioParsed = await parseOverlayClips(record.audioClips)
+    if (audioParsed && 'error' in audioParsed) {
+      return apiError(request, 404, 'not_found', audioParsed.error ?? 'Media asset not found')
+    }
+
+    const restored = await restoreCutTimeline({
+      cutId: cut.id,
+      scenes: restoreScenes,
+      ...(videoParsed && 'clips' in videoParsed ? { videoClips: videoParsed.clips } : {}),
+      ...(audioParsed && 'clips' in audioParsed ? { audioClips: audioParsed.clips } : {}),
+    })
+    if (!restored) return apiError(request, 409, 'invalid_payload', 'Timeline edit could not be applied')
+    return apiJson(request, restored)
   }
 
   if (action === 'addScenes') {

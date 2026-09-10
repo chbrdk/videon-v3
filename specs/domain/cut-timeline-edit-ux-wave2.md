@@ -57,6 +57,10 @@ Continuous zoom; beat track; cross-lane group move; Split remapped off `S`; DB-p
 
 See `cut-editor-shortcuts.md`, V2/VO marquee, minimap window drag, and `videon.cut.lockedClipIds.<cutId>` in `knowledge/paths.md` (UI locks MAY use localStorage; server lock remains out of scope).
 
+## Wave 4
+
+Slip commit + multilayer undo/redo: `cut-timeline-edit-ux-wave4.md`.
+
 ## Acceptance
 
 - Spec + unit tests: ripple, marquee, cull, snap filter, peak LOD, moveClips smoke.
