@@ -24,7 +24,7 @@ Produce Collection-scoped **AI-edited (or later AI-created) video** from operato
 |-------|-------|
 | `mediaAssetId` | Existing non-archived media in workspace |
 | `platformProjectId` | Access Model B writable |
-| `startMs` / `endMs` | Inclusive-exclusive source range; duration 1…`MAX_EDIT_DURATION_MS` (12_000) |
+| `startMs` / `endMs` | Inclusive-exclusive source range; duration 1…`MAX_EDIT_DURATION_MS` (12_000). Worker expands short ranges to the model input floor (Seedance ≥4s, MiniMax H3 Edit ≥5s) within the parent media before calling OpenRouter. |
 | `prompt` | Non-empty; server wraps with preserve clauses (Quality Lock) |
 | `modelId` | Catalog allowlist; default `seedance_2_5_edit` |
 | `skipDraft` | Default `false` — draft lane then approve; `true` → final only |

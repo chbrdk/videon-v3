@@ -265,6 +265,7 @@ export function CutEditorView({
       progressPercent: number | null
       promotedMediaAssetId: string | null
       targetCutInsertedAt: string | null
+      errorMessage?: string | null
     }>
   >([])
   const [aiEditApproveBusy, setAiEditApproveBusy] = useState(false)
@@ -2019,8 +2020,8 @@ export function CutEditorView({
                 <EditorStatusStrip
                   key={job.id}
                   level="critical"
-                  label={t('aiEdit.failed')}
-                  detail={job.modelId}
+                  label={t('aiEdit.jobFailed')}
+                  detail={job.errorMessage || job.modelId}
                 />
               )
             }

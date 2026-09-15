@@ -28,6 +28,10 @@ import {
   resolveDraftModel,
   resolveEditModel,
 } from '@/lib/generation/model-catalog'
+import {
+  editInputMinMsForModel,
+  expandEditRangeForProvider,
+} from '@/lib/generation/expand-edit-range'
 import { scheduleMediaAnalysis } from '@/lib/pipeline/enqueue'
 import { appendPromotedGenerationToCut } from '@/lib/pipeline/append-promoted-to-cut'
 import {
@@ -301,10 +305,45 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
     })
     await markMediaGenerationProgress(jobId, 15)
 
-    await extractSlice({
-      sourcePath,
+    const isDraftLane = job.lane === 'draft'
+    const model = isDraftLane
+      ? resolveDraftModel(job.modelId === 'happy_horse_draft' ? job.modelId : null)
+      : resolveEditModel(job.modelId)
+    if (!model) {
+      await markMediaGenerationFailed(jobId, `Unknown or disabled model: ${job.modelId}`)
+      return
+    }
+
+    // Seedance r2v rejects input clips < ~1.8s — expand within source media.
+    const sliceRange = expandEditRangeForProvider({
       startMs: job.startMs,
       endMs: job.endMs,
+      mediaDurationMs: media.durationMs,
+      minInputMs: editInputMinMsForModel(model.id),
+    })
+    if (sliceRange.insufficient) {
+      await markMediaGenerationFailed(
+        jobId,
+        `Source clip too short for ${model.label}: need ≥${Math.ceil(editInputMinMsForModel(model.id) / 1000)}s of source video (Seedance r2v floor).`,
+      )
+      return
+    }
+    if (sliceRange.expanded) {
+      console.info(
+        '[VIDEON-v3] Expanded edit slice for provider floor',
+        JSON.stringify({
+          jobId,
+          selected: { startMs: job.startMs, endMs: job.endMs },
+          slice: { startMs: sliceRange.startMs, endMs: sliceRange.endMs },
+          modelId: model.id,
+        }),
+      )
+    }
+
+    await extractSlice({
+      sourcePath,
+      startMs: sliceRange.startMs,
+      endMs: sliceRange.endMs,
       destinationPath: slicePath,
     })
     await markMediaGenerationProgress(jobId, 25)
@@ -323,17 +362,11 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
       expiresInSeconds: 4 * 60 * 60,
     })
 
-    const isDraftLane = job.lane === 'draft'
-    const model = isDraftLane
-      ? resolveDraftModel(job.modelId === 'happy_horse_draft' ? job.modelId : null)
-      : resolveEditModel(job.modelId)
-    if (!model) {
-      await markMediaGenerationFailed(jobId, `Unknown or disabled model: ${job.modelId}`)
-      return
-    }
-
     const lockedPrompt = buildQualityLockedPrompt(job.prompt)
-    const durationSeconds = Math.max(1, Math.round((job.endMs - job.startMs) / 1000))
+    const durationSeconds = Math.max(
+      1,
+      Math.round((sliceRange.endMs - sliceRange.startMs) / 1000),
+    )
     const providerResult = await runOpenRouterVideoEdit({
       model: model.providerModelId,
       prompt: lockedPrompt,

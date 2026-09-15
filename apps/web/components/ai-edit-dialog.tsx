@@ -125,6 +125,11 @@ export function AiEditDialog({
           {t('aiEdit.range')}: {formatClock(startMs)} – {formatClock(endMs)} ({Math.round(durationMs / 100) / 10}s)
           {!rangeOk ? ` · ${t('aiEdit.rangeInvalid', { max: Math.round(maxEditMs / 1000) })}` : ''}
         </Text>
+        {durationMs > 0 && durationMs < 4000 ? (
+          <Text role="body" as="p">
+            {t('aiEdit.rangeExpandHint')}
+          </Text>
+        ) : null}
         <Field label={t('aiEdit.prompt')}>
           <Input
             value={prompt}

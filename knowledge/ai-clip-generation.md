@@ -23,12 +23,16 @@ Recommend rules (client-safe): `apps/web/lib/generation/recommend.ts`.
 
 ## Quality Lock checklist
 
-1. Mark In/Out ≤ 12s (Phase 1 hard max).
+1. Mark In/Out ≤ 12s (Phase 1 hard max). Short Cut scenes are auto-expanded to the provider input floor (Seedance ≥4s) within the parent media — if the whole file is shorter, the job fails with a clear error.
 2. Prompt describes **only the change**; system adds preserve clauses (camera, lighting, background, people).
 3. Attach 1–2 reference images of the target subject when identity matters (e.g. Ford Escort).
 4. Review draft A/B against source before approve.
 5. Keep source audio unless the edit requires new sync sound.
 6. Promote → auto light analysis (best-effort) → optional Cut insert; brand check remains manual (no synthetic pass).
+
+## Provider floors (staging note)
+
+OpenRouter Seedance r2v rejects input clips under ~1.8s (`InvalidParameter` on `content[1]`). Worker uses `expandEditRangeForProvider` (`apps/web/lib/generation/expand-edit-range.ts`) before ffmpeg slice + submit.
 
 ## Env
 
