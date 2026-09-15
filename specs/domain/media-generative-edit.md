@@ -61,7 +61,7 @@ Produce Collection-scoped **AI-edited (or later AI-created) video** from operato
 5. Lineage records parent asset, range, model, prompt, lock_pack_hash, job id.
 6. Brand check is **not** automatic; use existing brand seam after analysis. Never synthetic pass.
 7. After promote, the worker MUST schedule a light media analysis run (best-effort; promote still succeeds if enqueue fails).
-8. Seedance edit submits MUST omit `duration` (match input). Fixed duration is create/extend only. Do not send `duration: -1` through OpenRouter (schema rejects it).
+8. Seedance V2V through OpenRouter MUST send a concrete `duration` matching the prepared input clip (4–30s). Do not send `duration: -1` (OpenRouter schema rejects it) and do not omit duration. Quality Lock MUST NOT prefix prompts with `edit:` (triggers Seedance edit-mode that requires -1).
 
 ## Model catalog
 

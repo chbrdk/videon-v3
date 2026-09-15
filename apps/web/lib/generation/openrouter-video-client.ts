@@ -30,14 +30,14 @@ export type GenerationEditInput = {
   imageUrls?: string[]
   resolution: string
   /**
-   * Seedance edit: omit duration so output follows the input clip (4–30s).
-   * OpenRouter Zod rejects duration=-1; Seedance rejects fixed duration on edit.
-   * Fixed seconds only when matchInputDuration is false.
+   * When true (default for Seedance V2V), send duration equal to the input clip
+   * length (4–30). OpenRouter rejects duration=-1; omitting duration lets OR
+   * default a fixed value that Seedance then rejects for edit-classified prompts.
    */
   durationSeconds?: number
   durationMinSeconds?: number
   durationMaxSeconds?: number
-  /** When true (default), omit duration so edit output matches the source clip. */
+  /** When true (default), duration matches the input clip seconds. */
   matchInputDuration?: boolean
   seed?: number | null
   generateAudio?: boolean
@@ -215,14 +215,14 @@ export async function runOpenRouterVideoEdit(input: GenerationEditInput): Promis
     seed: input.seed ?? undefined,
     input_references,
   }
-  // Seedance edit: do not send a fixed duration. OpenRouter rejects -1 (Zod ≥1),
-  // and Seedance rejects fixed seconds for edit — omit so output follows the input clip.
-  if (!matchInput) {
-    body.duration = clampDurationSeconds(input.durationSeconds ?? 5, {
-      min: input.durationMinSeconds,
-      max: input.durationMaxSeconds,
-    })
-  }
+  // Always send a concrete duration ≥1 for OpenRouter Zod.
+  // For V2V “match input”, use the measured/requested clip length (4–30).
+  // Native Seedance edit-mode wants -1, but OR rejects it — avoid edit-classified
+  // prompts (no "edit:" prefix) and send the input length instead.
+  body.duration = clampDurationSeconds(input.durationSeconds ?? 5, {
+    min: matchInput ? Math.max(4, input.durationMinSeconds ?? 4) : input.durationMinSeconds,
+    max: input.durationMaxSeconds,
+  })
 
   return openRouterVideoRoundTrip({
     body,

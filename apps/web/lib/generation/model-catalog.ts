@@ -180,10 +180,12 @@ export function clampGenerationDurationSeconds(
 
 export function buildQualityLockedPrompt(userPrompt: string): string {
   const trimmed = userPrompt.trim()
+  // Do NOT prefix with "edit:" — Seedance classifies that as edit-mode and then
+  // requires duration=-1, which OpenRouter's public /videos schema rejects (Zod ≥1).
   return [
-    `edit: ${trimmed}`,
-    'Preserve the original camera motion, framing, lighting, background, and people.',
-    'Change only what the edit instruction requires. Keep temporal continuity with the source video.',
+    trimmed,
+    'Keep the same shot length, camera motion, framing, lighting, background, and people.',
+    'Apply only the requested change. Do not continue or extend the shot beyond the source clip.',
   ].join(' ')
 }
 

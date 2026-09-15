@@ -34,7 +34,7 @@ Recommend rules (client-safe): `apps/web/lib/generation/recommend.ts`.
 
 OpenRouter Seedance r2v rejects input clips under ~1.8s (`InvalidParameter` on `content[1]`). Worker uses `expandEditRangeForProvider` (`apps/web/lib/generation/expand-edit-range.ts`) before ffmpeg slice + submit.
 
-For Seedance **edit** tasks omit `duration` on the OpenRouter request (output follows the input video, which must be 4–30s). Fixed durations are for create/extend only. Do **not** send `duration: -1` — OpenRouter’s public schema rejects it (`ZodError` ≥1) even though ByteDance’s native API uses -1.
+For Seedance V2V through OpenRouter: send a concrete `duration` matching the prepared input clip (4–30s). Do **not** send `duration: -1` (OpenRouter Zod rejects it) and do **not** omit duration (OR defaults a value Seedance then rejects when the prompt is classified as edit). Quality Lock must not prefix with `edit:` — that triggers Seedance edit-mode which requires -1.
 
 ## Env
 

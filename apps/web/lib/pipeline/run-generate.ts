@@ -53,52 +53,57 @@ async function extractSlice(input: {
   endMs: number
   destinationPath: string
 }): Promise<void> {
+  const durationSec = Math.max(0.1, (input.endMs - input.startMs) / 1000).toFixed(3)
+  // Re-encode with -t so provider-facing clips hit the requested length
+  // (stream-copy often undershoots on keyframe boundaries and Seedance needs ≥4s).
+  await execFileAsync(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-ss',
+      seconds(input.startMs),
+      '-i',
+      input.sourcePath,
+      '-t',
+      durationSec,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '18',
+      '-c:a',
+      'aac',
+      '-movflags',
+      '+faststart',
+      '-y',
+      input.destinationPath,
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  )
+}
+
+async function probeDurationSeconds(filePath: string): Promise<number | null> {
   try {
-    await execFileAsync(
-      'ffmpeg',
+    const { stdout } = await execFileAsync(
+      'ffprobe',
       [
-        '-hide_banner',
-        '-loglevel',
+        '-v',
         'error',
-        '-ss',
-        seconds(input.startMs),
-        '-to',
-        seconds(input.endMs),
-        '-i',
-        input.sourcePath,
-        '-c',
-        'copy',
-        '-y',
-        input.destinationPath,
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        filePath,
       ],
-      { maxBuffer: 8 * 1024 * 1024 },
+      { maxBuffer: 1024 * 1024 },
     )
+    const n = Number.parseFloat(stdout.trim())
+    return Number.isFinite(n) && n > 0 ? n : null
   } catch {
-    await execFileAsync(
-      'ffmpeg',
-      [
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-ss',
-        seconds(input.startMs),
-        '-to',
-        seconds(input.endMs),
-        '-i',
-        input.sourcePath,
-        '-c:v',
-        'libx264',
-        '-preset',
-        'veryfast',
-        '-crf',
-        '18',
-        '-c:a',
-        'aac',
-        '-y',
-        input.destinationPath,
-      ],
-      { maxBuffer: 16 * 1024 * 1024 },
-    )
+    return null
   }
 }
 
@@ -346,6 +351,15 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
       endMs: sliceRange.endMs,
       destinationPath: slicePath,
     })
+    const probedSeconds = await probeDurationSeconds(slicePath)
+    const minInputSeconds = Math.ceil(editInputMinMsForModel(model.id) / 1000)
+    if (probedSeconds != null && probedSeconds + 0.05 < minInputSeconds) {
+      await markMediaGenerationFailed(
+        jobId,
+        `Prepared source clip is ${probedSeconds.toFixed(2)}s; ${model.label} needs ≥${minInputSeconds}s.`,
+      )
+      return
+    }
     await markMediaGenerationProgress(jobId, 25)
 
     const sliceKey = mediaGenerationStorageKey(job.workspaceId, job.mediaAssetId, job.id, 'slice')
@@ -364,8 +378,8 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
 
     const lockedPrompt = buildQualityLockedPrompt(job.prompt)
     const durationSeconds = Math.max(
-      1,
-      Math.round((sliceRange.endMs - sliceRange.startMs) / 1000),
+      minInputSeconds,
+      Math.round(probedSeconds ?? (sliceRange.endMs - sliceRange.startMs) / 1000),
     )
     const providerResult = await runOpenRouterVideoEdit({
       model: model.providerModelId,
@@ -373,7 +387,7 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
       videoUrl: signed,
       imageUrls: job.referenceImageUrls,
       resolution: isDraftLane ? '480p' : model.defaultResolution,
-      // Seedance edit: omit duration (OpenRouter rejects -1; fixed seconds fail edit mode).
+      // Match input length with a concrete duration (OpenRouter rejects -1).
       matchInputDuration: true,
       durationSeconds,
       durationMinSeconds: model.durationMinSeconds,

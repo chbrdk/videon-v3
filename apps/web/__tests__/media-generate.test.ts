@@ -101,10 +101,11 @@ describe('media generative edit contracts', () => {
     expect(publicGenerationModelsForUi('edit').some((m) => m.id === 'minimax_hailuo_3_edit')).toBe(true)
   })
 
-  it('wraps prompts with preserve clauses', () => {
+  it('wraps prompts with preserve clauses without Seedance edit-mode trigger', () => {
     const locked = buildQualityLockedPrompt('Change the car to a Ford Escort')
-    expect(locked).toMatch(/edit:/i)
-    expect(locked).toMatch(/Preserve/i)
+    expect(locked).not.toMatch(/^edit:/i)
+    expect(locked).not.toMatch(/\bedit:\b/i)
+    expect(locked).toMatch(/Keep the same shot length/i)
     expect(locked).toMatch(/Ford Escort/)
   })
 
@@ -184,7 +185,7 @@ describe('OpenRouter video gateway mock', () => {
     expect(result.videoUrl).toMatch(/content/)
     expect(result.requiresAuthDownload).toBe(true)
     expect(calls).toBeGreaterThanOrEqual(2)
-    expect(submittedBody.duration).toBeUndefined()
+    expect(submittedBody.duration).toBe(5)
     expect(submittedBody.input_references).toBeTruthy()
   })
 
@@ -215,6 +216,8 @@ describe('OpenRouter video gateway mock', () => {
       resolution: '720p',
       durationSeconds: 8,
       matchInputDuration: false,
+      durationMinSeconds: 4,
+      durationMaxSeconds: 30,
     })
     expect(submittedBody.duration).toBe(8)
   })
