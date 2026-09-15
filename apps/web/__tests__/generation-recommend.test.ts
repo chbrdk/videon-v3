@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { recommendCreateModelId, recommendEditModelId } from '@/lib/generation/recommend'
 
 describe('generation recommend', () => {
-  it('defaults edit to MiniMax H3', () => {
+  it('defaults edit to Seedance Mini', () => {
     expect(recommendEditModelId({ prompt: 'change the car to a Ford Escort' })).toBe(
-      'minimax_hailuo_3_edit',
+      'seedance_2_0_mini_edit',
     )
   })
 
@@ -20,7 +20,7 @@ describe('generation recommend', () => {
         prompt: 'exact frame keyframe replace logo',
         alephAvailable: false,
       }),
-    ).toBe('minimax_hailuo_3_edit')
+    ).toBe('seedance_2_0_mini_edit')
   })
 
   it('picks Veo for photoreal create', () => {
@@ -34,8 +34,11 @@ describe('generation recommend', () => {
     expect(recommendCreateModelId('minimax hailuo fast create')).toBe('minimax_hailuo_3_create')
   })
 
-  it('picks MiniMax edit for brand/text prompts', () => {
+  it('picks MiniMax edit for brand/text/quality prompts', () => {
     expect(recommendEditModelId({ prompt: 'add brand text logo overlay hailuo' })).toBe(
+      'minimax_hailuo_3_edit',
+    )
+    expect(recommendEditModelId({ prompt: 'high quality motion transfer' })).toBe(
       'minimax_hailuo_3_edit',
     )
   })

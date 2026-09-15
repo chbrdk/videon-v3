@@ -26,7 +26,7 @@ Produce Collection-scoped **AI-edited (or later AI-created) video** from operato
 | `platformProjectId` | Access Model B writable |
 | `startMs` / `endMs` | Inclusive-exclusive source range; duration 1…`MAX_EDIT_DURATION_MS` (12_000). Worker expands short ranges to the model input floor (Seedance ≥4s, MiniMax H3 Edit ≥5s) within the parent media before calling OpenRouter. |
 | `prompt` | Non-empty; server wraps with preserve clauses (Quality Lock) |
-| `modelId` | Catalog allowlist; default `minimax_hailuo_3_edit` (`seedance_2_5_edit` disabled until OpenRouter accepts `duration=-1`) |
+| `modelId` | Catalog allowlist; default `seedance_2_0_mini_edit` (`seedance_2_5_edit` disabled; aliases to Mini) |
 | `skipDraft` | Default `false` — draft lane then approve; `true` → final only |
 | `keepSourceAudio` | Default `true` — mux source audio onto provider video |
 | `referenceImageUrls` | Optional http(s) URLs (≤4) for subject references |
@@ -61,7 +61,7 @@ Produce Collection-scoped **AI-edited (or later AI-created) video** from operato
 5. Lineage records parent asset, range, model, prompt, lock_pack_hash, job id.
 6. Brand check is **not** automatic; use existing brand seam after analysis. Never synthetic pass.
 7. After promote, the worker MUST schedule a light media analysis run (best-effort; promote still succeeds if enqueue fails).
-8. Seedance V2V edit remains unavailable on OpenRouter until `duration=-1` is accepted. Edit path MUST default to MiniMax H3; `seedance_2_5_edit` MUST stay disabled or aliased.
+8. Seedance 2.5 V2V edit remains unavailable on OpenRouter until `duration=-1` is accepted. Edit path MUST default to Seedance 2.0 Mini (`seedance_2_0_mini_edit`); MiniMax H3 remains the quality fallback. `seedance_2_5_edit` MUST stay disabled or aliased to Mini.
 
 ## Model catalog
 
@@ -69,9 +69,10 @@ Internal ids only (UI never hardcodes provider endpoints). Phase 1 edit models �
 
 | `modelId` | Role | OpenRouter model slug (env-overridable) |
 |-----------|------|----------------------------------------|
-| `seedance_2_5_edit` | Disabled (OpenRouter rejects Seedance edit `duration=-1`) | `bytedance/seedance-2.5` |
-| `minimax_hailuo_3_edit` | Default final (+ draft lane) | `minimax/hailuo-3` |
-| `happy_horse_draft` | Draft lane (MiniMax) | same MiniMax edit slug |
+| `seedance_2_0_mini_edit` | Default final (+ draft @480p) | `bytedance/seedance-2.0-mini` · R2V · 4–15s · cheap |
+| `minimax_hailuo_3_edit` | Quality / brand-text / motion-transfer edit | `minimax/hailuo-3` · 2K · 5–15s |
+| `seedance_2_5_edit` | Disabled (OpenRouter rejects Seedance 2.5 edit `duration=-1`) | `bytedance/seedance-2.5` |
+| `happy_horse_draft` | Draft lane (Seedance Mini @480p) | same Mini slug |
 | `runway_aleph_2` | Keyframe-precise edit | Enabled only when `VIDEON_GENERATION_ALEPH_MODEL` is set |
 
 Create-only ids MUST be rejected for `intent=edit`:
@@ -84,9 +85,11 @@ Create-only ids MUST be rejected for `intent=edit`:
 | `veo_3_1_lite_create` | `google/veo-3.1-lite` |
 | `veo_3_1_create` | `google/veo-3.1` |
 
-Client-safe recommend rules (no env): `apps/web/lib/generation/recommend.ts` — edit defaults to MiniMax H3; keyframe/Aleph → Aleph when available; photoreal create → Veo; wan/story → Wan 3.0.
+Client-safe recommend rules (no env): `apps/web/lib/generation/recommend.ts` — edit defaults to Seedance Mini; MiniMax keywords → H3; keyframe/Aleph → Aleph when available; photoreal create → Veo; wan/story → Wan 3.0.
 
 **Note:** OpenRouter video generation is **not ZDR-eligible**. Do not send `zdr: true` on video jobs; if account-wide ZDR enforcement blocks video routing, operators must allow video outside ZDR (vision analysis may still use ZDR).
+
+**Seedance edit caveat:** Seedance 2.5 V2V edit requires `duration=-1` which OpenRouter Zod rejects. Mini is the cost lane for R2V; if Mini also classifies a prompt as edit-mode and fails the same way, fall back to MiniMax H3.
 
 ## Surfaces
 

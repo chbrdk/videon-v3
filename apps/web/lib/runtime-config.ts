@@ -215,8 +215,17 @@ export function generationSeedanceModel(): string {
   )
 }
 
+/** Cheap Seedance 2.0 Mini (edit/draft R2V). */
+export function generationSeedanceMiniModel(): string {
+  return env(paths.envGenerationSeedanceMiniModel) || 'bytedance/seedance-2.0-mini'
+}
+
 export function generationDraftModel(): string {
-  return env(paths.envGenerationDraftModel) || env(paths.envGenerationDraftEndpoint) || generationSeedanceModel()
+  return (
+    env(paths.envGenerationDraftModel) ||
+    env(paths.envGenerationDraftEndpoint) ||
+    generationSeedanceMiniModel()
+  )
 }
 
 export function generationVeoModel(): string {

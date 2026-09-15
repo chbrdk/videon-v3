@@ -68,12 +68,14 @@ describe('media generative edit contracts', () => {
   })
 
   it('allowlists edit models and rejects create-only ids for edit resolve', () => {
+    expect(resolveEditModel('seedance_2_0_mini_edit')?.id).toBe('seedance_2_0_mini_edit')
     expect(resolveEditModel('minimax_hailuo_3_edit')?.id).toBe('minimax_hailuo_3_edit')
-    // Seedance edit is disabled on OpenRouter; alias to MiniMax.
-    expect(resolveEditModel('seedance_2_5_edit')?.id).toBe('minimax_hailuo_3_edit')
+    // Seedance 2.5 edit is disabled on OpenRouter; alias to Mini.
+    expect(resolveEditModel('seedance_2_5_edit')?.id).toBe('seedance_2_0_mini_edit')
     expect(resolveEditModel('veo_3_1_create')).toBeNull()
     expect(resolveEditModel('unknown_model')).toBeNull()
     const ui = publicGenerationModelsForUi('edit')
+    expect(ui.some((m) => m.id === 'seedance_2_0_mini_edit')).toBe(true)
     expect(ui.some((m) => m.id === 'minimax_hailuo_3_edit')).toBe(true)
     expect(ui.some((m) => m.id === 'seedance_2_5_edit')).toBe(false)
     expect(ui.every((m) => m.role !== 'create')).toBe(true)
@@ -85,6 +87,8 @@ describe('media generative edit contracts', () => {
     const pathsSrc = readFileSync(join(process.cwd(), 'lib/paths.ts'), 'utf8')
     expect(pathsSrc).toMatch(/envGenerationAlephModel/)
     expect(pathsSrc).toMatch(/VIDEON_GENERATION_ALEPH_MODEL/)
+    expect(pathsSrc).toMatch(/envGenerationSeedanceMiniModel/)
+    expect(pathsSrc).toMatch(/VIDEON_GENERATION_SEEDANCE_MINI_MODEL/)
   })
 
   it('scopes create storage keys without parent media', () => {

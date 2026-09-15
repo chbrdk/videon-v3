@@ -1,7 +1,9 @@
 import {
   generationAlephModel,
+  generationDraftModel,
   generationMinimaxEditModel,
   generationMinimaxModel,
+  generationSeedanceMiniModel,
   generationSeedanceModel,
   generationVeoLiteModel,
   generationVeoModel,
@@ -31,16 +33,15 @@ export type GenerationModelEntry = {
 export function generationModelCatalog(): GenerationModelEntry[] {
   return [
     {
-      id: 'seedance_2_5_edit',
-      label: 'Seedance 2.5 Edit (unavailable)',
+      id: 'seedance_2_0_mini_edit',
+      label: 'Seedance 2.0 Mini',
       role: 'edit',
-      providerModelId: generationSeedanceModel(),
-      defaultResolution: '720p',
-      // OpenRouter /videos rejects duration=-1 (Zod ≥1) while Seedance edit-mode requires -1.
-      phase1Enabled: false,
-      usdPerSecond: 0.12,
+      providerModelId: generationSeedanceMiniModel(),
+      defaultResolution: '480p',
+      phase1Enabled: true,
+      usdPerSecond: 0.034,
       durationMinSeconds: 4,
-      durationMaxSeconds: 30,
+      durationMaxSeconds: 15,
     },
     {
       id: 'minimax_hailuo_3_edit',
@@ -54,6 +55,18 @@ export function generationModelCatalog(): GenerationModelEntry[] {
       durationMaxSeconds: 15,
     },
     {
+      id: 'seedance_2_5_edit',
+      label: 'Seedance 2.5 Edit (unavailable)',
+      role: 'edit',
+      providerModelId: generationSeedanceModel(),
+      defaultResolution: '720p',
+      // OpenRouter /videos rejects duration=-1 (Zod ≥1) while Seedance 2.5 edit-mode requires -1.
+      phase1Enabled: false,
+      usdPerSecond: 0.12,
+      durationMinSeconds: 4,
+      durationMaxSeconds: 30,
+    },
+    {
       id: 'runway_aleph_2',
       label: 'Runway Aleph 2.0 (keyframe)',
       role: 'edit',
@@ -64,14 +77,13 @@ export function generationModelCatalog(): GenerationModelEntry[] {
     },
     {
       id: 'happy_horse_draft',
-      label: 'Draft (MiniMax H3)',
+      label: 'Draft (Seedance Mini 480p)',
       role: 'draft',
-      // Seedance draft shares the same OpenRouter duration=-1 deadlock on V2V.
-      providerModelId: generationMinimaxEditModel(),
-      defaultResolution: '2K',
+      providerModelId: generationDraftModel(),
+      defaultResolution: '480p',
       phase1Enabled: true,
-      usdPerSecond: 0.13,
-      durationMinSeconds: 5,
+      usdPerSecond: 0.034,
+      durationMinSeconds: 4,
       durationMaxSeconds: 15,
     },
     {
@@ -136,12 +148,12 @@ export function findGenerationModel(modelId: string): GenerationModelEntry | nul
   return generationModelCatalog().find((entry) => entry.id === modelId) ?? null
 }
 
-/** Default edit model while Seedance V2V is blocked on OpenRouter. */
-export const DEFAULT_EDIT_MODEL_ID = 'minimax_hailuo_3_edit'
+/** Default edit model — cheap Seedance Mini R2V. */
+export const DEFAULT_EDIT_MODEL_ID = 'seedance_2_0_mini_edit'
 
 export function resolveEditModel(modelId: string | undefined | null): GenerationModelEntry | null {
   let id = (modelId || DEFAULT_EDIT_MODEL_ID).trim()
-  // Alias blocked Seedance edit → MiniMax so queued/UI picks keep working.
+  // Alias blocked Seedance 2.5 edit → Mini so queued/UI picks keep working.
   if (id === 'seedance_2_5_edit') id = DEFAULT_EDIT_MODEL_ID
   const entry = findGenerationModel(id)
   if (!entry || !entry.phase1Enabled) return null
@@ -162,16 +174,24 @@ export function resolveDraftModel(preferredId?: string | null): GenerationModelE
   const draft = findGenerationModel('happy_horse_draft')
   if (draft?.phase1Enabled) return draft
   const edit = resolveEditModel(DEFAULT_EDIT_MODEL_ID)
-  if (edit) return { ...edit, id: 'happy_horse_draft', role: 'draft', label: 'Draft (MiniMax H3)' }
+  if (edit) {
+    return {
+      ...edit,
+      id: 'happy_horse_draft',
+      role: 'draft',
+      label: 'Draft (Seedance Mini 480p)',
+      defaultResolution: '480p',
+    }
+  }
   return {
     id: 'happy_horse_draft',
-    label: 'Draft (MiniMax H3)',
+    label: 'Draft (Seedance Mini 480p)',
     role: 'draft',
-    providerModelId: generationMinimaxEditModel(),
-    defaultResolution: '2K',
+    providerModelId: generationSeedanceMiniModel(),
+    defaultResolution: '480p',
     phase1Enabled: true,
-    usdPerSecond: 0.13,
-    durationMinSeconds: 5,
+    usdPerSecond: 0.034,
+    durationMinSeconds: 4,
     durationMaxSeconds: 15,
   }
 }

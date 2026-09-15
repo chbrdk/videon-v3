@@ -119,6 +119,8 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | `VIDEON_GENERATION_MAX_EDIT_MS` | Max edit range ms (default `12000`) |
 | `VIDEON_GENERATION_MAX_CONCURRENT` | Max concurrent generate jobs per workspace (default `2`) |
 | `VIDEON_GENERATION_SEEDANCE_MODEL` | Optional OpenRouter slug (default `bytedance/seedance-2.5`) |
+| `VIDEON_GENERATION_SEEDANCE_MINI_MODEL` | Optional cheap edit/draft (default `bytedance/seedance-2.0-mini`) |
+| `VIDEON_GENERATION_DRAFT_MODEL` | Optional; defaults to Seedance Mini |
 | `VIDEON_GENERATION_VEO_MODEL` | Optional (default `google/veo-3.1`) |
 | `VIDEON_GENERATION_VEO_LITE_MODEL` | Optional (default `google/veo-3.1-lite`) |
 | `VIDEON_GENERATION_WAN_MODEL` | Optional (default `alibaba/wan-3.0`) |

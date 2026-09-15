@@ -47,7 +47,7 @@ export function AiEditDialog({
 }: AiEditDialogProps) {
   const t = useT()
   const [prompt, setPrompt] = useState('')
-  const [modelId, setModelId] = useState('minimax_hailuo_3_edit')
+  const [modelId, setModelId] = useState('seedance_2_0_mini_edit')
   const [skipDraft, setSkipDraft] = useState(true)
   const [keepSourceAudio, setKeepSourceAudio] = useState(true)
   const [referenceUrl, setReferenceUrl] = useState('')
@@ -59,12 +59,14 @@ export function AiEditDialog({
 
   const modelChoices = useMemo(() => {
     if (models.length) return models
-    return [{ id: 'minimax_hailuo_3_edit', label: 'MiniMax H3 Edit', role: 'edit', usdPerSecond: 0.13 }]
+    return [
+      { id: 'seedance_2_0_mini_edit', label: 'Seedance 2.0 Mini', role: 'edit', usdPerSecond: 0.034 },
+    ]
   }, [models])
 
   const seconds = Math.max(1, Math.round(durationMs / 1000))
-  const finalRate = modelChoices.find((m) => m.id === modelId)?.usdPerSecond ?? 0.13
-  const draftRate = modelChoices.find((m) => m.role === 'draft')?.usdPerSecond ?? 0.13
+  const finalRate = modelChoices.find((m) => m.id === modelId)?.usdPerSecond ?? 0.034
+  const draftRate = modelChoices.find((m) => m.role === 'draft')?.usdPerSecond ?? 0.034
   const estimateUsd = Number(((skipDraft ? 0 : draftRate * seconds) + finalRate * seconds).toFixed(2))
 
   useEffect(() => {
@@ -73,7 +75,9 @@ export function AiEditDialog({
     setSkipDraft(true)
     setKeepSourceAudio(true)
     setReferenceUrl('')
-    setModelId(modelChoices.find((m) => m.role === 'edit')?.id || modelChoices[0]?.id || 'minimax_hailuo_3_edit')
+    setModelId(
+      modelChoices.find((m) => m.role === 'edit')?.id || modelChoices[0]?.id || 'seedance_2_0_mini_edit',
+    )
   }, [open, modelChoices])
 
   const handleConfirm = async () => {

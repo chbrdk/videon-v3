@@ -16,6 +16,7 @@ On `videon-v3:main-app`:
 | `VIDEON_GENERATION_MAX_EDIT_MS` | no | Default `12000` |
 | `VIDEON_GENERATION_MAX_CONCURRENT` | no | Default `2` per workspace |
 | `VIDEON_GENERATION_SEEDANCE_MODEL` | no | Default `bytedance/seedance-2.5` |
+| `VIDEON_GENERATION_SEEDANCE_MINI_MODEL` | no | Default `bytedance/seedance-2.0-mini` (cheap edit/draft) |
 | `VIDEON_GENERATION_VEO_MODEL` | no | Default `google/veo-3.1` |
 | `VIDEON_GENERATION_WAN_MODEL` | no | Default `alibaba/wan-3.0` |
 | `VIDEON_GENERATION_MINIMAX_MODEL` | no | Default `minimax/hailuo-3-max` |

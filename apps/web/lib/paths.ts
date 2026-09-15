@@ -94,6 +94,7 @@ export const paths = {
   envGenerationMaxEditMs: 'VIDEON_GENERATION_MAX_EDIT_MS',
   envGenerationMaxConcurrent: 'VIDEON_GENERATION_MAX_CONCURRENT',
   envGenerationSeedanceModel: 'VIDEON_GENERATION_SEEDANCE_MODEL',
+  envGenerationSeedanceMiniModel: 'VIDEON_GENERATION_SEEDANCE_MINI_MODEL',
   envGenerationDraftModel: 'VIDEON_GENERATION_DRAFT_MODEL',
   envGenerationVeoModel: 'VIDEON_GENERATION_VEO_MODEL',
   envGenerationVeoLiteModel: 'VIDEON_GENERATION_VEO_LITE_MODEL',

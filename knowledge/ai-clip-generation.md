@@ -6,9 +6,9 @@ Operator playbook for generative edit/create. Normative rules: `specs/domain/med
 
 | Intent | Prefer | Notes |
 |--------|--------|-------|
-| Object / subject replace | MiniMax H3 Edit (`minimax_hailuo_3_edit`) | Seedance V2V edit blocked on OpenRouter (`duration=-1` rejected by Zod) |
+| Object / subject replace | Seedance 2.0 Mini (`seedance_2_0_mini_edit`) | Cheap R2V · ~$0.03/s @480p · fallback MiniMax if OR edit-mode fails |
 | Instruction / brand text / motion transfer | MiniMax H3 Edit (`minimax_hailuo_3_edit`) | OpenRouter `minimax/hailuo-3` · 2K · 5–15s |
-| Cheap draft preview | MiniMax H3 @ draft lane | Approve before final; Seedance draft also blocked |
+| Cheap draft preview | Seedance Mini @ 480p (`happy_horse_draft`) | Same Mini slug |
 | Keyframe-precise edit | Runway Aleph 2.0 (`runway_aleph_2`) | Enabled only when `VIDEON_GENERATION_ALEPH_MODEL` is set |
 | Photoreal create / extend | Veo 3.1 (`veo_3_1_create`) | OpenRouter `google/veo-3.1` |
 | Cost-efficient Veo create | Veo 3.1 Lite (`veo_3_1_lite_create`) | OpenRouter `google/veo-3.1-lite` · 4–8s |
@@ -34,9 +34,9 @@ Recommend rules (client-safe): `apps/web/lib/generation/recommend.ts`.
 
 OpenRouter Seedance r2v rejects input clips under ~1.8s (`InvalidParameter` on `content[1]`). Worker uses `expandEditRangeForProvider` (`apps/web/lib/generation/expand-edit-range.ts`) before ffmpeg slice + submit.
 
-For Seedance **create** (T2V/I2V) fixed durations work. For Seedance **V2V edit**, ByteDance requires `duration: -1` while OpenRouter’s public `/videos` schema rejects values &lt; 1 (`ZodError`). Until OpenRouter accepts `-1`, `seedance_2_5_edit` is **phase1Enabled=false** and edit defaults to MiniMax H3 (`minimax_hailuo_3_edit`). Legacy `seedance_2_5_edit` ids alias to MiniMax in `resolveEditModel`.
+For Seedance **create** (T2V/I2V) fixed durations work. For Seedance **2.5 V2V edit**, ByteDance requires `duration: -1` while OpenRouter’s public `/videos` schema rejects values &lt; 1 (`ZodError`). `seedance_2_5_edit` stays disabled and aliases to **Seedance 2.0 Mini** (`seedance_2_0_mini_edit`, default). MiniMax H3 remains the quality fallback. If Mini also hits edit-mode `-1`, switch the job to MiniMax.
 
-V2V through OpenRouter (MiniMax): send a concrete `duration` matching the prepared input clip (≥5s for H3 Edit).
+V2V through OpenRouter: send a concrete `duration` matching the prepared input clip (≥4s Mini / ≥5s H3 Edit).
 
 ## Env
 
@@ -47,6 +47,8 @@ V2V through OpenRouter (MiniMax): send a concrete `duration` matching the prepar
 | `VIDEON_GENERATION_MAX_EDIT_MS` | Override max range (default 12000) |
 | `VIDEON_GENERATION_MAX_CONCURRENT` | Per-workspace concurrent jobs (default 2) |
 | `VIDEON_GENERATION_SEEDANCE_MODEL` | Default `bytedance/seedance-2.5` |
+| `VIDEON_GENERATION_SEEDANCE_MINI_MODEL` | Default `bytedance/seedance-2.0-mini` (cheap edit/draft) |
+| `VIDEON_GENERATION_DRAFT_MODEL` | Optional draft slug override (defaults to Mini) |
 | `VIDEON_GENERATION_DRAFT_MODEL` | Optional draft slug override |
 | `VIDEON_GENERATION_VEO_MODEL` | Default `google/veo-3.1` |
 | `VIDEON_GENERATION_VEO_LITE_MODEL` | Default `google/veo-3.1-lite` |
