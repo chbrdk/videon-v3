@@ -13,7 +13,7 @@ import {
   markMediaGenerationRunning,
   markMediaGenerationSucceeded,
 } from '@/lib/db/media-generation'
-import { createUploadingMediaAsset, findMediaAsset } from '@/lib/db/media'
+import { createUploadingMediaAsset, findMediaAsset, findMediaAssetDetail } from '@/lib/db/media'
 import { markMediaReady } from '@/lib/db/media-lifecycle'
 import { findWorkspaceById } from '@/lib/db/workspaces'
 import {
@@ -285,7 +285,7 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
   await markMediaGenerationRunning(jobId)
   await markMediaGenerationProgress(jobId, 5)
 
-  const media = await findMediaAsset(job.mediaAssetId)
+  const media = await findMediaAssetDetail(job.mediaAssetId)
   if (!media || media.workspaceId !== job.workspaceId) {
     await markMediaGenerationFailed(jobId, 'Media asset not found')
     return
