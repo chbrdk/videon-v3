@@ -29,9 +29,15 @@ export type GenerationEditInput = {
   videoUrl: string
   imageUrls?: string[]
   resolution: string
-  durationSeconds: number
+  /**
+   * Seedance edit requires duration=-1 (output follows input video, 4–30s).
+   * Fixed seconds only for providers that do not support match-input edit.
+   */
+  durationSeconds?: number
   durationMinSeconds?: number
   durationMaxSeconds?: number
+  /** When true (default), send duration=-1 so edit output matches the source clip. */
+  matchInputDuration?: boolean
   seed?: number | null
   generateAudio?: boolean
   onProgress?: (percent: number) => void | Promise<void>
@@ -199,14 +205,19 @@ export async function runOpenRouterVideoEdit(input: GenerationEditInput): Promis
     input_references.push({ type: 'image_url', image_url: { url: url.trim() } })
   }
 
+  const matchInput = input.matchInputDuration !== false
+  const duration = matchInput
+    ? -1
+    : clampDurationSeconds(input.durationSeconds ?? 5, {
+        min: input.durationMinSeconds,
+        max: input.durationMaxSeconds,
+      })
+
   return openRouterVideoRoundTrip({
     body: {
       model: input.model,
       prompt: input.prompt,
-      duration: clampDurationSeconds(input.durationSeconds, {
-        min: input.durationMinSeconds,
-        max: input.durationMaxSeconds,
-      }),
+      duration,
       resolution: input.resolution,
       generate_audio: input.generateAudio ?? false,
       seed: input.seed ?? undefined,

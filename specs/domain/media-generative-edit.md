@@ -54,13 +54,14 @@ Produce Collection-scoped **AI-edited (or later AI-created) video** from operato
 
 ## Quality Lock (normative)
 
-1. Edit only the requested range (trim slice before provider).
+1. Edit only the requested range (trim slice before provider; expand to model input floor when shorter).
 2. Lock pack: start/mid/end times, prompt with preserve clauses, optional refs, seed, resolution tier.
 3. Draft at 480p; final at 720p (catalog may override).
 4. Default keep source audio.
 5. Lineage records parent asset, range, model, prompt, lock_pack_hash, job id.
 6. Brand check is **not** automatic; use existing brand seam after analysis. Never synthetic pass.
 7. After promote, the worker MUST schedule a light media analysis run (best-effort; promote still succeeds if enqueue fails).
+8. Seedance edit submits MUST use `duration: -1` (match input). Fixed duration is create/extend only.
 
 ## Model catalog
 

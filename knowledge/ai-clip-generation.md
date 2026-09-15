@@ -34,6 +34,8 @@ Recommend rules (client-safe): `apps/web/lib/generation/recommend.ts`.
 
 OpenRouter Seedance r2v rejects input clips under ~1.8s (`InvalidParameter` on `content[1]`). Worker uses `expandEditRangeForProvider` (`apps/web/lib/generation/expand-edit-range.ts`) before ffmpeg slice + submit.
 
+For Seedance **edit** tasks the provider requires `duration: -1` (output follows the input video, which must be 4–30s). Fixed durations are for create/extend only — see `runOpenRouterVideoEdit` (`matchInputDuration`).
+
 ## Env
 
 | Key | Role |

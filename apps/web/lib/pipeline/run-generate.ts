@@ -373,6 +373,8 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
       videoUrl: signed,
       imageUrls: job.referenceImageUrls,
       resolution: isDraftLane ? '480p' : model.defaultResolution,
+      // Seedance edit: duration must be -1 (match input). Slice already ≥4s.
+      matchInputDuration: true,
       durationSeconds,
       durationMinSeconds: model.durationMinSeconds,
       durationMaxSeconds: model.durationMaxSeconds,

@@ -143,10 +143,12 @@ describe('OpenRouter video gateway mock', () => {
 
   it('submits, polls, and returns content url', async () => {
     let calls = 0
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    let submittedBody: Record<string, unknown> | null = null
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       calls += 1
       if (url.endsWith('/videos') && !url.includes('/videos/')) {
+        submittedBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>
         return new Response(
           JSON.stringify({
             id: 'job-1',
@@ -176,11 +178,14 @@ describe('OpenRouter video gateway mock', () => {
       videoUrl: 'https://signed.test/slice.mp4',
       resolution: '480p',
       durationSeconds: 5,
+      matchInputDuration: true,
     })
     expect(result.requestId).toBe('job-1')
     expect(result.videoUrl).toMatch(/content/)
     expect(result.requiresAuthDownload).toBe(true)
     expect(calls).toBeGreaterThanOrEqual(2)
+    expect(submittedBody?.duration).toBe(-1)
+    expect(submittedBody?.input_references).toBeTruthy()
   })
 
   it('fails closed when unconfigured', async () => {
