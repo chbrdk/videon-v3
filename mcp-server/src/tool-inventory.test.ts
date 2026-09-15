@@ -28,6 +28,8 @@ describe('videon MCP tool inventory', () => {
       'videon.cut_scenes_add',
       'videon.export_run',
       'videon.reframe_run',
+      'videon.generate_edit_run',
+      'videon.generate_create_run',
     ] as const) {
       assert.ok(VIDEON_TOOL_NAMES.includes(required), required)
     }

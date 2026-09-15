@@ -17,6 +17,7 @@ import {
 } from '@msqdx/ui'
 import { ContextMenu, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AnalysisOptionsDialog } from '@/components/analysis-options-dialog'
+import { AiEditDialog, type AiEditOptions } from '@/components/ai-edit-dialog'
 import { ReframeOptionsDialog, type ReframeOptions } from '@/components/reframe-options-dialog'
 import { useActiveCollection } from '@/components/collection-context'
 import { useT } from '@/lib/user-prefs'
@@ -153,9 +154,26 @@ export function MediaEditorView({
   const [stemMethodUsed, setStemMethodUsed] = useState<string | null>(null)
   const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false)
   const [reframeDialogOpen, setReframeDialogOpen] = useState(false)
+  const [aiEditDialogOpen, setAiEditDialogOpen] = useState(false)
   const [reframes, setReframes] = useState<
     Array<{ id: string; status: string; aspectRatio: string; progressPercent: number | null }>
   >([])
+  const [generateJobs, setGenerateJobs] = useState<
+    Array<{
+      id: string
+      status: string
+      lane: string
+      modelId: string
+      progressPercent: number | null
+      promotedMediaAssetId: string | null
+      startMs: number | null
+      endMs: number | null
+    }>
+  >([])
+  const [generateModels, setGenerateModels] = useState<
+    Array<{ id: string; label: string; role: string; usdPerSecond?: number }>
+  >([])
+  const [maxEditMs, setMaxEditMs] = useState(12_000)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
   const [currentMs, setCurrentMs] = useState(0)
   const [durationMs, setDurationMs] = useState(0)
@@ -265,18 +283,43 @@ export function MediaEditorView({
     setReframes(body.reframes ?? [])
   }, [mediaAssetId, platformProjectId])
 
+  const loadGenerateJobs = useCallback(async () => {
+    const response = await fetch(paths.routes.apiMediaGenerate(mediaAssetId, platformProjectId), {
+      cache: 'no-store',
+    })
+    if (!response.ok) return
+    const body = (await response.json()) as {
+      jobs?: Array<{
+        id: string
+        status: string
+        lane: string
+        modelId: string
+        progressPercent: number | null
+        promotedMediaAssetId: string | null
+        startMs: number | null
+        endMs: number | null
+      }>
+      models?: Array<{ id: string; label: string; role: string; usdPerSecond?: number }>
+      maxEditMs?: number
+    }
+    setGenerateJobs(body.jobs ?? [])
+    if (body.models?.length) setGenerateModels(body.models)
+    if (typeof body.maxEditMs === 'number' && body.maxEditMs > 0) setMaxEditMs(body.maxEditMs)
+  }, [mediaAssetId, platformProjectId])
+
   const refresh = useCallback(async () => {
     setError(null)
     try {
       await loadDetail()
       await loadPlayback()
       await loadReframes()
+      await loadGenerateJobs()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unbekannter Fehler')
     } finally {
       setLoading(false)
     }
-  }, [loadDetail, loadPlayback, loadReframes])
+  }, [loadDetail, loadPlayback, loadReframes, loadGenerateJobs])
 
   useEffect(() => {
     setPlatformProjectId(platformProjectId)
@@ -294,13 +337,17 @@ export function MediaEditorView({
   useEffect(() => {
     const analysisBusy = analysis?.status === 'queued' || analysis?.status === 'running'
     const reframeBusy = reframes.some((row) => row.status === 'queued' || row.status === 'running')
-    if (!analysisBusy && !brandStageBusy && !reframeBusy) return
+    const generateBusy = generateJobs.some(
+      (row) => row.status === 'queued' || row.status === 'running',
+    )
+    if (!analysisBusy && !brandStageBusy && !reframeBusy && !generateBusy) return
     const timer = window.setInterval(() => {
       void loadDetail()
       void loadReframes()
+      void loadGenerateJobs()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [analysis, brandStageBusy, reframes, loadDetail, loadReframes])
+  }, [analysis, brandStageBusy, reframes, generateJobs, loadDetail, loadReframes, loadGenerateJobs])
 
   useEffect(() => {
     const video = videoRef.current
@@ -569,6 +616,101 @@ export function MediaEditorView({
     }
   }
 
+  const openAiEditDialog = () => {
+    if (!markedRange) {
+      notifyError(t('aiEdit.markRequired'))
+      return
+    }
+    const duration = markedRange.endMs - markedRange.startMs
+    if (duration < 1000 || duration > maxEditMs) {
+      notifyError(t('aiEdit.rangeInvalid', { max: Math.round(maxEditMs / 1000) }))
+      return
+    }
+    setAiEditDialogOpen(true)
+  }
+
+  const startAiEdit = async (options: AiEditOptions) => {
+    setBusy('aiEdit')
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiMediaGenerate(mediaAssetId, platformProjectId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intent: 'edit',
+          startMs: options.startMs,
+          endMs: options.endMs,
+          prompt: options.prompt,
+          modelId: options.modelId,
+          skipDraft: options.skipDraft,
+          keepSourceAudio: options.keepSourceAudio,
+          referenceImageUrls: options.referenceImageUrls,
+          ...(activeCut?.platformProjectId === platformProjectId ? { cutId: activeCut.cutId } : {}),
+        }),
+      })
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || t('aiEdit.failed'))
+      setAiEditDialogOpen(false)
+      notifyOk(t('aiEdit.started'))
+      await loadGenerateJobs()
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('aiEdit.failed'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const approveAiEdit = async (jobId: string) => {
+    setBusy('aiEditApprove')
+    setError(null)
+    try {
+      const response = await fetch(
+        paths.routes.apiMediaGenerateApprove(mediaAssetId, jobId, platformProjectId),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            activeCut?.platformProjectId === platformProjectId ? { cutId: activeCut.cutId } : {},
+          ),
+        },
+      )
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || t('aiEdit.approveFailed'))
+      notifyOk(t('aiEdit.approved'))
+      await loadGenerateJobs()
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('aiEdit.approveFailed'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const insertAiEditIntoCut = async (jobId: string) => {
+    if (!activeCut || activeCut.platformProjectId !== platformProjectId) {
+      notifyError(t('aiEdit.noActiveCut'))
+      return
+    }
+    setBusy('aiEditInsert')
+    try {
+      const response = await fetch(
+        paths.routes.apiMediaGeneratePromote(mediaAssetId, jobId, platformProjectId),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cutId: activeCut.cutId }),
+        },
+      )
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || t('aiEdit.insertFailed'))
+      notifyOk(t('aiEdit.inserted'))
+      await loadGenerateJobs()
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('aiEdit.insertFailed'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const saveAsCut = async (
     allScenes = false,
     rangeOverride?: { startMs: number; endMs: number },
@@ -808,6 +950,15 @@ export function MediaEditorView({
               In/Out zum Cut
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+            onClick={() => openAiEditDialog()}
+          >
+            {busy === 'aiEdit' ? t('aiEdit.busy') : t('aiEdit.action')}
+          </Button>
           <div className="videon-nle__tool-cluster">
             <Button
               type="button"
@@ -876,6 +1027,71 @@ export function MediaEditorView({
                   >
                     {busy === 'reframe' ? t('reframe.busy') : t('reframe.action')}
                   </EditorOverflowItem>
+                  <EditorOverflowItem
+                    close={close}
+                    disabled={Boolean(busy) || media.lifecycleState === 'uploading'}
+                    onClick={() => openAiEditDialog()}
+                  >
+                    {busy === 'aiEdit' ? t('aiEdit.busy') : t('aiEdit.action')}
+                  </EditorOverflowItem>
+                  {generateJobs.slice(0, 4).flatMap((row) => {
+                    if (row.status === 'draft_ready') {
+                      return [
+                        <EditorOverflowItem
+                          key={`${row.id}-draft`}
+                          close={close}
+                          href={paths.routes.apiMediaGenerateDownload(
+                            mediaAssetId,
+                            row.id,
+                            platformProjectId,
+                            'draft',
+                          )}
+                        >
+                          {t('aiEdit.downloadDraft')} · {row.modelId}
+                        </EditorOverflowItem>,
+                        <EditorOverflowItem
+                          key={`${row.id}-approve`}
+                          close={close}
+                          disabled={Boolean(busy)}
+                          onClick={() => void approveAiEdit(row.id)}
+                        >
+                          {busy === 'aiEditApprove' ? t('aiEdit.approving') : t('aiEdit.approve')}
+                        </EditorOverflowItem>,
+                      ]
+                    }
+                    if (row.status === 'succeeded' && row.promotedMediaAssetId) {
+                      return [
+                        <EditorOverflowItem
+                          key={`${row.id}-open`}
+                          close={close}
+                          href={paths.routes.mediaFor(row.promotedMediaAssetId, platformProjectId)}
+                        >
+                          {t('aiEdit.openPromoted')}
+                        </EditorOverflowItem>,
+                        ...(activeCut?.platformProjectId === platformProjectId
+                          ? [
+                              <EditorOverflowItem
+                                key={`${row.id}-cut`}
+                                close={close}
+                                disabled={Boolean(busy)}
+                                onClick={() => void insertAiEditIntoCut(row.id)}
+                              >
+                                {busy === 'aiEditInsert' ? t('aiEdit.inserting') : t('aiEdit.insertIntoCut')}
+                              </EditorOverflowItem>,
+                            ]
+                          : []),
+                      ]
+                    }
+                    return [
+                      <EditorOverflowItem key={row.id} close={close} disabled>
+                        {`AI · ${row.status}${
+                          row.progressPercent != null && row.status === 'running'
+                            ? ` ${row.progressPercent}%`
+                            : ''
+                        }`}
+                      </EditorOverflowItem>,
+                    ]
+                  })}
                   {reframes.slice(0, 5).map((row) => (
                     <EditorOverflowItem
                       key={row.id}
@@ -942,6 +1158,25 @@ export function MediaEditorView({
           }}
         />
       ) : null}
+      {generateJobs
+        .filter((row) => row.status === 'draft_ready')
+        .slice(0, 1)
+        .map((row) => (
+          <EditorStatusStrip
+            key={row.id}
+            level="warn"
+            label={t('aiEdit.approve')}
+            detail={`A/B · ${row.modelId}`}
+            actionLabel={t('aiEdit.downloadDraft')}
+            onAction={() => {
+              window.open(
+                paths.routes.apiMediaGenerateDownload(mediaAssetId, row.id, platformProjectId, 'draft'),
+                '_blank',
+                'noopener,noreferrer',
+              )
+            }}
+          />
+        ))}
       </div>
 
       <div className="videon-nle__workspace">
@@ -1217,6 +1452,16 @@ export function MediaEditorView({
         busy={busy === 'reframe'}
         onClose={() => setReframeDialogOpen(false)}
         onConfirm={(options) => void startReframe(options)}
+      />
+      <AiEditDialog
+        open={aiEditDialogOpen}
+        busy={busy === 'aiEdit'}
+        startMs={markedRange?.startMs ?? 0}
+        endMs={markedRange?.endMs ?? 0}
+        maxEditMs={maxEditMs}
+        models={generateModels}
+        onClose={() => setAiEditDialogOpen(false)}
+        onConfirm={(options) => void startAiEdit(options)}
       />
       </div>
     </div>

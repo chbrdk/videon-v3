@@ -81,6 +81,7 @@ import {
 } from '@/lib/cut-timeline-context-menu'
 import { clampContextMenuPosition } from '@/lib/timeline-context-menu'
 import { useT } from '@/lib/user-prefs'
+import { AiEditDialog, type AiEditOptions } from '@/components/ai-edit-dialog'
 
 type Clip = {
   scene: {
@@ -246,6 +247,27 @@ export function CutEditorView({
   const [zoomAnchor, setZoomAnchor] = useState<TimelineZoomAnchor>('cursor')
   const [lockedIds, setLockedIds] = useState<string[]>([])
   const [linkAudio, setLinkAudio] = useState(false)
+  const [aiEditDialogOpen, setAiEditDialogOpen] = useState(false)
+  const [aiEditBusy, setAiEditBusy] = useState(false)
+  const [aiEditModels, setAiEditModels] = useState<
+    Array<{ id: string; label: string; role: string; usdPerSecond?: number }>
+  >([])
+  const [maxEditMs, setMaxEditMs] = useState(12_000)
+  const [aiEditRange, setAiEditRange] = useState<{ mediaAssetId: string; startMs: number; endMs: number } | null>(
+    null,
+  )
+  const [cutGenerateJobs, setCutGenerateJobs] = useState<
+    Array<{
+      id: string
+      mediaAssetId: string | null
+      status: string
+      modelId: string
+      progressPercent: number | null
+      promotedMediaAssetId: string | null
+      targetCutInsertedAt: string | null
+    }>
+  >([])
+  const [aiEditApproveBusy, setAiEditApproveBusy] = useState(false)
 
   useEffect(() => {
     setLockedIds(readLockedClipIds(cutId))
@@ -1335,6 +1357,153 @@ export function CutEditorView({
     }
   }
 
+  const openAiEditDialog = async () => {
+    const clip = activeClip
+    if (!clip?.scene.mediaAssetId) {
+      notifyError(t('aiEdit.clipRequired'))
+      return
+    }
+    const startMs = clip.scene.startMs
+    const rawEnd = clip.scene.endMs
+    let endMs = rawEnd
+    if (rawEnd - startMs > maxEditMs) {
+      endMs = startMs + maxEditMs
+    }
+    if (endMs - startMs < 1000) {
+      notifyError(t('aiEdit.rangeInvalid', { max: Math.round(maxEditMs / 1000) }))
+      return
+    }
+    try {
+      const response = await fetch(paths.routes.apiMediaGenerate(clip.scene.mediaAssetId, platformProjectId), {
+        cache: 'no-store',
+      })
+      if (response.ok) {
+        const body = (await response.json()) as {
+          models?: Array<{ id: string; label: string; role: string; usdPerSecond?: number }>
+          maxEditMs?: number
+        }
+        if (body.models?.length) setAiEditModels(body.models)
+        if (typeof body.maxEditMs === 'number' && body.maxEditMs > 0) {
+          setMaxEditMs(body.maxEditMs)
+          if (rawEnd - startMs > body.maxEditMs) {
+            endMs = startMs + body.maxEditMs
+          }
+        }
+      }
+    } catch {
+      /* use defaults */
+    }
+    setAiEditRange({ mediaAssetId: clip.scene.mediaAssetId, startMs, endMs })
+    setAiEditDialogOpen(true)
+  }
+
+  const startAiEdit = async (options: AiEditOptions) => {
+    if (!aiEditRange) return
+    setAiEditBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(
+        paths.routes.apiMediaGenerate(aiEditRange.mediaAssetId, platformProjectId),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            intent: 'edit',
+            startMs: options.startMs,
+            endMs: options.endMs,
+            prompt: options.prompt,
+            modelId: options.modelId,
+            skipDraft: options.skipDraft,
+            keepSourceAudio: options.keepSourceAudio,
+            referenceImageUrls: options.referenceImageUrls,
+            cutId,
+          }),
+        },
+      )
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || t('aiEdit.failed'))
+      setAiEditDialogOpen(false)
+      notifyOk(t('aiEdit.started'))
+      await loadCutGenerateJobs()
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('aiEdit.failed'))
+    } finally {
+      setAiEditBusy(false)
+    }
+  }
+
+  const loadCutGenerateJobs = useCallback(async () => {
+    try {
+      const response = await fetch(paths.routes.apiCutGenerateJobs(cutId, platformProjectId), {
+        cache: 'no-store',
+      })
+      if (!response.ok) return
+      const body = (await response.json()) as {
+        jobs?: Array<{
+          id: string
+          mediaAssetId: string | null
+          status: string
+          modelId: string
+          progressPercent: number | null
+          promotedMediaAssetId: string | null
+          targetCutInsertedAt: string | null
+        }>
+      }
+      setCutGenerateJobs(body.jobs ?? [])
+    } catch {
+      /* ignore poll errors */
+    }
+  }, [cutId, platformProjectId])
+
+  useEffect(() => {
+    void loadCutGenerateJobs()
+  }, [loadCutGenerateJobs])
+
+  useEffect(() => {
+    const busyJob = cutGenerateJobs.some(
+      (job) => job.status === 'queued' || job.status === 'running' || job.status === 'draft_ready',
+    )
+    if (!busyJob) return
+    const timer = window.setInterval(() => {
+      void loadCutGenerateJobs()
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [cutGenerateJobs, loadCutGenerateJobs])
+
+  const insertedJobIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    for (const job of cutGenerateJobs) {
+      if (job.status === 'succeeded' && job.targetCutInsertedAt && !insertedJobIdsRef.current.has(job.id)) {
+        insertedJobIdsRef.current.add(job.id)
+        void load()
+        notifyOk(t('aiEdit.inserted'))
+      }
+    }
+  }, [cutGenerateJobs, load, notifyOk, t])
+
+  const approveCutAiEdit = async (job: { id: string; mediaAssetId: string | null }) => {
+    if (!job.mediaAssetId) return
+    setAiEditApproveBusy(true)
+    try {
+      const response = await fetch(
+        paths.routes.apiMediaGenerateApprove(job.mediaAssetId, job.id, platformProjectId),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cutId }),
+        },
+      )
+      const body = (await response.json()) as { error?: { message?: string } }
+      if (!response.ok) throw new Error(body.error?.message || t('aiEdit.approveFailed'))
+      notifyOk(t('aiEdit.approved'))
+      await loadCutGenerateJobs()
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('aiEdit.approveFailed'))
+    } finally {
+      setAiEditApproveBusy(false)
+    }
+  }
+
   const startExport = async (format: CutExportFormat = exportFormat) => {
     setExportBusy(true)
     setError(null)
@@ -1692,6 +1861,15 @@ export function CutEditorView({
         <div className="videon-nle__tool-cluster">
           <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void openAiEditDialog()}
+            disabled={busy || aiEditBusy || !activeClip?.scene.mediaAssetId}
+          >
+            {aiEditBusy ? t('aiEdit.busy') : t('aiEdit.action')}
+          </Button>
+          <Button
+            type="button"
             variant={leftRailOpen ? 'primary' : 'ghost'}
             size="sm"
             onClick={() => setLeftOpen(!leftRailOpen)}
@@ -1802,6 +1980,61 @@ export function CutEditorView({
               }
             />
           ) : null}
+          {cutGenerateJobs.slice(0, 2).map((job) => {
+            if (job.status === 'draft_ready') {
+              return (
+                <EditorStatusStrip
+                  key={job.id}
+                  level="warn"
+                  label={t('aiEdit.approve')}
+                  detail={`${job.modelId}`}
+                  actionLabel={aiEditApproveBusy ? t('aiEdit.approving') : t('aiEdit.approve')}
+                  onAction={() => void approveCutAiEdit(job)}
+                />
+              )
+            }
+            if (job.status === 'succeeded') {
+              return (
+                <EditorStatusStrip
+                  key={job.id}
+                  level="ok"
+                  label={t('aiEdit.inserted')}
+                  detail={
+                    job.targetCutInsertedAt
+                      ? t('aiEdit.insertedDetail')
+                      : job.promotedMediaAssetId
+                        ? t('aiEdit.openPromoted')
+                        : job.status
+                  }
+                  actionLabel={t('aiEdit.reloadCut')}
+                  onAction={() => {
+                    void load()
+                    void loadCutGenerateJobs()
+                  }}
+                />
+              )
+            }
+            if (job.status === 'failed') {
+              return (
+                <EditorStatusStrip
+                  key={job.id}
+                  level="critical"
+                  label={t('aiEdit.failed')}
+                  detail={job.modelId}
+                />
+              )
+            }
+            return (
+              <EditorStatusStrip
+                key={job.id}
+                level="warn"
+                label={t('aiEdit.busy')}
+                detail={`${job.status}${
+                  job.progressPercent != null && job.status === 'running' ? ` ${job.progressPercent}%` : ''
+                }`}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -2106,6 +2339,19 @@ export function CutEditorView({
         onClose={closeTimelineContextMenu}
         items={timelineContextItems}
         label="Cut-Timeline-Kontextmenü"
+      />
+      <AiEditDialog
+        open={aiEditDialogOpen}
+        busy={aiEditBusy}
+        startMs={aiEditRange?.startMs ?? 0}
+        endMs={aiEditRange?.endMs ?? 0}
+        maxEditMs={maxEditMs}
+        models={aiEditModels}
+        onClose={() => {
+          if (aiEditBusy) return
+          setAiEditDialogOpen(false)
+        }}
+        onConfirm={(options) => void startAiEdit(options)}
       />
       {showShortcuts ? (
         <div className="videon-nle__shortcuts-panel" role="dialog" aria-label="Tastaturkürzel">

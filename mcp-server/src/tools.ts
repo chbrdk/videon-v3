@@ -60,6 +60,8 @@ export const VIDEON_TOOL_NAMES = [
   'videon.cut_scenes_add',
   'videon.export_run',
   'videon.reframe_run',
+  'videon.generate_edit_run',
+  'videon.generate_create_run',
 ] as const
 
 export function registerVideonTools(server: ToolServer) {
@@ -612,6 +614,139 @@ export function registerVideonTools(server: ToolServer) {
       if (idempotencyKey != null) body.idempotencyKey = idempotencyKey
       return textResult(
         `/api/media/${encodeURIComponent(mediaAssetId)}/reframe?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
+        },
+      )
+    },
+  )
+
+  server.registerTool(
+    'videon.generate_edit_run',
+    {
+      title: 'Start AI clip edit',
+      description:
+        'POST /api/media/:id/generate — enqueue fal Seedance/V2V edit for a source range. Returns job ref + deep link (no binary). Write tool — confirm with user. No Hit-Card / no Flow node. Access Model B via actorUserId + service auth.',
+      inputSchema: z.object({
+        actorUserId,
+        mediaAssetId: z.string(),
+        platformProjectId: z.string(),
+        startMs: z.number().int().nonnegative(),
+        endMs: z.number().int().positive(),
+        prompt: z.string().min(1).max(4000),
+        modelId: z.string().optional(),
+        skipDraft: z.boolean().optional(),
+        keepSourceAudio: z.boolean().optional(),
+        referenceImageUrls: z.array(z.string().url()).max(4).optional(),
+        seed: z.number().int().optional(),
+        idempotencyKey: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      const {
+        mediaAssetId,
+        platformProjectId,
+        startMs,
+        endMs,
+        prompt,
+        modelId,
+        skipDraft,
+        keepSourceAudio,
+        referenceImageUrls,
+        seed,
+        idempotencyKey,
+      } = args as {
+        actorUserId?: string
+        mediaAssetId: string
+        platformProjectId: string
+        startMs: number
+        endMs: number
+        prompt: string
+        modelId?: string
+        skipDraft?: boolean
+        keepSourceAudio?: boolean
+        referenceImageUrls?: string[]
+        seed?: number
+        idempotencyKey?: string
+      }
+      const body: Record<string, unknown> = {
+        intent: 'edit',
+        startMs,
+        endMs,
+        prompt,
+        modelId: modelId ?? 'seedance_2_5_edit',
+        skipDraft: skipDraft === true,
+        keepSourceAudio: keepSourceAudio !== false,
+      }
+      if (referenceImageUrls?.length) body.referenceImageUrls = referenceImageUrls
+      if (seed != null) body.seed = seed
+      if (idempotencyKey) body.idempotencyKey = idempotencyKey
+      return textResult(
+        `/api/media/${encodeURIComponent(mediaAssetId)}/generate?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          videon: { actorUserId: actorOf(args as { actorUserId?: string }) },
+        },
+      )
+    },
+  )
+
+  server.registerTool(
+    'videon.generate_create_run',
+    {
+      title: 'Create AI clip',
+      description:
+        'POST /api/media/ai-create — text/image-to-video create job. Returns job ref + deep link (no binary). Write tool — confirm with user. No Hit-Card / no Flow node.',
+      inputSchema: z.object({
+        actorUserId,
+        platformProjectId: z.string(),
+        prompt: z.string().min(1).max(4000),
+        modelId: z.string().optional(),
+        durationSeconds: z.number().int().min(4).max(30).optional(),
+        aspectRatio: z.enum(['16:9', '9:16', '1:1']).optional(),
+        referenceImageUrls: z.array(z.string().url()).max(4).optional(),
+        seed: z.number().int().optional(),
+        idempotencyKey: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      const {
+        platformProjectId,
+        prompt,
+        modelId,
+        durationSeconds,
+        aspectRatio,
+        referenceImageUrls,
+        seed,
+        idempotencyKey,
+      } = args as {
+        actorUserId?: string
+        platformProjectId: string
+        prompt: string
+        modelId?: string
+        durationSeconds?: number
+        aspectRatio?: string
+        referenceImageUrls?: string[]
+        seed?: number
+        idempotencyKey?: string
+      }
+      const body: Record<string, unknown> = {
+        intent: 'create',
+        prompt,
+        modelId: modelId ?? 'seedance_2_5_t2v',
+        durationSeconds: durationSeconds ?? 5,
+        aspectRatio: aspectRatio ?? '16:9',
+      }
+      if (referenceImageUrls?.length) body.referenceImageUrls = referenceImageUrls
+      if (seed != null) body.seed = seed
+      if (idempotencyKey) body.idempotencyKey = idempotencyKey
+      return textResult(
+        `/api/media/ai-create?platformProjectId=${encodeURIComponent(platformProjectId)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

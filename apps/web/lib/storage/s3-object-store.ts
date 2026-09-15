@@ -276,6 +276,24 @@ export class S3ObjectStore implements ObjectStore {
     }
   }
 
+  /** Long-lived GET for provider pull (generative edit). */
+  async createSignedGetUrl(input: {
+    workspaceId: string
+    storageKey: string
+    expiresInSeconds?: number
+  }): Promise<string> {
+    assertWorkspaceKey(input.workspaceId, input.storageKey)
+    const expiresIn = Math.max(60, Math.min(12 * 60 * 60, input.expiresInSeconds ?? SIGNED_URL_TTL_SECONDS))
+    return getSignedUrl(
+      this.signClient,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: input.storageKey,
+      }),
+      { expiresIn },
+    )
+  }
+
   async putObjectFromBody(input: {
     workspaceId: string
     storageKey: string

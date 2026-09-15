@@ -90,6 +90,23 @@ export const paths = {
   envStemServiceUrl: 'VIDEON_STEM_SERVICE_URL',
   /** Always-on reframe worker base URL (no trailing slash), e.g. http://videon-reframe-worker:8092 */
   envReframeServiceUrl: 'VIDEON_REFRAME_SERVICE_URL',
+  /** OpenRouter Video API model overrides (generation reuses OPENROUTER_API_KEY). */
+  envGenerationMaxEditMs: 'VIDEON_GENERATION_MAX_EDIT_MS',
+  envGenerationMaxConcurrent: 'VIDEON_GENERATION_MAX_CONCURRENT',
+  envGenerationSeedanceModel: 'VIDEON_GENERATION_SEEDANCE_MODEL',
+  envGenerationDraftModel: 'VIDEON_GENERATION_DRAFT_MODEL',
+  envGenerationVeoModel: 'VIDEON_GENERATION_VEO_MODEL',
+  envGenerationVeoLiteModel: 'VIDEON_GENERATION_VEO_LITE_MODEL',
+  envGenerationWanModel: 'VIDEON_GENERATION_WAN_MODEL',
+  envGenerationMinimaxModel: 'VIDEON_GENERATION_MINIMAX_MODEL',
+  envGenerationMinimaxEditModel: 'VIDEON_GENERATION_MINIMAX_EDIT_MODEL',
+  envGenerationAlephModel: 'VIDEON_GENERATION_ALEPH_MODEL',
+  /** @deprecated fal gateway removed — OpenRouter Video API is SSOT */
+  envFalApiKey: 'VIDEON_FAL_API_KEY',
+  envFalApiBaseUrl: 'VIDEON_FAL_API_BASE_URL',
+  envGenerationSeedanceEndpoint: 'VIDEON_GENERATION_SEEDANCE_ENDPOINT',
+  envGenerationDraftEndpoint: 'VIDEON_GENERATION_DRAFT_ENDPOINT',
+  envGenerationAlephEndpoint: 'VIDEON_GENERATION_ALEPH_ENDPOINT',
   /** Settings API tokens for MCP / machine clients (`videon_` + 64 hex). */
   apiTokenPrefix: 'videon_' as const,
   apiTokenBytes: 32,
@@ -180,6 +197,23 @@ export const paths = {
       `/api/media/${encodeURIComponent(mediaAssetId)}/reframes/${encodeURIComponent(reframeId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiMediaReframeDownload: (mediaAssetId: string, reframeId: string, platformProjectId: string) =>
       `/api/media/${encodeURIComponent(mediaAssetId)}/reframes/${encodeURIComponent(reframeId)}/download?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaGenerate: (mediaAssetId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/generate?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaGenerateDetail: (mediaAssetId: string, jobId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/generate/${encodeURIComponent(jobId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaGenerateApprove: (mediaAssetId: string, jobId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/generate/${encodeURIComponent(jobId)}/approve?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaGeneratePromote: (mediaAssetId: string, jobId: string, platformProjectId: string) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/generate/${encodeURIComponent(jobId)}/promote?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiMediaGenerateDownload: (
+      mediaAssetId: string,
+      jobId: string,
+      platformProjectId: string,
+      kind: 'draft' | 'final' = 'final',
+    ) =>
+      `/api/media/${encodeURIComponent(mediaAssetId)}/generate/${encodeURIComponent(jobId)}/download?platformProjectId=${encodeURIComponent(platformProjectId)}&kind=${encodeURIComponent(kind)}`,
+    apiMediaAiCreate: (platformProjectId: string) =>
+      `/api/media/ai-create?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     /** Adobe UXP panel insert download — specs/api/media-adobe-download.md */
     apiMediaAdobeDownload: (
       mediaAssetId: string,
@@ -197,6 +231,8 @@ export const paths = {
       `/api/cuts?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiCutDetail: (cutId: string, platformProjectId: string) =>
       `/api/cuts/${encodeURIComponent(cutId)}?platformProjectId=${encodeURIComponent(platformProjectId)}`,
+    apiCutGenerateJobs: (cutId: string, platformProjectId: string) =>
+      `/api/cuts/${encodeURIComponent(cutId)}/generate-jobs?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiCutExports: (cutId: string, platformProjectId: string) =>
       `/api/cuts/${encodeURIComponent(cutId)}/exports?platformProjectId=${encodeURIComponent(platformProjectId)}`,
     apiCutExportDetail: (cutId: string, exportId: string, platformProjectId: string) =>

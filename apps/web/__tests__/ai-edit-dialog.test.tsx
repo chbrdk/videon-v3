@@ -1,0 +1,43 @@
+import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+describe('AiEditDialog UI smoke', () => {
+  it('ships dialog with range/prompt validation and locale keys', () => {
+    const dialog = readFileSync(join(process.cwd(), 'components/ai-edit-dialog.tsx'), 'utf8')
+    const editor = readFileSync(join(process.cwd(), 'components/media-editor-view.tsx'), 'utf8')
+    const en = readFileSync(join(process.cwd(), 'locales/en.json'), 'utf8')
+    const de = readFileSync(join(process.cwd(), 'locales/de.json'), 'utf8')
+
+    expect(dialog).toMatch(/export function AiEditDialog/)
+    expect(dialog).toMatch(/durationMs >= 1000 && durationMs <= maxEditMs/)
+    expect(dialog).toMatch(/prompt\.trim\(\)\.length > 0/)
+    expect(dialog).toMatch(/skipDraft/)
+    expect(dialog).toMatch(/keepSourceAudio/)
+
+    expect(editor).toMatch(/AiEditDialog/)
+    expect(editor).toMatch(/openAiEditDialog/)
+    expect(editor).toMatch(/approveAiEdit/)
+    expect(en).toMatch(/"aiEdit"/)
+    expect(de).toMatch(/"aiEdit"/)
+    expect(en).toMatch(/"markRequired"/)
+    expect(de).toMatch(/"markRequired"/)
+    expect(dialog).toMatch(/aiEdit\.costEstimate/)
+    expect(en).toMatch(/"aiCreate"/)
+    expect(de).toMatch(/"aiCreate"/)
+    expect(editor).toMatch(/apiMediaGenerate/)
+    const library = readFileSync(join(process.cwd(), 'components/media-library.tsx'), 'utf8')
+    expect(library).toMatch(/AiCreateDialog/)
+    expect(library).toMatch(/apiMediaAiCreate/)
+    const cut = readFileSync(join(process.cwd(), 'components/cut-editor-view.tsx'), 'utf8')
+    expect(cut).toMatch(/AiEditDialog/)
+    expect(cut).toMatch(/openAiEditDialog/)
+    expect(dialog).toMatch(/recommendEditModelId/)
+    expect(en).toMatch(/"clipRequired"/)
+    expect(de).toMatch(/"clipRequired"/)
+    const runGenerate = readFileSync(join(process.cwd(), 'lib/pipeline/run-generate.ts'), 'utf8')
+    expect(runGenerate).toMatch(/scheduleMediaAnalysis/)
+    expect(runGenerate).toMatch(/Post-promote analysis/)
+    expect(runGenerate).toMatch(/maybeInsertTargetCut/)
+  })
+})

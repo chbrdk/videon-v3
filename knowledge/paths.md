@@ -91,12 +91,12 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Open Cut wave | `specs/domain/adobe-uxp-open-cut-premiere.md` — Cut → Premiere sequence via `premiere_xml` ZIP |
 | Package | `tools/adobe-uxp-library-panel/` (UXP dual-host: Premiere Wave 1 + AE Wave 1.5) |
 | UDT External copy (macOS) | `~/Library/Application Support/Adobe/UXP/Plugins/External/videon.libraryPanel_<version>/` — frozen after Load; must Unload + Load / re-sync after every build |
-| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`); current **0.1.28** |
+| Panel version chrome | Header shows `vX.Y.Z` from `PANEL_VERSION` in `src/index.js` (must match `manifest.json`); current **0.1.49** |
 | Preview playback notes | `knowledge/adobe-uxp-panel-preview-playback.md` |
 | Auth | Settings API Bearer (`settings-api-tokens.md`); owner via `POST /api/tokens/verify`; table `api_tokens` |
 | Search | Same `GET /api/media/search` + `scene-hit-model.md` as `/chat` |
 | Posters | `GET /api/media/:id/frame` (`apiMediaFrame`) |
-| Card MP4 previews | `GET /api/media/:id/preview` → write into UXP data folder → `<video src>` via `file.url` / `getFsUrl` / `file://nativePath` (blob: unreliable for video in Premiere UXP) |
+| Card MP4 previews | `GET /api/media/:id/preview` → write into UXP data folder → `<video src>` via `plugin-data:` / `getFsUrl` / `file:/nativePath` (opacity reveal; blob: unreliable) — see `knowledge/adobe-uxp-panel-preview-playback.md` |
 | Insert media | `GET /api/media/:id/adobe-download` — `specs/api/media-adobe-download.md`; helper `paths.routes.apiMediaAdobeDownload` |
 | Legacy reference | `videon/tools/ae-uxp-plugin` (PrismVid; localhost path — do not reuse) |
 | Panel prefs (illustrative) | `videon.adobe.productBaseUrl` · `videon.adobe.apiToken` · `videon.adobe.defaultPlatformProjectId` · `videon.adobe.cacheDir` |
@@ -109,8 +109,23 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | `BRAND_COMPLIANCE_JOB_NAME` | `videon.media.brand_compliance` |
 | `EXPORT_JOB_NAME` | `videon.cut.export` |
 | `REFRAME_JOB_NAME` | `videon.media.reframe` |
+| `GENERATE_JOB_NAME` | `videon.media.generate` |
 | `VIDEON_REFRAME_SERVICE_URL` | Always-on reframe worker base (no trailing slash) |
 | Media reframe API | `POST/GET /api/media/:id/reframe(s)` — `specs/api/media-reframe.md` |
+| AI generative edit | `POST/GET /api/media/:id/generate` — OpenRouter Video API · `specs/domain/media-generative-edit.md` · `specs/api/media-generative-edit.md` · `knowledge/ai-clip-generation.md` |
+| Cut AI generate jobs | `GET /api/cuts/:cutId/generate-jobs` — jobs with `target_cut_id` |
+| AI generative create | `POST/GET /api/media/ai-create` — T2V/I2V create jobs |
+| `OPENROUTER_API_KEY` | Shared vision + **video generation** gateway |
+| `VIDEON_GENERATION_MAX_EDIT_MS` | Max edit range ms (default `12000`) |
+| `VIDEON_GENERATION_MAX_CONCURRENT` | Max concurrent generate jobs per workspace (default `2`) |
+| `VIDEON_GENERATION_SEEDANCE_MODEL` | Optional OpenRouter slug (default `bytedance/seedance-2.5`) |
+| `VIDEON_GENERATION_VEO_MODEL` | Optional (default `google/veo-3.1`) |
+| `VIDEON_GENERATION_VEO_LITE_MODEL` | Optional (default `google/veo-3.1-lite`) |
+| `VIDEON_GENERATION_WAN_MODEL` | Optional (default `alibaba/wan-3.0`) |
+| `VIDEON_GENERATION_MINIMAX_MODEL` | Optional create (default `minimax/hailuo-3-max`) |
+| `VIDEON_GENERATION_MINIMAX_EDIT_MODEL` | Optional edit (default `minimax/hailuo-3`) |
+| `VIDEON_GENERATION_ALEPH_MODEL` | Optional; when set enables `runway_aleph_2` |
+| Coolify generation | OpenRouter on main-app — `knowledge/staging-coolify-fal-generation.md` |
 | Reframe worker | Coolify `videon-v3:reframe-worker` `hydwudxhs3ovqdf3lpdk9gjz` · port **8092** · FQDN `https://hydwudxhs3ovqdf3lpdk9gjz.projects-a.plygrnd.tech` · `knowledge/staging-coolify-reframe-worker.md` |
 | Multi-source Cuts | `specs/domain/cut-multi-source-compose.md` · `specs/api/cuts.md` — `PATCH addScenes`; MCP `videon.cut_scenes_add` |
 | Cut export extras | `specs/domain/cut-export-extras.md` — canvas presets + Premiere ZIP (`premiere_xml`) |
@@ -118,6 +133,12 @@ Writes, detail, stream, upload remain auth + `platformProjectId`.
 | Cut pushback from Premiere (sketch) | `specs/domain/adobe-uxp-cut-pushback-premiere.md` · `knowledge/adobe-uxp-cut-pushback-premiere.md` — **manual parity** both directions; not live sync |
 | Pushback → dead playback | `knowledge/adobe-uxp-pushback-restore-playback.md` — duplicate filename / ticks / peaks |
 | Pushback effects Wave P3 | `knowledge/adobe-uxp-pushback-effects-backlog.md` — clip `<filter>` sidecar (no Videon UI) |
+| Provider-first (clips/scenes) | `knowledge/adobe-uxp-provider-first.md` — Cuts tab + in-place sync off (`panel-features.js`) |
+| Scenes provider polish | `knowledge/adobe-uxp-scenes-provider-polish.md` — insert In/Out + cards ≥ 0.1.37 |
+| Hit detail overlay | `knowledge/adobe-uxp-hit-detail-overlay.md` — Anzeigen → width-scaled MP4 preview + rich meta ≥ 0.1.49 |
+| Panel MSQ DX chrome | `knowledge/adobe-uxp-panel-msqdx-ui.md` — brand-lockup + `ds-*` via `styles.bundle.css` ≥ 0.1.48; controls are `div[role=button]` |
+| In-place Premiere patch Wave P4 | `knowledge/adobe-uxp-inplace-patch-premiere.md` — **paused** ≥ 0.1.35 |
+| Cut change watch Wave P5 | `knowledge/adobe-uxp-cut-change-watch.md` — **paused** ≥ 0.1.35 |
 | Cut multi-track | `specs/domain/cut-multi-track.md` — extra `audio_bus` / Voice-Over spur |
 
 ## V7 production rollout

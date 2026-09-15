@@ -4,6 +4,7 @@ import {
   ANALYSIS_JOB_NAME,
   BRAND_COMPLIANCE_JOB_NAME,
   EXPORT_JOB_NAME,
+  GENERATE_JOB_NAME,
   REFRAME_JOB_NAME,
 } from '@/lib/pipeline/constants'
 
@@ -24,6 +25,11 @@ export type CutExportJobPayload = {
 
 export type MediaReframeJobPayload = {
   reframeId: string
+  mediaAssetId: string
+}
+
+export type MediaGenerateJobPayload = {
+  jobId: string
   mediaAssetId: string
 }
 
@@ -56,6 +62,7 @@ async function getBoss(): Promise<PgBoss> {
       await ensureQueue(boss as PgBoss, BRAND_COMPLIANCE_JOB_NAME)
       await ensureQueue(boss as PgBoss, EXPORT_JOB_NAME)
       await ensureQueue(boss as PgBoss, REFRAME_JOB_NAME)
+      await ensureQueue(boss as PgBoss, GENERATE_JOB_NAME)
       return boss as PgBoss
     })
   }
@@ -105,6 +112,17 @@ export async function enqueueMediaReframeJob(payload: MediaReframeJobPayload): P
     retryDelay: 30,
     retryBackoff: true,
     expireInSeconds: 180 * 60,
+  })
+}
+
+export async function enqueueMediaGenerateJob(payload: MediaGenerateJobPayload): Promise<string | null> {
+  const queue = await getBoss()
+  return queue.send(GENERATE_JOB_NAME, payload, {
+    singletonKey: payload.jobId,
+    retryLimit: 2,
+    retryDelay: 45,
+    retryBackoff: true,
+    expireInSeconds: 240 * 60,
   })
 }
 
@@ -197,6 +215,34 @@ export async function registerMediaReframeHandler(
           '[VIDEON-v3] Media reframe job failed',
           JSON.stringify({
             reframeId: payload.reframeId,
+            mediaAssetId: payload.mediaAssetId,
+            message,
+          }),
+        )
+        throw error
+      }
+    }
+  })
+}
+
+export async function registerMediaGenerateHandler(
+  handler: (payload: MediaGenerateJobPayload) => Promise<void>,
+): Promise<void> {
+  const queue = await getBoss()
+  await queue.work(GENERATE_JOB_NAME, { localConcurrency: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      const payload = job.data as MediaGenerateJobPayload
+      if (!payload?.jobId || !payload?.mediaAssetId) {
+        throw new Error('Invalid media generate job payload')
+      }
+      try {
+        await handler(payload)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error(
+          '[VIDEON-v3] Media generate job failed',
+          JSON.stringify({
+            jobId: payload.jobId,
             mediaAssetId: payload.mediaAssetId,
             message,
           }),

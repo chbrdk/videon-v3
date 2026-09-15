@@ -104,6 +104,36 @@ export function mediaReframeStorageKey(workspaceId: string, mediaAssetId: string
   return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/derivatives/reframe/${safe(reframeId, 'reframeId')}.mp4`
 }
 
+export type MediaGenerationArtifactKind = 'slice' | 'draft' | 'final'
+
+export function mediaGenerationStorageKey(
+  workspaceId: string,
+  mediaAssetId: string,
+  jobId: string,
+  kind: MediaGenerationArtifactKind,
+): string {
+  const safe = (value: string, label: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
+    return trimmed
+  }
+  return `${safe(workspaceId, 'workspaceId')}/media/${safe(mediaAssetId, 'mediaAssetId')}/derivatives/generate/${safe(jobId, 'jobId')}/${kind}.mp4`
+}
+
+/** Create-intent jobs have no parent media — store under workspace generate prefix. */
+export function mediaGenerationCreateStorageKey(
+  workspaceId: string,
+  jobId: string,
+  kind: MediaGenerationArtifactKind,
+): string {
+  const safe = (value: string, label: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || /[\\/]/.test(trimmed)) throw new Error(`${label} must be an opaque id`)
+    return trimmed
+  }
+  return `${safe(workspaceId, 'workspaceId')}/generate/${safe(jobId, 'jobId')}/${kind}.mp4`
+}
+
 /** Eager / write-through JPEG posters for Frame API (Wave 4). */
 export function mediaPosterStorageKey(
   workspaceId: string,

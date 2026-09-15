@@ -16,6 +16,7 @@ import {
   Text,
 } from '@msqdx/ui'
 import { MediaCardThumb } from '@/components/media-card-thumb'
+import { AiCreateDialog, type AiCreateOptions } from '@/components/ai-create-dialog'
 import { HubIndexLayoutSwitch, useHubIndexLayout } from '@/components/hub-index-layout'
 import { MediaSearch } from '@/components/media-search'
 import { formatClock } from '@/lib/editor-time'
@@ -78,6 +79,11 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId?: string
   const [loading, setLoading] = useState(true)
   const [lifecycleFilter, setLifecycleFilter] = useState<LifecycleFilter>('all')
   const [analysisFilter, setAnalysisFilter] = useState<AnalysisFilter>('all')
+  const [aiCreateOpen, setAiCreateOpen] = useState(false)
+  const [aiCreateBusy, setAiCreateBusy] = useState(false)
+  const [createModels, setCreateModels] = useState<
+    Array<{ id: string; label: string; role: string; usdPerSecond?: number }>
+  >([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -103,6 +109,41 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId?: string
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!scopedId) return
+    void (async () => {
+      const response = await fetch(paths.routes.apiMediaAiCreate(scopedId), { cache: 'no-store' })
+      if (!response.ok) return
+      const body = (await response.json()) as {
+        models?: Array<{ id: string; label: string; role: string; usdPerSecond?: number }>
+      }
+      if (body.models?.length) setCreateModels(body.models)
+    })()
+  }, [scopedId])
+
+  const startAiCreate = async (options: AiCreateOptions) => {
+    if (!scopedId) return
+    setAiCreateBusy(true)
+    try {
+      const response = await fetch(paths.routes.apiMediaAiCreate(scopedId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      })
+      const body = (await response.json()) as {
+        job?: { promotedMediaAssetId?: string | null; id?: string }
+        error?: { message?: string }
+      }
+      if (!response.ok) throw new Error(body.error?.message || t('aiCreate.failed'))
+      setAiCreateOpen(false)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('aiCreate.failed'))
+    } finally {
+      setAiCreateBusy(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!items) return []
@@ -157,6 +198,11 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId?: string
               {global ? t('library.uploadViaProject') : t('library.upload')}
             </Button>
           </Link>
+          {!global ? (
+            <Button type="button" variant="ghost" onClick={() => setAiCreateOpen(true)}>
+              {t('aiCreate.action')}
+            </Button>
+          ) : null}
           <Button type="button" variant="ghost" onClick={() => void load()}>
             {t('library.refresh')}
           </Button>
@@ -328,6 +374,13 @@ export function MediaLibrary({ platformProjectId }: { platformProjectId?: string
           })}
         </RankedList>
       )}
+      <AiCreateDialog
+        open={aiCreateOpen}
+        busy={aiCreateBusy}
+        models={createModels}
+        onClose={() => setAiCreateOpen(false)}
+        onConfirm={(options) => void startAiCreate(options)}
+      />
     </div>
   )
 }

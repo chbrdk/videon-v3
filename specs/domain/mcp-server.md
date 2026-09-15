@@ -50,6 +50,8 @@ The in-app `/chat` hub (Phase 1 scene retrieval UI) remains independent. MCP is 
 | `videon.cut.scenes.add` | `videon.cut_scenes_add` (Accepted — Agent append; no Flow node) |
 | `videon.export.run` | `videon.export_run` (P2 / Flow-first) |
 | `videon.reframe.run` | `videon.reframe_run` (Accepted — Robust CPU) |
+| `videon.generate.edit` | `videon.generate_edit_run` (Accepted — fal V2V edit) |
+| `videon.generate.create` | `videon.generate_create_run` (Accepted — T2V/I2V) |
 
 ## Tool surface
 
@@ -91,6 +93,8 @@ Hard limits (initial): `media_search` ≤ 20 hits; `media_get` scene list ≤ 40
 | `videon.cut_scenes_add` | `PATCH /api/cuts/:id` `addScenes` | Append batch; confirm; **no** Flow node |
 | `videon.export_run` | `POST /api/cuts/:id/exports` | Prefer Collection Flow; optional `format` `mp4`\|`premiere_xml` (ZIP + media) |
 | `videon.reframe_run` | `POST /api/media/:id/reframe` | Confirm/job; no Hit-Card; no Flow node yet |
+| `videon.generate_edit_run` | `POST /api/media/:id/generate` | Confirm/job; range + prompt; no Hit-Card |
+| `videon.generate_create_run` | `POST /api/media/ai-create` | Confirm/job; T2V/I2V; no Hit-Card |
 
 Writes require writable membership + idempotency keys where the Product API supports them.
 

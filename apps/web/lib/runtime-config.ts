@@ -183,3 +183,93 @@ export function reframeServiceUrl(): string | null {
   const url = env(paths.envReframeServiceUrl).replace(/\/$/, '')
   return url || null
 }
+
+/** OpenRouter Video API for generative edit/create (same key as vision). */
+export function isGenerationGatewayConfigured(): boolean {
+  return Boolean(openRouterApiKey())
+}
+
+/** @deprecated Use isGenerationGatewayConfigured */
+export function isFalGenerationConfigured(): boolean {
+  return isGenerationGatewayConfigured()
+}
+
+export function generationMaxEditMs(): number {
+  const raw = Number(env(paths.envGenerationMaxEditMs) || '12000')
+  if (!Number.isFinite(raw) || raw < 1000) return 12_000
+  return Math.min(60_000, Math.floor(raw))
+}
+
+export function generationMaxConcurrent(): number {
+  const raw = Number(env(paths.envGenerationMaxConcurrent) || '2')
+  if (!Number.isFinite(raw) || raw < 1) return 2
+  return Math.min(8, Math.floor(raw))
+}
+
+/** OpenRouter Seedance slug. Legacy VIDEON_GENERATION_SEEDANCE_ENDPOINT still accepted. */
+export function generationSeedanceModel(): string {
+  return (
+    env(paths.envGenerationSeedanceModel) ||
+    env(paths.envGenerationSeedanceEndpoint) ||
+    'bytedance/seedance-2.5'
+  )
+}
+
+export function generationDraftModel(): string {
+  return env(paths.envGenerationDraftModel) || env(paths.envGenerationDraftEndpoint) || generationSeedanceModel()
+}
+
+export function generationVeoModel(): string {
+  return env(paths.envGenerationVeoModel) || 'google/veo-3.1'
+}
+
+/** Google Veo 3.1 Lite (cheaper create lane). */
+export function generationVeoLiteModel(): string {
+  return env(paths.envGenerationVeoLiteModel) || 'google/veo-3.1-lite'
+}
+
+/** Alibaba Wan 3.0 (create). */
+export function generationWanModel(): string {
+  return env(paths.envGenerationWanModel) || 'alibaba/wan-3.0'
+}
+
+/** MiniMax H3 Max (create) — latest flagship T2V/I2V. */
+export function generationMinimaxModel(): string {
+  return env(paths.envGenerationMinimaxModel) || 'minimax/hailuo-3-max'
+}
+
+/** MiniMax H3 (edit) — supports video refs / instruction edits. */
+export function generationMinimaxEditModel(): string {
+  return env(paths.envGenerationMinimaxEditModel) || 'minimax/hailuo-3'
+}
+
+/** Empty → Aleph edit model stays disabled in catalog. */
+export function generationAlephModel(): string | null {
+  const value = env(paths.envGenerationAlephModel) || env(paths.envGenerationAlephEndpoint)
+  return value || null
+}
+
+/** @deprecated */
+export function falApiKey(): string {
+  return openRouterApiKey()
+}
+
+/** @deprecated */
+export function falApiBaseUrl(): string {
+  return openRouterApiBaseUrl() || 'https://openrouter.ai/api/v1'
+}
+
+/** @deprecated */
+export function generationSeedanceEndpoint(): string {
+  return generationSeedanceModel()
+}
+
+/** @deprecated */
+export function generationDraftEndpoint(): string {
+  return generationDraftModel()
+}
+
+/** @deprecated */
+export function generationAlephEndpoint(): string | null {
+  return generationAlephModel()
+}

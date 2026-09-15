@@ -20,6 +20,7 @@ export const ANALYSIS_JOB_NAME = 'videon.media.analysis' as const
 export const BRAND_COMPLIANCE_JOB_NAME = 'videon.media.brand_compliance' as const
 export const EXPORT_JOB_NAME = 'videon.cut.export' as const
 export const REFRAME_JOB_NAME = 'videon.media.reframe' as const
+export const GENERATE_JOB_NAME = 'videon.media.generate' as const
 
 export const PROBE_CAPABILITY = 'probe' as const
 export const SCENE_DETECT_CAPABILITY = 'scene_detect' as const

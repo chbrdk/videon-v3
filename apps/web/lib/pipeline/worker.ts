@@ -3,11 +3,13 @@ import {
   registerBrandComplianceHandler,
   registerCutExportHandler,
   registerMediaAnalysisHandler,
+  registerMediaGenerateHandler,
   registerMediaReframeHandler,
 } from '@/lib/jobs/pg-boss-queue'
 import { runCutExport } from '@/lib/pipeline/export-cut'
 import { runMediaAnalysis } from '@/lib/pipeline/run-analysis'
 import { runBrandComplianceForAnalysis } from '@/lib/pipeline/run-brand-compliance'
+import { runMediaGenerate } from '@/lib/pipeline/run-generate'
 import { runMediaReframe } from '@/lib/pipeline/run-reframe'
 
 let started = false
@@ -49,7 +51,10 @@ export async function startPipelineWorker(): Promise<void> {
   await registerMediaReframeHandler(async (payload) => {
     await runMediaReframe(payload.reframeId)
   })
+  await registerMediaGenerateHandler(async (payload) => {
+    await runMediaGenerate(payload.jobId)
+  })
   console.info(
-    '[VIDEON-v3] Pipeline worker subscribed to durable media analysis, brand compliance, cut export, and reframe jobs',
+    '[VIDEON-v3] Pipeline worker subscribed to durable media analysis, brand compliance, cut export, reframe, and generate jobs',
   )
 }

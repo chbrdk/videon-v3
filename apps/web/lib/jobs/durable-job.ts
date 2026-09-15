@@ -3,7 +3,7 @@ export type DurableJobStatus = (typeof DURABLE_JOB_STATUSES)[number]
 
 export type DurableJob = {
   id: string
-  type: 'media.analysis' | 'cut.export' | 'media.reframe'
+  type: 'media.analysis' | 'cut.export' | 'media.reframe' | 'media.generate'
   idempotencyKey: string
   status: DurableJobStatus
   payload: Record<string, unknown>
