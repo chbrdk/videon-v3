@@ -30,13 +30,14 @@ export type GenerationEditInput = {
   imageUrls?: string[]
   resolution: string
   /**
-   * Seedance edit requires duration=-1 (output follows input video, 4–30s).
-   * Fixed seconds only for providers that do not support match-input edit.
+   * Seedance edit: omit duration so output follows the input clip (4–30s).
+   * OpenRouter Zod rejects duration=-1; Seedance rejects fixed duration on edit.
+   * Fixed seconds only when matchInputDuration is false.
    */
   durationSeconds?: number
   durationMinSeconds?: number
   durationMaxSeconds?: number
-  /** When true (default), send duration=-1 so edit output matches the source clip. */
+  /** When true (default), omit duration so edit output matches the source clip. */
   matchInputDuration?: boolean
   seed?: number | null
   generateAudio?: boolean
@@ -206,23 +207,25 @@ export async function runOpenRouterVideoEdit(input: GenerationEditInput): Promis
   }
 
   const matchInput = input.matchInputDuration !== false
-  const duration = matchInput
-    ? -1
-    : clampDurationSeconds(input.durationSeconds ?? 5, {
-        min: input.durationMinSeconds,
-        max: input.durationMaxSeconds,
-      })
+  const body: Record<string, unknown> = {
+    model: input.model,
+    prompt: input.prompt,
+    resolution: input.resolution,
+    generate_audio: input.generateAudio ?? false,
+    seed: input.seed ?? undefined,
+    input_references,
+  }
+  // Seedance edit: do not send a fixed duration. OpenRouter rejects -1 (Zod ≥1),
+  // and Seedance rejects fixed seconds for edit — omit so output follows the input clip.
+  if (!matchInput) {
+    body.duration = clampDurationSeconds(input.durationSeconds ?? 5, {
+      min: input.durationMinSeconds,
+      max: input.durationMaxSeconds,
+    })
+  }
 
   return openRouterVideoRoundTrip({
-    body: {
-      model: input.model,
-      prompt: input.prompt,
-      duration,
-      resolution: input.resolution,
-      generate_audio: input.generateAudio ?? false,
-      seed: input.seed ?? undefined,
-      input_references,
-    },
+    body,
     onProgress: input.onProgress,
   })
 }

@@ -143,7 +143,7 @@ describe('OpenRouter video gateway mock', () => {
 
   it('submits, polls, and returns content url', async () => {
     let calls = 0
-    let submittedBody: Record<string, unknown> | null = null
+    let submittedBody: Record<string, unknown> = {}
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       calls += 1
@@ -184,8 +184,39 @@ describe('OpenRouter video gateway mock', () => {
     expect(result.videoUrl).toMatch(/content/)
     expect(result.requiresAuthDownload).toBe(true)
     expect(calls).toBeGreaterThanOrEqual(2)
-    expect(submittedBody?.duration).toBe(-1)
-    expect(submittedBody?.input_references).toBeTruthy()
+    expect(submittedBody.duration).toBeUndefined()
+    expect(submittedBody.input_references).toBeTruthy()
+  })
+
+  it('sends fixed duration when matchInputDuration is false', async () => {
+    let submittedBody: Record<string, unknown> = {}
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/videos') && !url.includes('/videos/')) {
+        submittedBody = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>
+        return new Response(
+          JSON.stringify({ id: 'job-2', polling_url: 'https://openrouter.test/api/v1/videos/job-2', status: 'pending' }),
+          { status: 202 },
+        )
+      }
+      if (url.includes('/videos/job-2')) {
+        return new Response(JSON.stringify({ id: 'job-2', status: 'completed', unsigned_urls: [] }), {
+          status: 200,
+        })
+      }
+      return new Response('unexpected', { status: 500 })
+    }) as typeof fetch
+
+    const { runOpenRouterVideoEdit } = await import('@/lib/generation/openrouter-video-client')
+    await runOpenRouterVideoEdit({
+      model: 'bytedance/seedance-2.5',
+      prompt: 'extend shot',
+      videoUrl: 'https://signed.test/slice.mp4',
+      resolution: '720p',
+      durationSeconds: 8,
+      matchInputDuration: false,
+    })
+    expect(submittedBody.duration).toBe(8)
   })
 
   it('fails closed when unconfigured', async () => {

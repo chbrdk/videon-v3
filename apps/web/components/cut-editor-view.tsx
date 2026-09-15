@@ -1448,6 +1448,7 @@ export function CutEditorView({
           progressPercent: number | null
           promotedMediaAssetId: string | null
           targetCutInsertedAt: string | null
+          errorMessage?: string | null
         }>
       }
       setCutGenerateJobs(body.jobs ?? [])
@@ -1464,12 +1465,29 @@ export function CutEditorView({
     const busyJob = cutGenerateJobs.some(
       (job) => job.status === 'queued' || job.status === 'running' || job.status === 'draft_ready',
     )
-    if (!busyJob) return
+    // Always poll briefly after mount; keep polling while active, or for 2 min after start.
     const timer = window.setInterval(() => {
       void loadCutGenerateJobs()
-    }, 4000)
+    }, busyJob ? 3000 : 12_000)
     return () => window.clearInterval(timer)
   }, [cutGenerateJobs, loadCutGenerateJobs])
+
+  const activeGenerateJobs = useMemo(() => {
+    const rank = (status: string) => {
+      if (status === 'running' || status === 'queued') return 0
+      if (status === 'draft_ready') return 1
+      if (status === 'failed') return 2
+      if (status === 'succeeded') return 3
+      return 4
+    }
+    return [...cutGenerateJobs].sort((a, b) => rank(a.status) - rank(b.status)).slice(0, 3)
+  }, [cutGenerateJobs])
+
+  const aiEditInFlight = cutGenerateJobs.some(
+    (job) => job.status === 'queued' || job.status === 'running',
+  )
+  const showEditorTopStrip =
+    !topbarTrailHost || Boolean(latestExport) || activeGenerateJobs.length > 0
 
   const insertedJobIdsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
@@ -1865,9 +1883,9 @@ export function CutEditorView({
             variant="ghost"
             size="sm"
             onClick={() => void openAiEditDialog()}
-            disabled={busy || aiEditBusy || !activeClip?.scene.mediaAssetId}
+            disabled={busy || aiEditBusy || aiEditInFlight || !activeClip?.scene.mediaAssetId}
           >
-            {aiEditBusy ? t('aiEdit.busy') : t('aiEdit.action')}
+            {aiEditBusy || aiEditInFlight ? t('aiEdit.busy') : t('aiEdit.action')}
           </Button>
           <Button
             type="button"
@@ -1950,7 +1968,7 @@ export function CutEditorView({
       }
     >
       {topbarTrailHost ? createPortal(toolbarChrome, topbarTrailHost) : null}
-      {topbarTrailHost && !latestExport ? null : (
+      {showEditorTopStrip ? (
         <div className="videon-nle__top">
           {topbarTrailHost ? null : toolbarChrome}
 
@@ -1981,7 +1999,7 @@ export function CutEditorView({
               }
             />
           ) : null}
-          {cutGenerateJobs.slice(0, 2).map((job) => {
+          {activeGenerateJobs.map((job) => {
             if (job.status === 'draft_ready') {
               return (
                 <EditorStatusStrip
@@ -2030,14 +2048,16 @@ export function CutEditorView({
                 key={job.id}
                 level="warn"
                 label={t('aiEdit.busy')}
-                detail={`${job.status}${
-                  job.progressPercent != null && job.status === 'running' ? ` ${job.progressPercent}%` : ''
+                detail={`${job.modelId} · ${job.status}${
+                  job.progressPercent != null && job.status === 'running'
+                    ? ` ${job.progressPercent}%`
+                    : ''
                 }`}
               />
             )
           })}
         </div>
-      )}
+      ) : null}
 
       <div className="videon-nle__workspace">
         <CutEditorRail
