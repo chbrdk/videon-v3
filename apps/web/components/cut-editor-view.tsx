@@ -2048,7 +2048,11 @@ export function CutEditorView({
                 key={job.id}
                 level="warn"
                 label={t('aiEdit.busy')}
-                detail={`${job.modelId} · ${job.status}${
+                detail={`${job.modelId} · ${
+                  job.progressPercent != null && job.progressPercent <= 48
+                    ? t('aiEdit.waitingProvider')
+                    : job.status
+                }${
                   job.progressPercent != null && job.status === 'running'
                     ? ` ${job.progressPercent}%`
                     : ''

@@ -149,6 +149,7 @@ async function openRouterVideoRoundTrip(input: {
   const deadline = Date.now() + 45 * 60 * 1000
   let poll = 0
   let last: PollResponse = submitJson
+  const startedAt = Date.now()
 
   while (Date.now() < deadline) {
     poll += 1
@@ -168,9 +169,24 @@ async function openRouterVideoRoundTrip(input: {
     last = (await statusRes.json()) as PollResponse
     const status = String(last.status || '').toLowerCase()
     if (input.onProgress) {
-      const approx =
-        status === 'pending' ? 30 : status === 'in_progress' ? 55 : status === 'completed' ? 80 : 40
+      // Video gen often sits in pending for minutes — climb slowly so UI does not look frozen.
+      const elapsedMin = (Date.now() - startedAt) / 60_000
+      let approx = 40
+      if (status === 'pending') approx = Math.min(48, 30 + Math.floor(elapsedMin * 4))
+      else if (status === 'in_progress') approx = Math.min(78, 50 + Math.floor(elapsedMin * 5))
+      else if (status === 'completed') approx = 80
       await input.onProgress(approx)
+    }
+    if (poll === 1 || poll % 5 === 0) {
+      console.info(
+        '[VIDEON-v3] OpenRouter video poll',
+        JSON.stringify({
+          jobId,
+          status,
+          poll,
+          elapsedSec: Math.round((Date.now() - startedAt) / 1000),
+        }),
+      )
     }
     if (status === 'completed') break
     if (status === 'failed' || status === 'cancelled' || status === 'canceled' || status === 'expired') {

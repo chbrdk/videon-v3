@@ -176,6 +176,7 @@
   "aiEdit": {
     "action": "AI Edit",
     "busy": "AI Edit…",
+    "waitingProvider": "Waiting on OpenRouter (often several minutes)",
     "title": "AI clip edit",
     "lead": "Edit the marked In/Out range with a video model. Draft first, then approve the final.",
     "range": "Range",
