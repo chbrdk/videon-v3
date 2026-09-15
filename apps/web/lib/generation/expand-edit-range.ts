@@ -78,8 +78,8 @@ export function expandEditRangeForProvider(input: ExpandEditRangeInput): ExpandE
 /** Provider input-video floor per edit model (ms). */
 export function editInputMinMsForModel(modelId: string | null | undefined): number {
   const id = (modelId || '').trim()
-  if (id === 'minimax_hailuo_3_edit') return 5000
+  if (id === 'minimax_hailuo_3_edit' || id === 'happy_horse_draft') return 5000
   if (id === 'runway_aleph_2') return 2000
-  // seedance_2_5_edit, happy_horse_draft, defaults — Seedance edit ≥4s
+  // legacy seedance ids / defaults
   return DEFAULT_EDIT_INPUT_MIN_MS
 }

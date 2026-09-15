@@ -68,11 +68,14 @@ describe('media generative edit contracts', () => {
   })
 
   it('allowlists edit models and rejects create-only ids for edit resolve', () => {
-    expect(resolveEditModel('seedance_2_5_edit')?.id).toBe('seedance_2_5_edit')
+    expect(resolveEditModel('minimax_hailuo_3_edit')?.id).toBe('minimax_hailuo_3_edit')
+    // Seedance edit is disabled on OpenRouter; alias to MiniMax.
+    expect(resolveEditModel('seedance_2_5_edit')?.id).toBe('minimax_hailuo_3_edit')
     expect(resolveEditModel('veo_3_1_create')).toBeNull()
     expect(resolveEditModel('unknown_model')).toBeNull()
     const ui = publicGenerationModelsForUi('edit')
-    expect(ui.some((m) => m.id === 'seedance_2_5_edit')).toBe(true)
+    expect(ui.some((m) => m.id === 'minimax_hailuo_3_edit')).toBe(true)
+    expect(ui.some((m) => m.id === 'seedance_2_5_edit')).toBe(false)
     expect(ui.every((m) => m.role !== 'create')).toBe(true)
     // Aleph stays catalog-defined but phase1Enabled only with env endpoint
     expect(resolveEditModel('runway_aleph_2')).toBeNull()

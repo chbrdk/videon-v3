@@ -1,6 +1,5 @@
 import {
   generationAlephModel,
-  generationDraftModel,
   generationMinimaxEditModel,
   generationMinimaxModel,
   generationSeedanceModel,
@@ -33,11 +32,12 @@ export function generationModelCatalog(): GenerationModelEntry[] {
   return [
     {
       id: 'seedance_2_5_edit',
-      label: 'Seedance 2.5 Edit',
+      label: 'Seedance 2.5 Edit (unavailable)',
       role: 'edit',
       providerModelId: generationSeedanceModel(),
       defaultResolution: '720p',
-      phase1Enabled: true,
+      // OpenRouter /videos rejects duration=-1 (Zod ≥1) while Seedance edit-mode requires -1.
+      phase1Enabled: false,
       usdPerSecond: 0.12,
       durationMinSeconds: 4,
       durationMaxSeconds: 30,
@@ -64,14 +64,15 @@ export function generationModelCatalog(): GenerationModelEntry[] {
     },
     {
       id: 'happy_horse_draft',
-      label: 'Draft (480p Seedance)',
+      label: 'Draft (MiniMax H3)',
       role: 'draft',
-      providerModelId: generationDraftModel(),
-      defaultResolution: '480p',
+      // Seedance draft shares the same OpenRouter duration=-1 deadlock on V2V.
+      providerModelId: generationMinimaxEditModel(),
+      defaultResolution: '2K',
       phase1Enabled: true,
-      usdPerSecond: 0.05,
-      durationMinSeconds: 4,
-      durationMaxSeconds: 30,
+      usdPerSecond: 0.13,
+      durationMinSeconds: 5,
+      durationMaxSeconds: 15,
     },
     {
       id: 'seedance_2_5_t2v',
@@ -135,8 +136,13 @@ export function findGenerationModel(modelId: string): GenerationModelEntry | nul
   return generationModelCatalog().find((entry) => entry.id === modelId) ?? null
 }
 
+/** Default edit model while Seedance V2V is blocked on OpenRouter. */
+export const DEFAULT_EDIT_MODEL_ID = 'minimax_hailuo_3_edit'
+
 export function resolveEditModel(modelId: string | undefined | null): GenerationModelEntry | null {
-  const id = (modelId || 'seedance_2_5_edit').trim()
+  let id = (modelId || DEFAULT_EDIT_MODEL_ID).trim()
+  // Alias blocked Seedance edit → MiniMax so queued/UI picks keep working.
+  if (id === 'seedance_2_5_edit') id = DEFAULT_EDIT_MODEL_ID
   const entry = findGenerationModel(id)
   if (!entry || !entry.phase1Enabled) return null
   if (entry.role === 'create') return null
@@ -154,17 +160,19 @@ export function resolveDraftModel(preferredId?: string | null): GenerationModelE
   const preferred = preferredId ? findGenerationModel(preferredId) : null
   if (preferred?.role === 'draft' && preferred.phase1Enabled) return preferred
   const draft = findGenerationModel('happy_horse_draft')
-  if (draft) return draft
+  if (draft?.phase1Enabled) return draft
+  const edit = resolveEditModel(DEFAULT_EDIT_MODEL_ID)
+  if (edit) return { ...edit, id: 'happy_horse_draft', role: 'draft', label: 'Draft (MiniMax H3)' }
   return {
-    id: 'seedance_2_5_edit',
-    label: 'Seedance 2.5 Edit',
-    role: 'edit',
-    providerModelId: generationSeedanceModel(),
-    defaultResolution: '480p',
+    id: 'happy_horse_draft',
+    label: 'Draft (MiniMax H3)',
+    role: 'draft',
+    providerModelId: generationMinimaxEditModel(),
+    defaultResolution: '2K',
     phase1Enabled: true,
-    usdPerSecond: 0.05,
-    durationMinSeconds: 4,
-    durationMaxSeconds: 30,
+    usdPerSecond: 0.13,
+    durationMinSeconds: 5,
+    durationMaxSeconds: 15,
   }
 }
 

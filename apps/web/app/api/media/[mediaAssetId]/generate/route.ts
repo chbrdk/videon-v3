@@ -165,7 +165,7 @@ export async function POST(request: Request, context: RouteContext) {
     )
   }
 
-  const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : 'seedance_2_5_edit'
+  const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : 'minimax_hailuo_3_edit'
   const model = resolveEditModel(modelId)
   if (!model) {
     return apiError(request, 400, 'invalid_payload', `Unknown or unavailable modelId: ${modelId}`)

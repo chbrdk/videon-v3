@@ -13,22 +13,26 @@ export type RecommendEditInput = {
 
 /**
  * Rule-based edit model pick. No LLM.
- * Object/subject replace → Seedance Edit; brand/text/motion transfer → MiniMax; keyframe → Aleph.
+ * Default → MiniMax H3 Edit (Seedance V2V blocked on OpenRouter duration=-1).
+ * Keyframe → Aleph when available.
  */
 export function recommendEditModelId(input: RecommendEditInput): string {
   const prompt = input.prompt.trim().toLowerCase()
-  if (!prompt) return 'seedance_2_5_edit'
+  if (!prompt) return 'minimax_hailuo_3_edit'
 
   const wantsKeyframe =
     /\b(keyframe|key frame|exact frame|pixel.?perfect|frame.?guided|präzise|exakt)\b/i.test(prompt) ||
     /\b(aleph)\b/i.test(prompt)
   if (wantsKeyframe && input.alephAvailable) return 'runway_aleph_2'
 
+  // Explicit Seedance ask still maps to MiniMax until OpenRouter supports duration=-1.
+  if (/\b(seedance)\b/i.test(prompt)) return 'minimax_hailuo_3_edit'
+
   const wantsMinimax =
     /\b(minimax|hailuo|h3|brand.?text|logo.?text|motion.?transfer|typografie|schrift)\b/i.test(prompt)
   if (wantsMinimax && input.minimaxAvailable !== false) return 'minimax_hailuo_3_edit'
 
-  return 'seedance_2_5_edit'
+  return 'minimax_hailuo_3_edit'
 }
 
 export function recommendCreateModelId(prompt: string): string {

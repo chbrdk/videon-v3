@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { recommendCreateModelId, recommendEditModelId } from '@/lib/generation/recommend'
 
 describe('generation recommend', () => {
-  it('defaults edit to Seedance', () => {
-    expect(recommendEditModelId({ prompt: 'change the car to a Ford Escort' })).toBe('seedance_2_5_edit')
+  it('defaults edit to MiniMax H3', () => {
+    expect(recommendEditModelId({ prompt: 'change the car to a Ford Escort' })).toBe(
+      'minimax_hailuo_3_edit',
+    )
   })
 
   it('picks Aleph for keyframe prompts when available', () => {
@@ -18,7 +20,7 @@ describe('generation recommend', () => {
         prompt: 'exact frame keyframe replace logo',
         alephAvailable: false,
       }),
-    ).toBe('seedance_2_5_edit')
+    ).toBe('minimax_hailuo_3_edit')
   })
 
   it('picks Veo for photoreal create', () => {

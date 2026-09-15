@@ -60,10 +60,10 @@ describe('expandEditRangeForProvider', () => {
     expect(result.endMs).toBe(2500)
   })
 
-  it('uses Seedance 4s floor by default', () => {
+  it('uses Seedance 4s floor by default and MiniMax 5s', () => {
     expect(DEFAULT_EDIT_INPUT_MIN_MS).toBe(4000)
     expect(editInputMinMsForModel('seedance_2_5_edit')).toBe(4000)
-    expect(editInputMinMsForModel('happy_horse_draft')).toBe(4000)
+    expect(editInputMinMsForModel('happy_horse_draft')).toBe(5000)
     expect(editInputMinMsForModel('minimax_hailuo_3_edit')).toBe(5000)
   })
 })

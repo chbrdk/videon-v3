@@ -6,9 +6,9 @@ Operator playbook for generative edit/create. Normative rules: `specs/domain/med
 
 | Intent | Prefer | Notes |
 |--------|--------|-------|
-| Object / subject replace | Seedance 2.5 Edit (`seedance_2_5_edit`) | Keep motion; pass reference stills of the target |
+| Object / subject replace | MiniMax H3 Edit (`minimax_hailuo_3_edit`) | Seedance V2V edit blocked on OpenRouter (`duration=-1` rejected by Zod) |
 | Instruction / brand text / motion transfer | MiniMax H3 Edit (`minimax_hailuo_3_edit`) | OpenRouter `minimax/hailuo-3` · 2K · 5–15s |
-| Cheap draft preview | Same Seedance @ 480p or `happy_horse_draft` | Approve before spendy final |
+| Cheap draft preview | MiniMax H3 @ draft lane | Approve before final; Seedance draft also blocked |
 | Keyframe-precise edit | Runway Aleph 2.0 (`runway_aleph_2`) | Enabled only when `VIDEON_GENERATION_ALEPH_MODEL` is set |
 | Photoreal create / extend | Veo 3.1 (`veo_3_1_create`) | OpenRouter `google/veo-3.1` |
 | Cost-efficient Veo create | Veo 3.1 Lite (`veo_3_1_lite_create`) | OpenRouter `google/veo-3.1-lite` · 4–8s |
@@ -34,7 +34,9 @@ Recommend rules (client-safe): `apps/web/lib/generation/recommend.ts`.
 
 OpenRouter Seedance r2v rejects input clips under ~1.8s (`InvalidParameter` on `content[1]`). Worker uses `expandEditRangeForProvider` (`apps/web/lib/generation/expand-edit-range.ts`) before ffmpeg slice + submit.
 
-For Seedance V2V through OpenRouter: send a concrete `duration` matching the prepared input clip (4–30s). Do **not** send `duration: -1` (OpenRouter Zod rejects it) and do **not** omit duration (OR defaults a value Seedance then rejects when the prompt is classified as edit). Quality Lock must not prefix with `edit:` — that triggers Seedance edit-mode which requires -1.
+For Seedance **create** (T2V/I2V) fixed durations work. For Seedance **V2V edit**, ByteDance requires `duration: -1` while OpenRouter’s public `/videos` schema rejects values &lt; 1 (`ZodError`). Until OpenRouter accepts `-1`, `seedance_2_5_edit` is **phase1Enabled=false** and edit defaults to MiniMax H3 (`minimax_hailuo_3_edit`). Legacy `seedance_2_5_edit` ids alias to MiniMax in `resolveEditModel`.
+
+V2V through OpenRouter (MiniMax): send a concrete `duration` matching the prepared input clip (≥5s for H3 Edit).
 
 ## Env
 
