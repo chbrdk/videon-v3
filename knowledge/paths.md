@@ -83,6 +83,28 @@ UI routes: `/chat` scene search (Card grid + deep-link `?t=`/`?scene=`); `/proje
 
 Writes, detail, stream, upload remain auth + `platformProjectId`.
 
+## Collection team (PLEXON SSOT)
+
+VIDEON has no `/projects/:id` page — the team is a thin aside on the Projekte hub, bound to the
+active `platformProjectId`. PLEXON owns the roster; `videon_workspace_members` stays a read
+projection written only by the provisioning replay in `apps/web/lib/db/workspaces.ts`.
+
+| Key | Value |
+|-----|-------|
+| `apiCollectionMembers(projectId)` | `GET`/`POST /api/collections/:platformProjectId/members` |
+| `apiCollectionMember(projectId, userId)` | `DELETE /api/collections/:platformProjectId/members/:userId` |
+| `apiCollectionInvites(projectId)` | `POST /api/collections/:platformProjectId/invites` |
+| `plexonProvisioningCollectionMembersPath(id)` | `/api/platform/provisioning/collections/:id/members` |
+| `plexonProvisioningCollectionMemberPath(id, userId)` | `/api/platform/provisioning/collections/:id/members/:userId` |
+| `plexonProvisioningCollectionInvitesPath(id)` | `/api/platform/provisioning/collections/:id/invites` |
+| `apps/web/lib/collection-members-plexon.ts` | Federation client (contract headers + `X-Plexon-User-Id`) |
+| `apps/web/lib/collection-team-access.ts` | Gate via `accessible-collections`; no local workspace writes |
+| `apps/web/lib/plexon-platform-id.ts` | `isRealPlatformProjectId` UUID guard |
+| `apps/web/components/collection-team-panel.tsx` | Compact panel (inline draft row + invite link) |
+| Locale keys | `collections.team.*` in `apps/web/locales/{en,de}.json` |
+
+Spec: [`specs/domain/project-team.md`](../specs/domain/project-team.md).
+
 ## Adobe UXP Library Panel
 
 | Key / path | Meaning |

@@ -52,6 +52,13 @@ export const paths = {
   plexonAccessibleCollectionsPath: '/api/platform/provisioning/accessible-collections',
   plexonProjectSyncPath: (platformProjectId: string) =>
     `/api/platform/provisioning/projects/${encodeURIComponent(platformProjectId)}/sync`,
+  /** Collection team SSOT lives in PLEXON — `specs/domain/project-team.md`. */
+  plexonProvisioningCollectionMembersPath: (platformProjectId: string) =>
+    `/api/platform/provisioning/collections/${encodeURIComponent(platformProjectId)}/members`,
+  plexonProvisioningCollectionMemberPath: (platformProjectId: string, userId: string) =>
+    `/api/platform/provisioning/collections/${encodeURIComponent(platformProjectId)}/members/${encodeURIComponent(userId)}`,
+  plexonProvisioningCollectionInvitesPath: (platformProjectId: string) =>
+    `/api/platform/provisioning/collections/${encodeURIComponent(platformProjectId)}/invites`,
   /** Browser upload cap for signed PUT (bytes). */
   maxUploadBytes: 2 * 1024 * 1024 * 1024,
   envFederationMode: 'PLEXON_FEDERATION_MODE',
@@ -126,6 +133,13 @@ export const paths = {
     /** @deprecated Alias — redirects to `/projects`. */
     collections: '/collections',
     apiCollections: '/api/collections',
+    /** Collection team BFF — keyed by platformProjectId, PLEXON stays SSOT. */
+    apiCollectionMembers: (platformProjectId: string) =>
+      `/api/collections/${encodeURIComponent(platformProjectId)}/members`,
+    apiCollectionMember: (platformProjectId: string, userId: string) =>
+      `/api/collections/${encodeURIComponent(platformProjectId)}/members/${encodeURIComponent(userId)}`,
+    apiCollectionInvites: (platformProjectId: string) =>
+      `/api/collections/${encodeURIComponent(platformProjectId)}/invites`,
     apiTokens: '/api/tokens',
     apiTokenDetail: (tokenId: string) => `/api/tokens/${encodeURIComponent(tokenId)}`,
     apiTokenVerify: '/api/tokens/verify',

@@ -639,6 +639,120 @@ main {
   flex-wrap: wrap;
 }
 
+.videon-hub__with-aside {
+  display: grid;
+  gap: clamp(1rem, 2.5vw, 2rem);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .videon-hub__with-aside {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  }
+}
+
+.videon-hub__with-aside-main {
+  min-width: 0;
+}
+
+.videon-hub__aside {
+  min-width: 0;
+  position: sticky;
+  top: 1.5rem;
+}
+
+.videon-collection-team {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.videon-collection-team__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.videon-collection-team__row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding-block: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.videon-collection-team__num {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.videon-collection-team__main {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.videon-collection-team__email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videon-collection-team__meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.videon-collection-team__input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.15rem 0;
+}
+
+.videon-collection-team__input:focus-visible {
+  outline: none;
+  border-bottom-color: currentColor;
+}
+
+.videon-collection-team__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.videon-collection-team__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0.35rem 0;
+}
+
+.videon-collection-team__add[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.videon-collection-team__status {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 .videon-media-browse__band {
   display: flex;
   flex-wrap: wrap;

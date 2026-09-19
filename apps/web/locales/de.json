@@ -59,7 +59,23 @@
     "emptyTitle": "Keine zugänglichen Projekte",
     "emptyBody": "Access Model B: VIDEON zeigt nur Projekte, die dir in PLEXON explizit zugewiesen sind.",
     "listAria": "Zugängliche Projekte",
-    "startUpload": "Ersten Upload starten"
+    "startUpload": "Ersten Upload starten",
+    "team": {
+      "title": "Team",
+      "empty": "Noch keine Mitglieder — die Liste führt PLEXON.",
+      "needsCollection": "Projekt wählen, um das PLEXON-Team zu verwalten.",
+      "add": "Mitglied hinzufügen",
+      "addPlaceholder": "name@firma.de",
+      "added": "Mitglied in PLEXON hinzugefügt",
+      "addError": "Mitglied konnte nicht hinzugefügt werden",
+      "userMissing": "Kein PLEXON-Nutzer mit dieser E-Mail in dieser Firma",
+      "remove": "Mitglied entfernen",
+      "removeError": "Mitglied konnte nicht entfernt werden",
+      "inviteLink": "Einladungslink",
+      "inviteCopied": "Einladungslink kopiert",
+      "inviteError": "Einladungslink konnte nicht erstellt werden",
+      "loadError": "Team konnte nicht geladen werden"
+    }
   },
   "library": {
     "deck": "Alle Videos aus allen Projekten, die dir zugänglich sind.",
