@@ -105,6 +105,8 @@ projection written only by the provisioning replay in `apps/web/lib/db/workspace
 
 Spec: [`specs/domain/project-team.md`](../specs/domain/project-team.md).
 
+Outbound team/auth mail is **Plexon-only** (no Videon `SMTP_*`). Login deep-links to Plexon `/forgot-password` via `lib/plexon-links.ts` + `NEXT_PUBLIC_PLEXON_URL`. See `plexon-v3/specs/domain/transactional-email.md`.
+
 ## Adobe UXP Library Panel
 
 | Key / path | Meaning |

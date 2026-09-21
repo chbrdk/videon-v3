@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { Button, Field, Input, Panel, SectionChrome, Text } from '@msqdx/ui'
+import { getPlexonForgotPasswordUrl } from '@/lib/plexon-links'
 
 export function LoginForm({ plexonConfigured }: { plexonConfigured: boolean }) {
   const router = useRouter()
@@ -13,6 +14,7 @@ export function LoginForm({ plexonConfigured }: { plexonConfigured: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const redirect = params.get('redirect') || '/'
+  const forgotUrl = getPlexonForgotPasswordUrl()
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -64,6 +66,11 @@ export function LoginForm({ plexonConfigured }: { plexonConfigured: boolean }) {
             <Button type="submit" variant="primary" disabled={loading}>
               {loading ? 'Anmelden …' : 'Mit PLEXON anmelden'}
             </Button>
+            {forgotUrl ? (
+              <p className="videon-login__forgot">
+                <a href={forgotUrl}>Passwort vergessen</a>
+              </p>
+            ) : null}
           </form>
         )}
       </Panel>
