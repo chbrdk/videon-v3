@@ -9,7 +9,7 @@
 Show who holds Access Model B access to the active Collection and allow, from VIDEON:
 
 1. Add by email — an existing same-company PLEXON user becomes an additive Collection assignment.
-2. Mint a Collection invite link.
+2. Mint a Collection invite link (draft email → optional `toEmail` so PLEXON sends the invite).
 3. Revoke an assignment (never the Collection creator).
 
 ## SSOT

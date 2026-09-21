@@ -194,12 +194,17 @@ export async function createCollectionInviteOnPlexon(input: {
   platformProjectId: string
   plexonUserId: string
   role?: 'admin' | 'member'
+  toEmail?: string
 }): Promise<
-  { ok: true; inviteUrl: string; inviteId: string; expiresAt?: string } | PlexonTeamFailure
+  | { ok: true; inviteUrl: string; inviteId: string; expiresAt?: string; emailedTo?: string }
+  | PlexonTeamFailure
 > {
   if (!federationReady(input.platformProjectId)) {
     return { ok: false, status: 503, error: 'federation_off' }
   }
+  const payload: Record<string, unknown> = { role: input.role ?? 'member' }
+  const toEmail = input.toEmail?.trim()
+  if (toEmail) payload.toEmail = toEmail
   try {
     const response = await fetch(
       collectionUrl(paths.plexonProvisioningCollectionInvitesPath(input.platformProjectId)),
@@ -209,7 +214,7 @@ export async function createCollectionInviteOnPlexon(input: {
           'Content-Type': 'application/json',
           ...federationHeaders(input.plexonUserId),
         },
-        body: JSON.stringify({ role: input.role ?? 'member' }),
+        body: JSON.stringify(payload),
         cache: 'no-store',
       },
     )
@@ -226,6 +231,7 @@ export async function createCollectionInviteOnPlexon(input: {
       inviteUrl: String(body.inviteUrl ?? ''),
       inviteId: String(body.inviteId ?? ''),
       ...(typeof body.expiresAt === 'string' ? { expiresAt: body.expiresAt } : {}),
+      ...(typeof body.emailedTo === 'string' ? { emailedTo: body.emailedTo } : {}),
     }
   } catch (error) {
     return {

@@ -240,6 +240,28 @@ describe('Collection team BFF', () => {
     expect(addCollectionMemberOnPlexon).not.toHaveBeenCalled()
   })
 
+  it('POST invites forwards toEmail to PLEXON', async () => {
+    vi.mocked(createCollectionInviteOnPlexon).mockResolvedValue({
+      ok: true,
+      inviteUrl: 'https://plexon.test/invite/tok',
+      inviteId: 'inv-1',
+      emailedTo: 'peer@example.com',
+    })
+    const { POST } = await import('@/app/api/collections/[platformProjectId]/invites/route')
+    const response = await POST(
+      new Request(`http://localhost/api/collections/${COLLECTION_ID}/invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'member', toEmail: 'peer@example.com' }),
+      }),
+      membersParams(),
+    )
+    expect(response.status).toBe(200)
+    expect(createCollectionInviteOnPlexon).toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: 'peer@example.com' }),
+    )
+  })
+
   it('POST invites maps federation-off to a retryable 503', async () => {
     vi.mocked(createCollectionInviteOnPlexon).mockResolvedValue({
       ok: false,

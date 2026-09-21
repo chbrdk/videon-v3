@@ -22,6 +22,7 @@ type TeamRow = {
 type TeamResponseBody = {
   items?: TeamRow[]
   inviteUrl?: string
+  emailedTo?: string
   error?: { message?: string }
 }
 
@@ -126,20 +127,30 @@ export function CollectionTeamPanel({
   }
 
   async function onInviteLink() {
+    const toEmail = draft.trim() || undefined
+    skipBlurSave.current = true
     setBusy(true)
     setError(null)
     setInviteUrl(null)
+    setStatus(null)
     try {
       const response = await fetch(paths.routes.apiCollectionInvites(collectionId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'member' }),
+        body: JSON.stringify({
+          role: 'member',
+          ...(toEmail ? { toEmail } : {}),
+        }),
       })
       const body = await readBody(response)
       if (!response.ok) throw new Error(body.error?.message || t('collections.team.inviteError'))
       const url = body.inviteUrl ?? ''
       setInviteUrl(url)
-      if (url && navigator.clipboard?.writeText) {
+      if (body.emailedTo) {
+        setStatus(t('collections.team.inviteEmailed', { email: body.emailedTo }))
+        setDraftOpen(false)
+        setDraft('')
+      } else if (url && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url)
         setStatus(t('collections.team.inviteCopied'))
       }

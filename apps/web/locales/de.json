@@ -68,13 +68,14 @@
       "addPlaceholder": "name@firma.de",
       "added": "Mitglied in PLEXON hinzugefügt",
       "addError": "Mitglied konnte nicht hinzugefügt werden",
-      "userMissing": "Kein PLEXON-Nutzer mit dieser E-Mail in dieser Firma",
+      "userMissing": "Kein PLEXON-Nutzer mit dieser E-Mail — im Entwurf lassen und Einladungslink nutzen",
       "remove": "Mitglied entfernen",
       "removeError": "Mitglied konnte nicht entfernt werden",
       "inviteLink": "Einladungslink",
       "inviteCopied": "Einladungslink kopiert",
       "inviteError": "Einladungslink konnte nicht erstellt werden",
-      "loadError": "Team konnte nicht geladen werden"
+      "loadError": "Team konnte nicht geladen werden",
+      "inviteEmailed": "Einladung per E-Mail an {email} gesendet"
     }
   },
   "library": {
