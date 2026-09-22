@@ -40,7 +40,7 @@ Canonical route and env keys live in `apps/web/lib/paths.ts` and resolvers in `a
 | Media peaks backfill | `POST /api/media/:id/peaks-backfill?platformProjectId=` → mixPeaks without full re-analysis; `specs/api/media-peaks-backfill.md` |
 | Media preview (assistant hover + Adobe panel cards) | `GET /api/media/:id/preview?platformProjectId=&t=&durationMs=` → `video/mp4` ≤3s; spec `specs/api/media-preview.md` |
 | Scene hit model | `specs/domain/scene-hit-model.md` — shared Product `/chat` + Plexon `video_hit_strip` |
-| Knowledge facet `media_insights` | Publish via Plexon Collection Knowledge Pack; ownership VIDEON · `specs/domain/media-insights-publish.md` · `apps/web/lib/plexon-knowledge-pack.ts` |
+| Knowledge facet `media_insights` | Publish via Plexon Collection Knowledge Pack; ownership VIDEON · soft-skip marks `publish_failed` via freshness API · `specs/domain/media-insights-publish.md` · `apps/web/lib/plexon-knowledge-pack.ts` |
 
 ## Brandion seam
 

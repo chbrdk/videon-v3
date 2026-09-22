@@ -62,6 +62,38 @@ function facetPublishPath(platformProjectId: string, facetId: string): string {
   return `${knowledgePath(platformProjectId)}/facets/${encodeURIComponent(facetId)}/publish`
 }
 
+function facetFreshnessPath(platformProjectId: string, facetId: string): string {
+  return `${knowledgePath(platformProjectId)}/facets/${encodeURIComponent(facetId)}/freshness`
+}
+
+/** Soft-skip visibility — mark facet without changing distillate body. */
+export async function markKnowledgeFacetFreshness(opts: {
+  platformProjectId: string
+  facetId: 'media_insights'
+  freshness: 'publish_pending' | 'publish_failed' | 'stale' | 'fresh'
+  note?: string
+}): Promise<boolean> {
+  const id = opts.platformProjectId.trim()
+  if (!id || !isPlexonAuthConfigured()) return false
+  const secret = plexonServiceSecret()
+  try {
+    const res = await fetch(facetFreshnessPath(id, opts.facetId), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...plexonContractHeaders(secret),
+      },
+      body: JSON.stringify({
+        freshness: opts.freshness,
+        note: opts.note ?? `videon soft-skip:${opts.freshness}`,
+      }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export async function fetchCollectionKnowledgePack(
   platformProjectId: string,
 ): Promise<KnowledgePackResponse | null> {

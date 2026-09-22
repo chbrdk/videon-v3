@@ -14,9 +14,11 @@ After a successful media analysis, VIDEON distills a **bounded** Collection-scop
 
 1. WHEN analysis finishes `succeeded` THEN VIDEON MAY schedule a soft publish (no throw into the pipeline).  
 2. WHEN publishing THEN payload MUST respect pack caps (summary ≤ ~2k, highlights ≤ 12, sceneRefs ≤ 20, no raw video / transcripts / signed URLs).  
-3. WHEN Collection / distillate / pack is unavailable THEN soft skip + log — NOT a hard error.
+3. WHEN Collection / distillate / pack is unavailable THEN soft skip + log — NOT a hard error.  
+4. WHEN soft skip is due to pack unavailable or publish failure THEN VIDEON MUST mark facet freshness `publish_failed` via `POST …/knowledge/facets/media_insights/freshness` (best-effort; never throws into analysis).
 
 ## Acceptance
 
 1. Client uses federation contract headers + service secret against Plexon knowledge facet publish.  
-2. Hook lives in `run-analysis.ts` after `markAnalysisFinished(..., 'succeeded')`.
+2. Hook lives in `run-analysis.ts` after `markAnalysisFinished(..., 'succeeded')`.  
+3. Soft-skip paths call `markKnowledgeFacetFreshness` (`apps/web/lib/plexon-knowledge-pack.ts`).

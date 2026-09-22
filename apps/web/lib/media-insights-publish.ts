@@ -10,6 +10,7 @@ import { findWorkspaceById } from '@/lib/db/workspaces'
 import {
   distillMediaInsights,
   fetchCollectionKnowledgePack,
+  markKnowledgeFacetFreshness,
   publishMediaInsightsToPack,
 } from '@/lib/plexon-knowledge-pack'
 import { isPlexonAuthConfigured } from '@/lib/runtime-config'
@@ -124,9 +125,16 @@ export async function publishWorkspaceMediaInsights(input: {
 
   const pack = await fetchCollectionKnowledgePack(platformProjectId)
   if (!pack) {
-    return soft
-      ? { ok: false, status: 502, error: 'pack_unavailable', skipped: true }
-      : { ok: false, status: 502, error: 'pack_unavailable' }
+    if (soft) {
+      void markKnowledgeFacetFreshness({
+        platformProjectId,
+        facetId: 'media_insights',
+        freshness: 'publish_failed',
+        note: 'videon soft-skip:pack_unavailable',
+      })
+      return { ok: false, status: 502, error: 'pack_unavailable', skipped: true }
+    }
+    return { ok: false, status: 502, error: 'pack_unavailable' }
   }
 
   const published = await publishMediaInsightsToPack({
@@ -136,6 +144,14 @@ export async function publishWorkspaceMediaInsights(input: {
     runId: input.analysisRunId ?? null,
   })
   if (!published.ok) {
+    if (soft) {
+      void markKnowledgeFacetFreshness({
+        platformProjectId,
+        facetId: 'media_insights',
+        freshness: 'publish_failed',
+        note: `videon soft-skip:publish_failed:${published.error}`.slice(0, 500),
+      })
+    }
     return {
       ok: false,
       status: published.status >= 400 ? published.status : 502,
