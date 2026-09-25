@@ -38,6 +38,10 @@ import { transcriptExcerptForScene, transcribeAudioFile, type TranscriptSegment 
 import { S3ObjectStore } from '@/lib/storage/s3-object-store'
 import type { VisionFrame } from '@/lib/openrouter-client'
 import { publishWorkspaceMediaInsights } from '@/lib/media-insights-publish'
+import { scheduleCollectionActivityDistillate } from '@/lib/plexon-collection-activity'
+import { scheduleSuiteAuditEvent } from '@/lib/plexon-suite-audit'
+import { findWorkspaceById } from '@/lib/db/workspaces'
+import { paths } from '@/lib/paths'
 
 function userPseudonym(workspaceId: string, plexonUserId: string): string {
   return createHash('sha256').update(`${workspaceId}:${plexonUserId}`).digest('hex').slice(0, 32)
@@ -418,6 +422,29 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
         '[VIDEON-v3] media_insights publish failed:',
         err instanceof Error ? err.message : err,
       )
+    })
+
+    void findWorkspaceById(media.workspaceId).then((workspace) => {
+      const platformProjectId = workspace?.platformProjectId?.trim() ?? ''
+      if (!platformProjectId) return
+      scheduleCollectionActivityDistillate({
+        platformProjectId,
+        productId: 'videon',
+        kind: 'analysis_run',
+        status: 'succeeded',
+        subjectRef: analysisRunId,
+        title: media.filename || 'Media analysis',
+        href: `${paths.routes.analyses}?run=${encodeURIComponent(analysisRunId)}`,
+        actorUserId: analysis.requestedByPlexonUserId,
+      })
+      scheduleSuiteAuditEvent({
+        platformProjectId,
+        productId: 'videon',
+        action: 'run_finished',
+        actorUserId: analysis.requestedByPlexonUserId,
+        subjectRef: analysisRunId,
+        meta: { mediaAssetId: media.id },
+      })
     })
   } catch (error) {
     await markMediaFailed(media.id, media.workspaceId).catch(() => {})
