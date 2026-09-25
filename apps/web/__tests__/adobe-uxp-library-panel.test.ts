@@ -9,7 +9,9 @@ import {
   dedupeSearchHits,
   formatRank,
   normalizeSearchHit,
+  sceneHitBadgeLabel,
   sceneHitDurationLabel,
+  sceneHitOrdinalLabel,
   sceneHitTimingLabel,
 } from '../../../tools/adobe-uxp-library-panel/src/hit-model.js'
 import {
@@ -84,19 +86,86 @@ describe('adobe uxp library panel contracts', () => {
     expect(manifest.host.app).toBe('premierepro')
     expect(manifest.host.minVersion).toBe('25.6.0')
     expect(manifest.entrypoints?.[0]?.type).toBe('panel')
-    expect(manifest.version).toBe('0.1.24')
+    expect(manifest.version).toBe('0.1.49')
     expect(readFileSync(join(root, 'preview.html'), 'utf8')).toContain('importmap')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('collection-select')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('panel-version')
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('v0.1.24')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('v0.1.49')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('data-theme="msqdx-ui-dark"')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('brand-lockup')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('brand-lockup-mark')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('aria-label="VIDEON"')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).not.toContain('brand-corner-box')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('mode-cuts-btn')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toMatch(/Clips &amp; Szenen|Clips & Szenen/)
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('append-sequence')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toMatch(/id="append-sequence"[^>]*checked/)
+    expect(readFileSync(join(root, 'src/panel-features.js'), 'utf8')).toContain('ENABLE_CUTS_TAB = false')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('ENABLE_CUTS_TAB')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('sceneHitOrdinalLabel')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('ds-badge--neutral')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('ds-badge--accent')
+    expect(readFileSync(join(root, 'src/premiere.js'), 'utf8')).toContain('createClearInOutPointsAction')
+    expect(readFileSync(join(root, 'src/premiere.js'), 'utf8')).toContain('createOverwriteItemAction')
+    expect(readFileSync(join(root, 'src/premiere.js'), 'utf8')).toContain('resolveClipAfterImport')
+    expect(readFileSync(join(root, 'src/msqdx-tokens.css'), 'utf8')).toContain('--accent: #ff6a3b')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('.ds-btn--primary')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('.ds-field-label')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('.ds-card--media')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('styles.bundle.css')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('src/styles.bundle.css')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('ds-btn ds-btn--primary')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('brand-lockup-label')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('fill="#ff6a3b"')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('UXP: no flex gap')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('margin: 0.55rem')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('margin: 0 0 0.55rem')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('brand-lockup')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('makeDsBtn')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('ds-card--media')
+    expect(readFileSync(join(root, 'src/msqdx-tokens.css'), 'utf8')).toContain('--bg0: #0c0c0c')
+    expect(readFileSync(join(root, 'src/assets/msqdx-mark.svg'), 'utf8')).toContain('viewBox="0 0 143 145"')
+    expect(readFileSync(join(root, 'src/assets/msqdx-mark.svg'), 'utf8')).toContain('fill="#ff6a3b"')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('div[role=button]')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('role="button"')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).not.toContain('<button')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("role', 'button'")
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('never rely on native')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('brand-lockup-mark')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('brand-lockup-label')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('pushback-confirm')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).not.toContain('onclick=')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('src/panel.bundle.js')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.24'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.49'")
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('materializePreview')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('loadPreviewForHit')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('hit-insert-btn')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('openHitDetail')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('sizeHitDetailMedia')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('fillHitDetailMeta')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('bindUxpVideoPreview')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('sceneHitDurationDetailLabel')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('sceneHitMsRangeLabel')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("Anzeigen")
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('hit-detail')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('hit-detail-media')
+    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('hit-detail-select')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('setHitSelected')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toContain('hit-card-check')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('position: absolute')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('max-height: 100%')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('overflow: hidden')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).not.toContain('min-height: 100vh')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('sizeHitDetailMedia')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('will not decode while display:none')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('.hit-detail-video.is-visible')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('.ds-btn--xs')
+    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('hit-detail-sheet')
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-hit-detail-overlay.md'), 'utf8')).toContain('Anzeigen')
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-hit-detail-overlay.md'), 'utf8')).toContain('sizeHitDetailMedia')
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-hit-detail-overlay.md'), 'utf8')).toContain('analysisRunId')
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-panel-preview-playback.md'), 'utf8')).toContain('file:/')
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-panel-preview-playback.md'), 'utf8')).toContain('bindUxpVideoPreview')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('runOpenCut')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('startCutPushback')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('all src candidates failed')
@@ -104,19 +173,28 @@ describe('adobe uxp library panel contracts', () => {
     expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('materializePreview')
     expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('getFsUrl')
     expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('nativePathToFileUrl')
+    expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('nativePathToUxpFileUrl')
     expect(readFileSync(join(root, 'src/cache.js'), 'utf8')).toContain('resolveEntryPlaybackUrls')
     expect(readFileSync(join(root, 'src/api.js'), 'utf8')).toContain('/preview?')
     expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('hit-card-preview.is-visible')
-    expect(readFileSync(join(root, 'src/styles.css'), 'utf8')).toContain('mode-tab')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('.ds-chip--selected')
+    expect(readFileSync(join(root, 'src/msqdx-components.css'), 'utf8')).toContain('.ds-badge--accent')
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('openCutInPremiere')
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('autoImportOpenCutXml')
-    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('0.1.24')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('0.1.49')
+    expect(readFileSync(join(root, 'src/styles.bundle.css'), 'utf8')).toContain('--accent: #ff6a3b')
+    expect(readFileSync(join(root, 'src/styles.bundle.css'), 'utf8')).toContain('.ds-btn--primary')
+    expect(readFileSync(join(root, 'src/styles.bundle.css'), 'utf8')).toContain('hit-card-preview.is-visible')
+    expect(readFileSync(join(root, 'src/styles.bundle.css'), 'utf8')).not.toMatch(/@import\s+['"]\.\/msqdx/)
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('materializePreview')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('nativePathToFileUrl')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('applyPreviewToCard')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('runOpenCut')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('openCutInPremiere')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('previewCutPushback')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('ENABLE_CUTS_TAB')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('sceneHitOrdinalLabel')
+    expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('createClearInOutPointsAction')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).toContain('unzipSync')
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(
       /__require\(["']module["']\)|require\(["']module["']\)|createRequire/,
@@ -124,10 +202,32 @@ describe('adobe uxp library panel contracts', () => {
     expect(readFileSync(join(root, 'src/panel.bundle.js'), 'utf8')).not.toMatch(/document\.addEventListener\s*\(/)
   })
 
+  it('panel MSQ DX chrome stays a token snapshot (no @msqdx/ui package)', () => {
+    const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+    expect(JSON.stringify(pkg.dependencies || {})).not.toContain('@msqdx/ui')
+    expect(JSON.stringify(pkg.devDependencies || {})).not.toContain('@msqdx/ui')
+    const domain = readFileSync(
+      join(__dirname, '../../../specs/domain/adobe-uxp-library-panel.md'),
+      'utf8',
+    )
+    expect(domain).toContain('Do **not** bundle `@msqdx/ui`')
+    expect(domain).toContain('component mirror')
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-panel-msqdx-ui.md'), 'utf8')).toContain(
+      'styles.bundle.css',
+    )
+    expect(readFileSync(join(__dirname, '../../../knowledge/adobe-uxp-panel-msqdx-ui.md'), 'utf8')).toContain(
+      'does not apply CSS `@import`',
+    )
+  })
+
   it('build targets browser fflate (no Node module require)', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     const build = readFileSync(join(root, 'build.cjs'), 'utf8')
     expect(build).toContain("platform: 'browser'")
+    expect(build).toContain('styles.bundle.css')
+    expect(build).toContain('msqdx-tokens.css')
+    expect(build).toContain('msqdx-components.css')
     expect(build).toContain('fflate/esm/browser.js')
     expect(readFileSync(join(root, 'src/open-cut-cache.js'), 'utf8')).toContain(
       "from 'fflate'",
@@ -164,12 +264,65 @@ describe('adobe uxp library panel contracts', () => {
       endMs: 3400,
       searchText: 'hello',
       rank: 0.42,
+      sceneKey: 'scene-2',
     })
-    expect(hit.href).toBe('/media/m1?platformProjectId=p1&t=1200')
+    expect(hit.href).toContain('platformProjectId=p1')
+    expect(hit.href).toContain('t=1200')
+    expect(hit.href).toContain('scene=scene-2')
+    expect(hit.hasSceneBounds).toBe(true)
+    expect(hit.durationMs).toBe(2200)
+    expect(hit.analysisRunId).toBeNull()
     expect(sceneHitTimingLabel(hit)).toBe('00:01–00:03')
     expect(sceneHitDurationLabel(hit)).toBe('00:02')
+    expect(sceneHitBadgeLabel(hit)).toBe('00:01–00:03 · Δ 00:02')
+    expect(sceneHitOrdinalLabel(hit)).toBe('Szene 2')
+    expect(sceneHitOrdinalLabel({ sceneKey: null }, 3)).toBe('Szene 4')
     expect(formatRank(hit.rank)).toBe('0.42')
     expect(buildHitHref({ ...hit, sceneKey: 'scene-2' })).toContain('scene=scene-2')
+  })
+
+  it('normalizes analysisRunId and detail duration / ms labels', async () => {
+    const {
+      normalizeSearchHit,
+      sceneHitDurationDetailLabel,
+      sceneHitMsRangeLabel,
+    } = await import('../../../tools/adobe-uxp-library-panel/src/hit-model.js')
+    const hit = normalizeSearchHit({
+      mediaAssetId: 'm1',
+      platformProjectId: 'p1',
+      analysisRunId: 'ar-9',
+      startMs: 1200,
+      endMs: 3400,
+      sceneKey: 'scene-2',
+    })
+    expect(hit.analysisRunId).toBe('ar-9')
+    expect(sceneHitDurationDetailLabel(hit)).toBe('00:02 · 2.2 s')
+    expect(sceneHitMsRangeLabel(hit)).toBe('1200–3400 ms')
+  })
+
+  it('builds UXP file:/ playback URLs from native paths', async () => {
+    const { nativePathToUxpFileUrl, nativePathToFileUrl } = await import(
+      '../../../tools/adobe-uxp-library-panel/src/cache.js'
+    )
+    expect(nativePathToUxpFileUrl('/Users/me/plugin/preview.mp4')).toBe(
+      'file:/Users/me/plugin/preview.mp4',
+    )
+    expect(nativePathToUxpFileUrl('C:\\cache\\preview.mp4')).toBe('file:/C:/cache/preview.mp4')
+    expect(nativePathToFileUrl('/Users/me/plugin/preview.mp4')).toBe(
+      'file:///Users/me/plugin/preview.mp4',
+    )
+  })
+
+  it('premiere insert path clears In/Out and falls back to overwrite', () => {
+    const premiere = readFileSync(
+      join(__dirname, '../../../tools/adobe-uxp-library-panel/src/premiere.js'),
+      'utf8',
+    )
+    expect(premiere).toContain('createClearInOutPointsAction')
+    expect(premiere).toContain('createOverwriteItemAction')
+    expect(premiere).toContain('CLIP_SETTLE_MS')
+    expect(premiere).toContain('preferredBin')
+    expect(premiere).toContain('In/Out nicht gesetzt')
   })
 
   it('dedupes identical scene hits keeping higher rank', () => {
@@ -351,6 +504,8 @@ describe('adobe uxp library panel contracts', () => {
     expect(pushback).toContain('Premiere aus Cut neu laden')
     expect(pushback).toContain('Live / background / continuous sync')
     expect(pushback).toContain('Cut aktualisieren')
-    expect(pushback).toContain('0.1.24')
+    expect(pushback).toContain('0.1.35')
+    expect(pushback).toContain('provider-first')
+    expect(openCut).toContain('ENABLE_CUTS_TAB')
   })
 })

@@ -57,6 +57,31 @@ describe('buildPremiereXmeml', () => {
     expect(xml).toMatch(/<clipitem id="clipitem-4"[\s\S]*?<out>38<\/out>/)
   })
 
+  it('stamps stable scene id in clip name and comments (Wave P4)', () => {
+    const sceneId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+    const xml = buildPremiereXmeml({
+      cut: { id: 'c', name: 'C', width: 1920, height: 1080, frameRate: 25 },
+      scenes: [
+        {
+          id: sceneId,
+          mediaAssetId: 'm1',
+          startMs: 0,
+          endMs: 1000,
+          originalFilename: 'fin 1.mp4',
+          zipMediaName: 'fin 1.mp4',
+        },
+      ],
+    })
+    expect(xml).toContain(`fin 1.mp4 ⟦${sceneId}⟧`)
+    expect(xml).toContain(`<comments>videon:scene:${sceneId}</comments>`)
+    // Linked stereo audio clipitems also carry the scene mark (Wave P4.3).
+    const audioNames = [...xml.matchAll(/premiereChannelType="stereo"[\s\S]*?<name>([^<]+)<\/name>/gi)].map(
+      (m) => m[1],
+    )
+    expect(audioNames.length).toBeGreaterThanOrEqual(2)
+    expect(audioNames.every((n) => n.includes(sceneId))).toBe(true)
+  })
+
   it('keeps matching in/out on video and both audio channels', () => {
     const xml = buildPremiereXmeml({
       cut: { id: 'c', name: 'C', width: 1920, height: 1080, frameRate: 25 },

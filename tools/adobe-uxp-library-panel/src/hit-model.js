@@ -26,10 +26,54 @@ export function sceneHitDurationLabel(hit) {
   return formatSceneHitClock(hit.endMs - hit.startMs)
 }
 
+/** Duration in ms when bounds are valid. */
+export function sceneHitDurationMs(hit) {
+  if (hit.startMs == null || hit.endMs == null || hit.endMs <= hit.startMs) return null
+  return hit.endMs - hit.startMs
+}
+
+/**
+ * Human scene ordinal from sceneKey (e.g. scene-0 → Szene 1) or fallback index.
+ * Spec: scene-hit-model.md · sceneHitOrdinalLabel
+ */
+export function sceneHitOrdinalLabel(hit, index = 0, formatN = (n) => `Szene ${n}`) {
+  const raw = typeof hit?.sceneKey === 'string' ? hit.sceneKey.trim() : ''
+  if (raw) {
+    const match = raw.match(/(\d+)/)
+    if (match) return formatN(Number(match[1]))
+    return raw
+  }
+  return formatN(index + 1)
+}
+
+/** Media badge: In/Out · Δ duration */
+export function sceneHitBadgeLabel(hit) {
+  const timing = sceneHitTimingLabel(hit)
+  const duration = sceneHitDurationLabel(hit)
+  return [timing, duration ? `Δ ${duration}` : null].filter(Boolean).join(' · ') || null
+}
+
 export function formatRank(rank) {
   const n = Number(rank)
   if (!Number.isFinite(n) || n <= 0) return null
   return n.toFixed(2)
+}
+
+/** Human duration with seconds (e.g. "00:12 · 12.4 s"). */
+export function sceneHitDurationDetailLabel(hit) {
+  const clock = sceneHitDurationLabel(hit)
+  const ms = sceneHitDurationMs(hit)
+  if (ms == null) return clock
+  const sec = (ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1)
+  return clock ? `${clock} · ${sec} s` : `${sec} s`
+}
+
+/** Compact ms range for editors. */
+export function sceneHitMsRangeLabel(hit) {
+  if (hit.startMs == null && hit.endMs == null) return null
+  const a = hit.startMs == null ? '—' : String(Math.floor(hit.startMs))
+  const b = hit.endMs == null ? '—' : String(Math.floor(hit.endMs))
+  return `${a}–${b} ms`
 }
 
 export function buildHitHref(hit) {
@@ -51,16 +95,22 @@ export function normalizeSearchHit(raw) {
     id: String(raw.id || `${mediaAssetId}:${sceneKey || 'asset'}`),
     mediaAssetId,
     platformProjectId,
-    sceneKey,
+    analysisRunId:
+      raw.analysisRunId == null || raw.analysisRunId === ''
+        ? null
+        : String(raw.analysisRunId),
+    sceneKey: sceneKey?.trim() ? sceneKey.trim() : null,
     mediaFilename: String(raw.mediaFilename || raw.filename || 'Untitled'),
     startMs: Number.isFinite(startMs) ? startMs : null,
     endMs: Number.isFinite(endMs) ? endMs : null,
-    searchText: String(raw.searchText || '').slice(0, 400),
+    searchText: String(raw.searchText || '').slice(0, 800),
     projectName: raw.projectName == null ? null : String(raw.projectName),
     rank: Number.isFinite(rank) ? rank : null,
     href: raw.href ? String(raw.href) : null,
   }
   if (!hit.href) hit.href = buildHitHref(hit)
+  hit.durationMs = sceneHitDurationMs(hit)
+  hit.hasSceneBounds = hit.startMs != null && hit.endMs != null && hit.endMs > hit.startMs
   return hit
 }
 

@@ -61,6 +61,24 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;')
 }
 
+const SCENE_ID_OPEN = '\u27E6'
+const SCENE_ID_CLOSE = '\u27E7'
+const SCENE_ID_IN_NAME_RE =
+  /\u27E6([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\u27E7/i
+
+/** Embed stable Cut scene id in Premiere clip name for in-place patch (Wave P4). */
+export function encodePremiereClipDisplayName(filename: string, sceneId: string): string {
+  const base = String(filename || '')
+    .replace(SCENE_ID_IN_NAME_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'clip'
+  const id = String(sceneId || '').trim()
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return base
+  }
+  return `${base} ${SCENE_ID_OPEN}${id}${SCENE_ID_CLOSE}`
+}
+
 function framesFromMs(ms: number, fps: number): number {
   return Math.max(0, Math.round((ms / 1000) * fps))
 }
@@ -304,9 +322,12 @@ export function buildPremiereXmeml(input: {
     .map((scene, index) => {
       const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
       const tlStart = timelineStartMs(scenes, index)
-      const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+      const displayName = escapeXml(
+        encodePremiereClipDisplayName(scene.originalFilename || `clip-${index + 1}`, scene.id),
+      )
       const inFrames = framesFromMs(scene.startMs, fps)
       const outFrames = framesFromMs(scene.endMs, fps)
+      const sceneComment = escapeXml(`videon:scene:${scene.id}`)
       return `
 					<clipitem id="clipitem-${index + 1}" premiereChannelType="video">
 						<name>${displayName}</name>
@@ -320,7 +341,15 @@ export function buildPremiereXmeml(input: {
 							<mediatype>video</mediatype>
 							<trackindex>1</trackindex>
 						</sourcetrack>
-						${scene.premiereFiltersXml?.trim() ? `\n\t\t\t\t\t\t${scene.premiereFiltersXml.trim()}` : ''}
+						<comments>${sceneComment}</comments>
+						${
+              scene.premiereFiltersXml?.trim()
+                ? `\n\t\t\t\t\t\t${scene.premiereFiltersXml
+                    .trim()
+                    .replace(/<comments\b[\s\S]*?<\/comments>/gi, '')
+                    .trim()}`
+                : ''
+            }
 						${videoLinkBlock(index)}
 					</clipitem>`
     })
@@ -384,7 +413,9 @@ export function buildPremiereXmeml(input: {
       .map((scene, index) => {
         const clipDurMs = Math.max(0, scene.endMs - scene.startMs)
         const tlStart = timelineStartMs(scenes, index)
-        const displayName = escapeXml(scene.originalFilename || `clip-${index + 1}`)
+        const displayName = escapeXml(
+          encodePremiereClipDisplayName(scene.originalFilename || `clip-${index + 1}`, scene.id),
+        )
         const fileId = `file-${scene.mediaAssetId}`
         const firstId = explodedIndex === 0 ? audioLFirstId : audioRFirstId
         const clipId = `clipitem-${firstId + index}`

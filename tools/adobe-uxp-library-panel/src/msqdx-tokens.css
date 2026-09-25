@@ -1,0 +1,74 @@
+/**
+ * MSQ DX token snapshot for Adobe UXP (plain CSS — do NOT bundle @msqdx/ui).
+ * Source: msqdx-ui/packages/ui/src/css/tokens.css · theme `msqdx-ui-dark`
+ * Snapshot date: 2026-09-10
+ * Knowledge: knowledge/adobe-uxp-panel-msqdx-ui.md
+ */
+
+:root {
+  /* Scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-panel: 12px;
+  --radius-pill: 999px;
+
+  --stack-display: system-ui, 'Segoe UI', 'Adobe Clean', sans-serif;
+  --stack-body: system-ui, 'Segoe UI', 'Adobe Clean', sans-serif;
+  --stack-mono: ui-monospace, 'IBM Plex Mono', Menlo, monospace;
+
+  --type-2xs: 0.62rem;
+  --type-xs: 0.65rem;
+  --type-sm: 0.72rem;
+  --type-md: 0.78rem;
+  --type-lg: 0.88rem;
+  --type-xl: 1rem;
+  --type-2xl: 1.15rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --track-label: 0.06em;
+  --track-meta: 0.04em;
+
+  /* msqdx-ui-dark palette (solid — no color-mix for UXP Chromium) */
+  --bg0: #0c0c0c;
+  --bg1: #161616;
+  --ink: #ffffff;
+  --fg: #ffffff;
+  --muted: #a3a3a3;
+  --accent: #ff6a3b;
+  --accent-ink: #ffffff;
+  --line: rgba(255, 255, 255, 0.12);
+  --danger: #f87171;
+  --ok: #00ca55;
+  --warn: #fef14d;
+  --surface: #161616;
+  --surface-2: #222222;
+  --field: #1e1e1e;
+  --track: rgba(255, 255, 255, 0.16);
+  --atmosphere-a: rgba(255, 106, 59, 0.16);
+  --atmosphere-b: rgba(182, 56, 255, 0.12);
+  --accent-soft: rgba(255, 106, 59, 0.14);
+
+  --font-display: var(--stack-display);
+  --font-body: var(--stack-body);
+  --font-mono: var(--stack-mono);
+
+  /* Panel aliases (legacy class names) */
+  --bg: var(--bg0);
+  --panel: var(--bg1);
+  --stroke: var(--line);
+  --text: var(--ink);
+
+  color-scheme: dark;
+  font-family: var(--font-body);
+  font-size: 12px;
+}

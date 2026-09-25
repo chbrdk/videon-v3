@@ -1,11 +1,13 @@
 /**
  * Open Cut orchestrator — Wave B pipeline.
  * Spec: adobe-uxp-open-cut-premiere.md
+ * Strategy: knowledge/adobe-uxp-provider-first.md
  */
 
 import {
   downloadExportZip,
   enqueuePremiereExport,
+  getCutDetail,
   getCutExport,
   listCutExports,
 } from './cuts-api.js'
@@ -21,7 +23,12 @@ import {
   pickReusablePremiereExport,
 } from './open-cut-model.js'
 import { openCutInPremiere } from './premiere-open-cut.js'
+import { patchLinkedSequenceFromCut, stampSceneIdsOnLinkedSequence } from './premiere-patch-cut.js'
+import { normalizeCutDetailScenes } from './xmeml-pushback.js'
 import { isAfterEffectsHost } from './host.js'
+import { ENABLE_INPLACE_PATCH } from './panel-features.js'
+
+export { ENABLE_CUTS_TAB, ENABLE_INPLACE_PATCH } from './panel-features.js'
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -101,6 +108,7 @@ async function ensurePremiereExport(settings, cut, platformProjectId, signal, on
  *   handoff?: boolean,
  *   forceFreshExport?: boolean,
  *   replaceLinked?: boolean,
+ *   forceZipReplace?: boolean,
  *   link?: object|null,
  *   onPhase?: (phase: string, label: string) => void,
  * }} input
@@ -115,6 +123,7 @@ export async function runOpenCut(input) {
     handoff = true,
     forceFreshExport = false,
     replaceLinked = false,
+    forceZipReplace = false,
     link = null,
     onPhase,
   } = input
@@ -142,6 +151,56 @@ export async function runOpenCut(input) {
   }
 
   try {
+    // Wave P4 in-place patch paused (ENABLE_INPLACE_PATCH). Provider-first: ZIP replace only.
+    if (ENABLE_INPLACE_PATCH && handoff && replaceLinked && !forceZipReplace) {
+      emit(OPEN_CUT_PHASE.import, 'Patch…')
+      try {
+        const detail = await getCutDetail(settings, cut.id, platformProjectId, signal)
+        const scenes = normalizeCutDetailScenes(detail)
+        const patched = await patchLinkedSequenceFromCut({
+          cut: { ...cut, name: cut.name || detail?.name },
+          scenes,
+          link: link || { sequenceName: cut.name },
+        })
+        if (patched.ok) {
+          emit(OPEN_CUT_PHASE.done, patched.mode)
+          return {
+            ok: true,
+            mode: patched.mode,
+            cutId: cut.id,
+            sequenceName: link?.sequenceName || cut.name,
+            sequenceGuid: link?.sequenceGuid || null,
+            exportId: link?.exportId || null,
+            patched: patched.patched,
+            matchMode: patched.matchMode,
+            message: patched.message,
+          }
+        }
+        emit(OPEN_CUT_PHASE.error, 'Patch nein')
+        return {
+          ok: false,
+          mode: 'patch_rejected',
+          cutId: cut.id,
+          message:
+            `In-Place-Patch fehlgeschlagen: ${patched.message || 'unbekannt'}. ` +
+            `Sequenz nicht ersetzt — Live-Effekte bleiben. ` +
+            `Nur wenn nötig: „Cut neu laden“ (zerstört Live-Effekte).`,
+          patchMessage: patched.message,
+        }
+      } catch (patchError) {
+        const patchMsg = patchError instanceof Error ? patchError.message : String(patchError)
+        emit(OPEN_CUT_PHASE.error, 'Patch Fehler')
+        return {
+          ok: false,
+          mode: 'patch_rejected',
+          cutId: cut.id,
+          message:
+            `In-Place-Patch Fehler: ${patchMsg}. Sequenz nicht ersetzt — Live-Effekte bleiben. ` +
+            `Nur wenn nötig: „Cut neu laden“.`,
+        }
+      }
+    }
+
     const resolvePackage = async (forceFresh) => {
       let exportJob = await ensurePremiereExport(
         settings,
@@ -215,7 +274,7 @@ export async function runOpenCut(input) {
     }
 
     emit(OPEN_CUT_PHASE.import)
-    const opened = await openCutInPremiere({
+    let opened = await openCutInPremiere({
       xmlPath: extracted.xmlNativePath,
       extractDir: extracted.extractDir,
       cutId: cut.id,
@@ -230,6 +289,31 @@ export async function runOpenCut(input) {
     if (!opened.ok) {
       emit(OPEN_CUT_PHASE.error, opened.message || 'import')
       return opened
+    }
+
+    // After ZIP import, stamp scene ids onto live track items (Premiere often drops XML name marks).
+    if (opened.mode === 'auto_import' || opened.mode === 'reveal_and_prompt') {
+      try {
+        const detail = await getCutDetail(settings, cut.id, platformProjectId, signal)
+        const scenes = normalizeCutDetailScenes(detail)
+        const stamped = await stampSceneIdsOnLinkedSequence({
+          cut: { ...cut, name: cut.name || detail?.name },
+          scenes,
+          link: {
+            sequenceName: opened.sequenceName || cut.name,
+            sequenceGuid: opened.sequenceGuid || null,
+          },
+        })
+        if (stamped.ok) {
+          opened = {
+            ...opened,
+            message: `${opened.message || 'Import OK'} · ${stamped.message}`,
+            stamped: stamped.stamped,
+          }
+        }
+      } catch {
+        /* stamp is best-effort */
+      }
     }
 
     if (opened.mode === 'reveal_and_prompt') {

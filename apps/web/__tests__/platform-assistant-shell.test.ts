@@ -12,6 +12,7 @@ describe('videon platform assistant shell mount', () => {
     expect(shell).toContain('platformProjectId={platformProjectId}')
     expect(shell).toContain('ShellBrandCorner')
     expect(host).toContain('postPlatformAssistantTheme')
+    expect(host).toContain('embedSrcLockedRef')
     expect(host).toContain('headerActions')
     expect(host).toContain("ASSISTANT_EMBED_PRODUCT")
     expect(paths).toContain('envPlexonPublicUrl')

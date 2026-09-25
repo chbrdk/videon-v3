@@ -7,6 +7,10 @@
 
 Cuts tab → ensure `premiere_xml` ZIP → extract (`xml` + `media/`) → try `importFiles(xml)` (**auto_import**) → on failure reveal + Import hint.
 
+**UI status (≥ 0.1.36):** Cuts tab **paused** (`ENABLE_CUTS_TAB`). Day-to-day panel = Clips & Szenen search/insert. See `knowledge/adobe-uxp-provider-first.md`.
+
+**Premiere refresh (when Cuts revived):** in-place patch **paused**. Use **Cut neu laden** for explicit ZIP replace.
+
 ## Modes
 
 | Panel mode | Unit | Result |
@@ -27,9 +31,11 @@ Cuts tab → ensure `premiere_xml` ZIP → extract (`xml` + `media/`) → try `i
 
 ## Operator reload
 
-UDT Unload → Load repo folder; header **v0.1.24**. Pin Collection → Cuts → **In Premiere öffnen**.
+UDT Unload → Load repo folder; header **v0.1.32**. Pin Collection → Cuts → **In Premiere öffnen**.
 
-- Success `auto_import`: banner like `Sequenz importiert: …`
+- Success `auto_import`: banner like `Sequenz importiert: …` (+ optional Clip-Name stamp)
+- Success `in_place_patch`: banner like `N Video-Clip(s) … · M Audio` (optional `· Multi-Signal-Match`)
+- Patch fail: error banner — sequence untouched; use **Sequenz ersetzen** only if you accept FX loss
 - Fallback `reveal_and_prompt`: Import-Hinweis + XML-Pfad (+ Auto-Import reason)
 
 ## API

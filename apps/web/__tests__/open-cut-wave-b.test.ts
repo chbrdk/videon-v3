@@ -120,13 +120,13 @@ describe('open-cut-model Wave B helpers', () => {
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('replaceLinked')
     expect(readFileSync(join(root, 'src/premiere-open-cut.js'), 'utf8')).toContain('deleteSequenceBestEffort')
     expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('mode-cuts-btn')
-    expect(readFileSync(join(root, 'src/index.html'), 'utf8')).toContain('Sequenz ersetzen')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('In Premiere öffnen')
+    expect(readFileSync(join(root, 'src/panel-features.js'), 'utf8')).toContain('ENABLE_CUTS_TAB = false')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Cut neu laden')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('replaceLinked: true')
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toContain(
       'withParityRefresh || preview.needsParityRefresh',
     )
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.24'")
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.47'")
     expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('setPanelMode')
     expect(readFileSync(join(root, 'src/http.js'), 'utf8')).toContain('xhr.send(body)')
   })

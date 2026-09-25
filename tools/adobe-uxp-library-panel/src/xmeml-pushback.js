@@ -6,6 +6,8 @@
  * pathurl only on the first full <file> definition (refs elsewhere).
  */
 
+import { sceneIdFromClipName, sceneIdFromComment, sceneIdFromAnyText } from './clip-identity.js'
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -199,6 +201,13 @@ function parseClipItem(body, sequenceFps, fileRegistry) {
   const filename =
     pathBasenameFromUrl(pathurl) || fileNameTag || fileMeta?.filename || name || null
 
+  const sceneIdFromName = sceneIdFromClipName(name)
+  const sceneIdFromComments = sceneIdFromComment(
+    firstMatch(body, /<comments>([\s\S]*?)<\/comments>/i) || '',
+  )
+  const cutSceneId =
+    sceneIdFromName || sceneIdFromComments || sceneIdFromAnyText(body) || null
+
   if (!enabled) return { skipped: true, reason: 'disabled' }
 
   // Premiere uses -1 for empty/gap placeholders sometimes
@@ -225,6 +234,7 @@ function parseClipItem(body, sequenceFps, fileRegistry) {
     name,
     filename,
     mediaAssetId,
+    cutSceneId,
     fileId: fileIdAttr,
     pathurl: pathurl || null,
     startMs,
@@ -245,6 +255,7 @@ const MANAGED_CLIPITEM_TAGS = new Set([
   'file',
   'sourcetrack',
   'link',
+  'comments',
   'pproticksin',
   'pproticksout',
   'pproticksduration',
@@ -479,7 +490,30 @@ export function mapClipsToMedia(clips, catalog) {
 
 export function normalizeCutDetailScenes(detail) {
   if (Array.isArray(detail?.scenes) && detail.scenes.length) {
-    return detail.scenes
+    const byId = new Map()
+    if (Array.isArray(detail?.clips)) {
+      for (const row of detail.clips) {
+        const scene = row?.scene || row
+        const id = scene?.id
+        if (!id) continue
+        byId.set(id, {
+          originalFilename: row.media?.originalFilename || row.media?.filename || scene.originalFilename,
+          mediaFilename: row.media?.filename,
+          media: row.media,
+          mediaAssetId: scene.mediaAssetId || row.media?.id,
+        })
+      }
+    }
+    return detail.scenes.map((scene) => {
+      const extra = byId.get(scene.id) || {}
+      return {
+        ...scene,
+        mediaAssetId: scene.mediaAssetId || extra.mediaAssetId,
+        originalFilename: scene.originalFilename || extra.originalFilename,
+        mediaFilename: scene.mediaFilename || extra.mediaFilename,
+        media: scene.media || extra.media,
+      }
+    })
   }
   if (Array.isArray(detail?.clips)) {
     return detail.clips
@@ -647,8 +681,10 @@ export function mappedClipsToRestoreScenes(mappedClips, newId = newSceneId) {
       clampedCount += 1
     }
     const timelineStartMs = Math.max(0, Math.floor(Number(clip.timelineStartMs) || 0))
+    const stableId =
+      clip.cutSceneId && UUID_RE.test(String(clip.cutSceneId)) ? String(clip.cutSceneId) : newId()
     return {
-      id: newId(),
+      id: stableId,
       position,
       mediaAssetId: clip.mediaAssetId,
       startMs,

@@ -1,15 +1,15 @@
 # Adobe UXP — Open Cut in Premiere
 
-**Status:** Draft — 2026-09-10 (Waves A–B locked; **Wave C auto_import shipped** with reveal fallback; staging smoke open)  
+**Status:** Draft — 2026-09-10 (Waves A–B locked; **Wave C auto_import shipped** with reveal fallback; **operator UI paused** ≥ panel 0.1.36 via `ENABLE_CUTS_TAB = false` — provider-first scenes/clips)  
 **Product:** VIDEON v3  
 **Federation:** `2026-05-plexon-federation-v3`  
 **Companions:**  
-- `specs/domain/adobe-uxp-library-panel.md` (panel core — search/insert Wave 1)  
+- `specs/domain/adobe-uxp-library-panel.md` (panel core — search/insert Wave 1; primary surface)  
 - `specs/domain/cut-export-extras.md` (Premiere ZIP / XMEML SSOT)  
 - `specs/domain/cut-multi-track.md` (V1/V2/VO track semantics in XMEML)  
 - `specs/api/cuts.md` (list cuts · enqueue/poll exports)  
-**Knowledge:** `knowledge/paths.md` · `knowledge/adobe-uxp-open-cut-premiere.md`  
-**Implements (later):** `tools/adobe-uxp-library-panel/` — Cuts mode UI + `open-cut.js` + Premiere reveal/import adapter  
+**Knowledge:** `knowledge/paths.md` · `knowledge/adobe-uxp-open-cut-premiere.md` · `knowledge/adobe-uxp-provider-first.md`  
+**Implements (paused in UI):** `tools/adobe-uxp-library-panel/` — Cuts mode modules retained behind `ENABLE_CUTS_TAB`
 
 ## Purpose
 

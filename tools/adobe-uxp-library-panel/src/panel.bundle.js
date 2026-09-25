@@ -368,7 +368,11 @@
     binName: "VIDEON",
     compName: "VIDEON",
     aeSequential: true,
-    aeGapFrames: 0
+    aeGapFrames: 0,
+    /** Wave P5 paused (provider-first): poll off by default. */
+    cutChangeWatch: false,
+    /** Wave P5 paused: auto in-place patch stays off. */
+    cutChangeAutoPatch: false
   };
   function loadSettings() {
     try {
@@ -746,11 +750,26 @@
     const t = hit.startMs != null && hit.startMs >= 0 ? Math.floor(hit.startMs) : 1e3;
     return `${hit.mediaAssetId}:preview:t${t}:d${durationMs}`;
   }
-  function nativePathToFileUrl(nativePath) {
+  function nativePathToUxpFileUrl(nativePath) {
     if (!nativePath || typeof nativePath !== "string") return null;
     const trimmed = nativePath.trim();
     if (!trimmed) return null;
     if (/^file:/i.test(trimmed)) return trimmed;
+    const encoded = (path) => encodeURI(path).replace(/#/g, "%23");
+    if (trimmed.startsWith("/")) {
+      return `file:${encoded(trimmed)}`;
+    }
+    const win = trimmed.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+    return `file:/${encoded(win)}`;
+  }
+  function nativePathToFileUrl(nativePath) {
+    if (!nativePath || typeof nativePath !== "string") return null;
+    const trimmed = nativePath.trim();
+    if (!trimmed) return null;
+    if (/^file:\/\//i.test(trimmed)) return trimmed;
+    if (/^file:\//i.test(trimmed) && !/^file:\/\//i.test(trimmed)) {
+      return `file://${trimmed.slice("file:".length)}`;
+    }
     if (trimmed.startsWith("/")) {
       return `file://${encodeURI(trimmed).replace(/#/g, "%23")}`;
     }
@@ -764,7 +783,7 @@
       if (s && !out.includes(s)) out.push(s);
     };
     try {
-      if (file.url) push(file.url);
+      if (file.name) push(`plugin-data:/${file.name}`);
     } catch {
     }
     try {
@@ -773,12 +792,13 @@
     } catch {
     }
     try {
-      if (file.name) push(`plugin-data:/${file.name}`);
+      if (file.url) push(file.url);
     } catch {
     }
     try {
       const native = file.nativePath;
       if (native) {
+        push(nativePathToUxpFileUrl(native));
         push(nativePathToFileUrl(native));
         push(native);
       }
@@ -1922,6 +1942,7 @@
   }
 
   // src/premiere.js
+  var CLIP_SETTLE_MS = [0, 150, 400, 800];
   async function getPremiereApi() {
     try {
       return await loadNativeModule("premierepro");
@@ -1931,12 +1952,18 @@
   }
   function runLockedTransaction(project, name, build) {
     let ok = false;
-    project.lockedAccess(() => {
-      ok = project.executeTransaction((compoundAction) => {
-        build(compoundAction);
-      }, name);
-    });
-    return ok;
+    let error = null;
+    try {
+      project.lockedAccess(() => {
+        ok = project.executeTransaction((compoundAction) => {
+          build(compoundAction);
+        }, name);
+      });
+    } catch (err2) {
+      error = err2 instanceof Error ? err2.message : String(err2);
+      ok = false;
+    }
+    return { ok: Boolean(ok), error };
   }
   async function listFolderItems(folder) {
     if (!folder || typeof folder.getItems !== "function") return [];
@@ -1988,9 +2015,7 @@
     }
     return out;
   }
-  async function findClipMatchingPath(ppro, project, filePath) {
-    const root = await project.getRootItem();
-    const items = await walkProjectItems(ppro, root);
+  async function matchClipInItems(ppro, items, filePath) {
     const base3 = pathBasename(filePath);
     for (const item of items) {
       const clip = ppro.ClipProjectItem?.cast?.(item);
@@ -2021,22 +2046,101 @@
     }
     return null;
   }
+  async function findClipMatchingPath(ppro, project, filePath, preferredBin = null) {
+    if (preferredBin) {
+      const binItems = await listFolderItems(preferredBin);
+      const inBin = await matchClipInItems(ppro, binItems, filePath);
+      if (inBin) return inBin;
+    }
+    const root = await project.getRootItem();
+    const items = await walkProjectItems(ppro, root);
+    return matchClipInItems(ppro, items, filePath);
+  }
+  async function resolveClipAfterImport(ppro, project, localPath, bin) {
+    for (const wait of CLIP_SETTLE_MS) {
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      const clip = await findClipMatchingPath(ppro, project, localPath, bin);
+      if (clip) return clip;
+    }
+    return null;
+  }
   function secondsFromMs(ms) {
     return Math.max(0, Number(ms) || 0) / 1e3;
   }
+  function tickFromSeconds(ppro, seconds) {
+    if (typeof ppro.TickTime?.createWithSeconds === "function") {
+      return ppro.TickTime.createWithSeconds(seconds);
+    }
+    return null;
+  }
+  async function resolveClipFps(clip) {
+    try {
+      if (typeof clip.getFootageInterpretation === "function") {
+        const interp = await clip.getFootageInterpretation();
+        const rate = Number(interp?.frameRate) || Number(interp?.frameRate?.value) || (typeof interp?.getFrameRate === "function" ? Number(await interp.getFrameRate()) : NaN);
+        if (Number.isFinite(rate) && rate > 0) return rate;
+      }
+    } catch {
+    }
+    return 25;
+  }
+  async function readClipInOutSeconds(ppro, clip) {
+    try {
+      const mediaType = ppro.Constants?.MediaType?.VIDEO;
+      const inTick = typeof clip.getInPoint === "function" ? await clip.getInPoint(mediaType ?? void 0) : null;
+      const outTick = typeof clip.getOutPoint === "function" ? await clip.getOutPoint(mediaType ?? void 0) : null;
+      const inSec = inTick && typeof inTick.seconds === "number" ? inTick.seconds : inTick && typeof inTick.getSeconds === "function" ? Number(inTick.getSeconds()) : null;
+      const outSec = outTick && typeof outTick.seconds === "number" ? outTick.seconds : outTick && typeof outTick.getSeconds === "function" ? Number(outTick.getSeconds()) : null;
+      return {
+        inSec: Number.isFinite(inSec) ? inSec : null,
+        outSec: Number.isFinite(outSec) ? outSec : null
+      };
+    } catch {
+      return { inSec: null, outSec: null };
+    }
+  }
   async function applySceneInOut(ppro, project, clip, hit) {
     if (!clip || typeof clip.createSetInOutPointsAction !== "function") {
-      return { applied: false, reason: "createSetInOutPointsAction unavailable" };
+      return { applied: false, reason: "createSetInOutPointsAction unavailable", verified: false };
     }
     if (hit.startMs == null || hit.endMs == null || hit.endMs <= hit.startMs) {
-      return { applied: false, reason: "no scene bounds" };
+      return { applied: false, reason: "no scene bounds", verified: false };
     }
-    const inPoint = ppro.TickTime.createWithSeconds(secondsFromMs(hit.startMs));
-    const outPoint = ppro.TickTime.createWithSeconds(secondsFromMs(hit.endMs));
-    const ok = runLockedTransaction(project, "VIDEON: Scene In/Out", (compoundAction) => {
+    const inPoint = tickFromSeconds(ppro, secondsFromMs(hit.startMs));
+    const outPoint = tickFromSeconds(ppro, secondsFromMs(hit.endMs));
+    if (!inPoint || !outPoint) {
+      return { applied: false, reason: "TickTime.createWithSeconds unavailable", verified: false };
+    }
+    const { ok, error } = runLockedTransaction(project, "VIDEON: Scene In/Out", (compoundAction) => {
+      if (typeof clip.createClearInOutPointsAction === "function") {
+        try {
+          compoundAction.addAction(clip.createClearInOutPointsAction());
+        } catch {
+        }
+      }
       compoundAction.addAction(clip.createSetInOutPointsAction(inPoint, outPoint));
     });
-    return { applied: Boolean(ok), reason: ok ? null : "transaction failed" };
+    if (!ok) {
+      return {
+        applied: false,
+        reason: error || "transaction failed",
+        verified: false
+      };
+    }
+    const expectedIn = secondsFromMs(hit.startMs);
+    const expectedOut = secondsFromMs(hit.endMs);
+    const { inSec, outSec } = await readClipInOutSeconds(ppro, clip);
+    let verified = false;
+    if (inSec != null && outSec != null) {
+      verified = Math.abs(inSec - expectedIn) < 0.05 && Math.abs(outSec - expectedOut) < 0.05;
+    }
+    return {
+      applied: true,
+      reason: verified ? null : inSec == null ? "set without verify API" : "set; verify mismatch",
+      verified,
+      inSec,
+      outSec
+    };
   }
   async function resolveInsertTime(ppro, sequence) {
     try {
@@ -2048,19 +2152,32 @@
     }
     return ppro.TickTime?.TIME_ZERO || ppro.TickTime.createWithSeconds(0);
   }
+  function projectItemForInsert(clip) {
+    return clip?.projectItem || clip;
+  }
   async function appendClipToActiveSequence(ppro, project, clipProjectItem) {
     const sequence = await project.getActiveSequence();
     if (!sequence) {
-      return { ok: false, message: "Keine aktive Sequence" };
+      return { ok: false, mode: "no_sequence", message: "Keine aktive Sequence" };
     }
     if (!ppro.SequenceEditor?.getEditor) {
-      return { ok: false, message: "SequenceEditor API fehlt" };
+      return { ok: false, mode: "no_api", message: "SequenceEditor API fehlt" };
     }
-    const editor = ppro.SequenceEditor.getEditor(sequence);
+    let editor = ppro.SequenceEditor.getEditor(sequence);
+    if (editor && typeof editor.then === "function") {
+      editor = await editor;
+    }
+    if (!editor) {
+      return { ok: false, mode: "no_editor", message: "SequenceEditor nicht verf\xFCgbar" };
+    }
     const at = await resolveInsertTime(ppro, sequence);
-    const ok = runLockedTransaction(project, "VIDEON: Sequence Insert", (compoundAction) => {
+    const item = projectItemForInsert(clipProjectItem);
+    const insertResult = runLockedTransaction(project, "VIDEON: Sequence Insert", (compoundAction) => {
+      if (typeof editor.createInsertProjectItemAction !== "function") {
+        throw new Error("createInsertProjectItemAction fehlt");
+      }
       const action = editor.createInsertProjectItemAction(
-        clipProjectItem,
+        item,
         at,
         0,
         // V1
@@ -2071,9 +2188,31 @@
       );
       compoundAction.addAction(action);
     });
+    if (insertResult.ok) {
+      return { ok: true, mode: "insert", message: "Auf Sequence eingef\xFCgt (Insert)" };
+    }
+    if (typeof editor.createOverwriteItemAction === "function") {
+      const overwriteResult = runLockedTransaction(
+        project,
+        "VIDEON: Sequence Overwrite",
+        (compoundAction) => {
+          const action = editor.createOverwriteItemAction(item, at, 0, 0);
+          compoundAction.addAction(action);
+        }
+      );
+      if (overwriteResult.ok) {
+        return { ok: true, mode: "overwrite", message: "Auf Sequence eingef\xFCgt (Overwrite)" };
+      }
+      return {
+        ok: false,
+        mode: "failed",
+        message: `Sequence-Insert fehlgeschlagen${overwriteResult.error ? `: ${overwriteResult.error}` : ""}`
+      };
+    }
     return {
-      ok: Boolean(ok),
-      message: ok ? "Auf Sequence eingef\xFCgt" : "Sequence-Insert fehlgeschlagen"
+      ok: false,
+      mode: "failed",
+      message: insertResult.error ? `Sequence-Insert fehlgeschlagen: ${insertResult.error}` : "Sequence-Insert fehlgeschlagen"
     };
   }
   async function insertHitIntoPremiere(input) {
@@ -2106,11 +2245,7 @@
       if (imported === false) {
         throw new Error("importFiles hat false zur\xFCckgegeben");
       }
-      let clip = await findClipMatchingPath(ppro, project, localPath);
-      if (!clip) {
-        await new Promise((r) => setTimeout(r, 150));
-        clip = await findClipMatchingPath(ppro, project, localPath);
-      }
+      const clip = await resolveClipAfterImport(ppro, project, localPath, bin);
       if (!clip) {
         return {
           ok: true,
@@ -2119,16 +2254,33 @@
         };
       }
       const inOut = await applySceneInOut(ppro, project, clip, hit);
+      const fps = await resolveClipFps(clip);
       let sequenceNote = "";
+      let sequenceOk = null;
       if (appendToSequence) {
         const seq = await appendClipToActiveSequence(ppro, project, clip);
+        sequenceOk = seq.ok;
         sequenceNote = seq.ok ? `; ${seq.message}` : `; Sequence: ${seq.message}`;
       }
       const timing = inOut.applied && hit.startMs != null && hit.endMs != null ? ` (${secondsFromMs(hit.startMs).toFixed(2)}s\u2013${secondsFromMs(hit.endMs).toFixed(2)}s)` : "";
+      let inOutNote = "";
+      if (hit.startMs != null && hit.endMs != null && hit.endMs > hit.startMs) {
+        if (!inOut.applied) {
+          inOutNote = ` \xB7 In/Out nicht gesetzt (${inOut.reason || "fehlgeschlagen"})`;
+        } else if (!inOut.verified) {
+          inOutNote = " \xB7 In/Out gesetzt";
+        }
+      } else {
+        inOutNote = " \xB7 voller Clip (keine Szenen-Bounds)";
+      }
       return {
         ok: true,
         mode: "imported",
-        message: `Importiert in \u201E${binName || "VIDEON"}\u201C${timing}${sequenceNote}`
+        inOutApplied: Boolean(inOut.applied),
+        inOutVerified: Boolean(inOut.verified),
+        sequenceOk,
+        fps,
+        message: `Importiert in \u201E${binName || "VIDEON"}\u201C${timing}${inOutNote}${sequenceNote}`
       };
     } catch (error) {
       return {
@@ -2473,201 +2625,363 @@ ${xmlPath}${reason}`
     });
   }
 
-  // src/open-cut.js
-  function sleep(ms, signal) {
-    return new Promise((resolve, reject) => {
-      if (signal?.aborted) {
-        reject(new Error("aborted"));
-        return;
-      }
-      const t = setTimeout(resolve, ms);
-      if (signal) {
-        const prev = signal.onabort;
-        signal.onabort = (event) => {
-          try {
-            if (typeof prev === "function") prev.call(signal, event);
-          } catch {
-          }
-          clearTimeout(t);
-          reject(new Error("aborted"));
-        };
-      }
-    });
+  // src/clip-identity.js
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var SCENE_ID_OPEN = "\u27E6";
+  var SCENE_ID_CLOSE = "\u27E7";
+  var SCENE_ID_IN_NAME_RE = /\u27E6([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\u27E7/i;
+  var SCENE_ID_IN_COMMENT_RE = /videon:scene:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+  var SCENE_ID_BRACKET_RE = /\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/i;
+  var SCENE_ID_SLASH_MD_RE = /\/\/(?:MD:)?\s*(?:videon:scene:)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+  function isSceneUuid(value) {
+    return UUID_RE.test(String(value || "").trim());
   }
-  async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase, forceFresh) {
-    onPhase?.(OPEN_CUT_PHASE.export);
-    if (!forceFresh) {
-      const existing = await listCutExports(settings, cut.id, platformProjectId, signal);
-      const reusable = pickReusablePremiereExport(cut, existing);
-      if (reusable) return reusable;
-    }
-    const enqueued = await enqueuePremiereExport(
-      settings,
-      cut.id,
-      platformProjectId,
-      forceFresh ? `${openCutIdempotencyKey(cut)}:force:${Date.now()}` : openCutIdempotencyKey(cut),
-      signal
-    );
-    const started = Date.now();
-    let attempt = 0;
-    let current = enqueued;
-    while (current.status !== "succeeded") {
-      if (signal?.aborted) throw new Error("aborted");
-      if (current.status === "failed" || current.status === "cancelled") {
-        throw new Error(current.errorMessage || `Export ${current.status}`);
-      }
-      if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) {
-        throw new Error("Export Timeout (10 Min.)");
-      }
-      await sleep(nextPollDelayMs(attempt), signal);
-      attempt += 1;
-      const detail = await getCutExport(settings, cut.id, current.id, platformProjectId, signal);
-      current = detail?.export || current;
-      if (detail?.export?.status === "succeeded" && detail.downloadUrl) {
-        return { ...detail.export, _downloadUrl: detail.downloadUrl };
-      }
-    }
-    const finalDetail = await getCutExport(settings, cut.id, current.id, platformProjectId, signal);
-    return {
-      ...finalDetail?.export || current,
-      _downloadUrl: finalDetail?.downloadUrl || null
-    };
+  function stripSceneIdMark(name) {
+    return String(name || "").replace(SCENE_ID_IN_NAME_RE, "").replace(SCENE_ID_BRACKET_RE, "").replace(SCENE_ID_SLASH_MD_RE, "").replace(SCENE_ID_IN_COMMENT_RE, "").replace(/\s+/g, " ").trim();
   }
-  async function runOpenCut(input) {
-    const {
-      settings,
-      cut,
-      platformProjectId,
-      hostInfo: hostInfo2,
-      signal,
-      handoff = true,
-      forceFreshExport = false,
-      replaceLinked = false,
-      link = null,
-      onPhase
-    } = input;
-    const emit = (phase, extra) => {
-      onPhase?.(phase, phaseLabel(phase, extra));
-    };
-    if (isAfterEffectsHost(hostInfo2) || hostInfo2?.id === "AEFT") {
-      emit(OPEN_CUT_PHASE.error, "nur Premiere");
-      return {
-        ok: false,
-        mode: "unsupported",
-        message: "Open Cut ist nur in Premiere Pro verf\xFCgbar."
-      };
-    }
-    if (!platformProjectId) {
-      emit(OPEN_CUT_PHASE.error, "Collection fehlt");
-      return { ok: false, mode: "unsupported", message: "Collection pinnen, dann Cuts \xF6ffnen." };
-    }
-    if (!cut?.id) {
-      emit(OPEN_CUT_PHASE.error, "Cut fehlt");
-      return { ok: false, mode: "unsupported", message: "Kein Cut gew\xE4hlt." };
-    }
+  function encodeClipDisplayName(filename, sceneId) {
+    const base3 = stripSceneIdMark(filename) || "clip";
+    const id = String(sceneId || "").trim();
+    if (!isSceneUuid(id)) return base3;
+    return `${base3} ${SCENE_ID_OPEN}${id}${SCENE_ID_CLOSE}`;
+  }
+  function sceneIdFromClipName(name) {
+    const raw = String(name || "");
+    return (raw.match(SCENE_ID_IN_NAME_RE) || [])[1] || (raw.match(SCENE_ID_BRACKET_RE) || [])[1] || (raw.match(SCENE_ID_SLASH_MD_RE) || [])[1] || null;
+  }
+  function sceneIdFromComment(text) {
+    const m = String(text || "").match(SCENE_ID_IN_COMMENT_RE);
+    return m?.[1] || null;
+  }
+  function sceneIdFromAnyText(text) {
+    const raw = String(text || "");
+    return sceneIdFromClipName(raw) || sceneIdFromComment(raw) || null;
+  }
+
+  // src/clip-match.js
+  var UUID_BODY = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  var UUID_RE2 = new RegExp(`^${UUID_BODY}$`, "i");
+  var MEDIA_IN_PATH_RE = new RegExp(`(?:^|[/\\\\])media[/\\\\](${UUID_BODY})(?:[/\\\\]|$)`, "i");
+  var FILE_PREFIX_RE = new RegExp(`(?:^|[^a-z0-9])file-(${UUID_BODY})(?:[^a-z0-9]|$)`, "i");
+  var MATCH_MIN_SCORE = 55;
+  var MATCH_TIMELINE_TIGHT_MS = 120;
+  var MATCH_TIMELINE_NEAR_MS = 600;
+  var MATCH_TIMELINE_LOOSE_MS = 2500;
+  var MATCH_IN_TIGHT_MS = 120;
+  var MATCH_IN_NEAR_MS = 600;
+  function isUuid(value) {
+    return UUID_RE2.test(String(value || "").trim());
+  }
+  function normalizeFilenameKey(name) {
+    const stripped = stripSceneIdMark(String(name || ""));
+    const base3 = stripped.split(/[/\\]/).pop()?.trim() || "";
+    if (!base3) return "";
     try {
-      const resolvePackage = async (forceFresh) => {
-        let exportJob2 = await ensurePremiereExport(
-          settings,
-          cut,
-          platformProjectId,
-          signal,
-          emit,
-          forceFresh
+      return decodeURIComponent(base3).toLowerCase();
+    } catch {
+      return base3.toLowerCase();
+    }
+  }
+  function mediaAssetIdFromAnyText(text) {
+    const raw = String(text || "");
+    if (!raw) return null;
+    const fromMedia = raw.match(MEDIA_IN_PATH_RE);
+    if (fromMedia?.[1]) return fromMedia[1];
+    const fromFile = raw.match(FILE_PREFIX_RE);
+    if (fromFile?.[1]) return fromFile[1];
+    const stem = normalizeFilenameKey(raw).replace(/\.[a-z0-9]+$/i, "");
+    if (isUuid(stem)) return stem;
+    return null;
+  }
+  function sceneFilenameKeys(scene) {
+    const keys = [];
+    for (const n of [
+      scene?.originalFilename,
+      scene?.mediaFilename,
+      scene?.filename,
+      scene?.media?.originalFilename,
+      scene?.media?.filename,
+      scene?.name
+    ]) {
+      const k = normalizeFilenameKey(n);
+      if (k) keys.push(k);
+    }
+    return [...new Set(keys)];
+  }
+  function absDelta(a, b) {
+    if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return Math.abs(Number(a) - Number(b));
+  }
+  function proximityScore(delta, tight, near, loose, ptsTight, ptsNear, ptsLoose) {
+    if (delta == null) return { add: 0, reason: null };
+    if (delta <= tight) return { add: ptsTight, reason: "tight" };
+    if (delta <= near) return { add: ptsNear, reason: "near" };
+    if (delta <= loose) return { add: ptsLoose, reason: "loose" };
+    return { add: 0, reason: null };
+  }
+  function scoreSceneAgainstClip(scene, clip, sceneIndex = 0) {
+    let score = 0;
+    const reasons = [];
+    const clipSceneId = clip.sceneId || sceneIdFromAnyText(clip.name || "");
+    if (clipSceneId && scene?.id && String(clipSceneId).toLowerCase() === String(scene.id).toLowerCase()) {
+      score += 1e3;
+      reasons.push("scene_id");
+    }
+    const clipMedia = clip.mediaAssetId || mediaAssetIdFromAnyText(clip.mediaPath || "") || mediaAssetIdFromAnyText(clip.name || "");
+    if (clipMedia && scene?.mediaAssetId && String(clipMedia).toLowerCase() === String(scene.mediaAssetId).toLowerCase()) {
+      score += 400;
+      reasons.push("media_id");
+    }
+    const sceneKeys = sceneFilenameKeys(scene);
+    const clipKey = clip.filenameKey || normalizeFilenameKey(clip.filename) || normalizeFilenameKey(stripSceneIdMark(clip.name || "")) || normalizeFilenameKey(clip.mediaPath || "");
+    if (clipKey && sceneKeys.includes(clipKey)) {
+      score += 200;
+      reasons.push("filename");
+    } else if (clipKey && sceneKeys.length) {
+      const clipStem = clipKey.replace(/\.[a-z0-9]+$/i, "");
+      if (sceneKeys.some((k) => k.replace(/\.[a-z0-9]+$/i, "") === clipStem && clipStem.length >= 3)) {
+        score += 120;
+        reasons.push("filename_stem");
+      }
+    }
+    const sceneTl = typeof scene?.timelineStartMs === "number" && Number.isFinite(scene.timelineStartMs) ? scene.timelineStartMs : null;
+    const tl = proximityScore(
+      absDelta(clip.timelineStartMs, sceneTl),
+      MATCH_TIMELINE_TIGHT_MS,
+      MATCH_TIMELINE_NEAR_MS,
+      MATCH_TIMELINE_LOOSE_MS,
+      90,
+      45,
+      18
+    );
+    if (tl.add) {
+      score += tl.add;
+      reasons.push(`timeline_${tl.reason}`);
+    }
+    const sceneIn = typeof scene?.startMs === "number" && Number.isFinite(scene.startMs) ? scene.startMs : null;
+    const inn = proximityScore(
+      absDelta(clip.inMs, sceneIn),
+      MATCH_IN_TIGHT_MS,
+      MATCH_IN_NEAR_MS,
+      MATCH_TIMELINE_LOOSE_MS,
+      50,
+      25,
+      8
+    );
+    if (inn.add) {
+      score += inn.add;
+      reasons.push(`in_${inn.reason}`);
+    }
+    const clipDur = clip.timelineStartMs != null && clip.timelineEndMs != null ? Math.max(0, clip.timelineEndMs - clip.timelineStartMs) : clip.outMs != null && clip.inMs != null ? Math.max(0, clip.outMs - clip.inMs) : null;
+    const sceneDur = scene?.endMs != null && scene?.startMs != null ? Math.max(0, scene.endMs - scene.startMs) : null;
+    const durDelta = absDelta(clipDur, sceneDur);
+    if (durDelta != null && durDelta <= MATCH_TIMELINE_TIGHT_MS) {
+      score += 35;
+      reasons.push("duration_tight");
+    } else if (durDelta != null && durDelta <= MATCH_TIMELINE_NEAR_MS) {
+      score += 15;
+      reasons.push("duration_near");
+    }
+    if (typeof clip.index === "number" && clip.index === sceneIndex) {
+      score += 12;
+      reasons.push("same_index");
+    }
+    return { score, reasons, clipSceneId, clipMedia, clipKey };
+  }
+  function matchScenesToClips(scenes, clips) {
+    const sceneList = Array.isArray(scenes) ? scenes.filter(Boolean) : [];
+    const clipList = Array.isArray(clips) ? clips.filter(Boolean) : [];
+    if (!sceneList.length) {
+      return { ok: false, mode: "none", pairs: [], message: "Keine Scenes zum Patch." };
+    }
+    if (!clipList.length) {
+      return { ok: false, mode: "none", pairs: [], message: "Keine Video-Clips auf V1" };
+    }
+    const edges = [];
+    for (let s = 0; s < sceneList.length; s += 1) {
+      for (let c = 0; c < clipList.length; c += 1) {
+        const clip = { ...clipList[c], index: clipList[c].index ?? c };
+        const scored = scoreSceneAgainstClip(sceneList[s], clip, s);
+        if (scored.score > 0) {
+          edges.push({
+            sceneIndex: s,
+            clipIndex: c,
+            score: scored.score,
+            reasons: scored.reasons
+          });
+        }
+      }
+    }
+    edges.sort((a, b) => b.score - a.score || a.sceneIndex - b.sceneIndex || a.clipIndex - b.clipIndex);
+    const sceneTaken = /* @__PURE__ */ new Set();
+    const clipTaken = /* @__PURE__ */ new Set();
+    const pairs = [];
+    const modes = [];
+    const tryAssign = (minScore, modeTag) => {
+      for (const edge of edges) {
+        if (edge.score < minScore) continue;
+        if (sceneTaken.has(edge.sceneIndex) || clipTaken.has(edge.clipIndex)) continue;
+        const rivals = edges.filter(
+          (e) => e !== edge && e.score === edge.score && !sceneTaken.has(e.sceneIndex) && !clipTaken.has(e.clipIndex) && (e.sceneIndex === edge.sceneIndex || e.clipIndex === edge.clipIndex)
         );
-        let downloadUrl = exportJob2._downloadUrl;
-        if (!downloadUrl) {
-          emit(OPEN_CUT_PHASE.export);
-          const detail = await getCutExport(settings, cut.id, exportJob2.id, platformProjectId, signal);
-          exportJob2 = detail?.export || exportJob2;
-          downloadUrl = detail?.downloadUrl;
-          if (exportJob2.status !== "succeeded") {
-            const started = Date.now();
-            let attempt = 0;
-            while (exportJob2.status !== "succeeded") {
-              if (exportJob2.status === "failed" || exportJob2.status === "cancelled") {
-                throw new Error(exportJob2.errorMessage || `Export ${exportJob2.status}`);
-              }
-              if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error("Export Timeout");
-              await sleep(nextPollDelayMs(attempt), signal);
-              attempt += 1;
-              const again = await getCutExport(settings, cut.id, exportJob2.id, platformProjectId, signal);
-              exportJob2 = again?.export || exportJob2;
-              downloadUrl = again?.downloadUrl;
+        if (rivals.length) continue;
+        sceneTaken.add(edge.sceneIndex);
+        clipTaken.add(edge.clipIndex);
+        const clip = clipList[edge.clipIndex];
+        pairs.push({
+          scene: sceneList[edge.sceneIndex],
+          itemIndex: typeof clip.index === "number" ? clip.index : edge.clipIndex,
+          score: edge.score,
+          reasons: edge.reasons
+        });
+        modes.push(modeTag);
+      }
+    };
+    tryAssign(1e3, "scene_id");
+    tryAssign(400, "media_id");
+    tryAssign(MATCH_MIN_SCORE, "scored");
+    if (sceneTaken.size < sceneList.length) {
+      const leftScenes = [];
+      for (let s = 0; s < sceneList.length; s += 1) {
+        if (!sceneTaken.has(s)) leftScenes.push(s);
+      }
+      const leftClips = [];
+      for (let c = 0; c < clipList.length; c += 1) {
+        if (!clipTaken.has(c)) leftClips.push(c);
+      }
+      if (leftScenes.length === leftClips.length && leftScenes.length > 0) {
+        let orderOk = true;
+        const fill = [];
+        for (const s of leftScenes) {
+          let best = null;
+          for (const c of leftClips) {
+            if (fill.some((f) => f.clipIndex === c)) continue;
+            const clip = { ...clipList[c], index: clipList[c].index ?? c };
+            const scored = scoreSceneAgainstClip(sceneList[s], clip, s);
+            const soft = Math.max(scored.score, clip.index === s ? 12 : 1);
+            if (!best || soft > best.score) {
+              best = { sceneIndex: s, clipIndex: c, score: soft, reasons: scored.reasons.length ? scored.reasons : ["order_fill"] };
+            }
+          }
+          if (!best) {
+            orderOk = false;
+            break;
+          }
+          const tied = leftClips.filter((c) => {
+            if (fill.some((f) => f.clipIndex === c) || c === best.clipIndex) return false;
+            const clip = { ...clipList[c], index: clipList[c].index ?? c };
+            const scored = scoreSceneAgainstClip(sceneList[s], clip, s);
+            const soft = Math.max(scored.score, clip.index === s ? 12 : 1);
+            return soft === best.score;
+          });
+          if (tied.length) {
+            const orderedClip = leftClips.find((c) => !fill.some((f) => f.clipIndex === c));
+            if (orderedClip == null) {
+              orderOk = false;
+              break;
+            }
+            fill.push({
+              sceneIndex: s,
+              clipIndex: orderedClip,
+              score: 1,
+              reasons: ["order_fill"]
+            });
+          } else {
+            fill.push(best);
+          }
+        }
+        if (orderOk && fill.length === leftScenes.length) {
+          const used = new Set(fill.map((f) => f.clipIndex));
+          if (used.size === fill.length) {
+            for (const edge of fill) {
+              sceneTaken.add(edge.sceneIndex);
+              clipTaken.add(edge.clipIndex);
+              const clip = clipList[edge.clipIndex];
+              pairs.push({
+                scene: sceneList[edge.sceneIndex],
+                itemIndex: typeof clip.index === "number" ? clip.index : edge.clipIndex,
+                score: edge.score,
+                reasons: edge.reasons
+              });
+              modes.push("order_fill");
             }
           }
         }
-        if (!downloadUrl) throw new Error("downloadUrl nach Export fehlt");
-        emit(OPEN_CUT_PHASE.download);
-        const zipBuffer2 = await downloadExportZip(downloadUrl, signal);
-        return { exportJob: exportJob2, zipBuffer: zipBuffer2 };
-      };
-      let packageResult;
-      try {
-        packageResult = await resolvePackage(forceFreshExport);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (!forceFreshExport && isMissingStorageKeyError(msg)) {
-          emit(OPEN_CUT_PHASE.export, "Export neu\u2026");
-          packageResult = await resolvePackage(true);
-        } else {
-          throw error;
-        }
       }
-      const { exportJob, zipBuffer } = packageResult;
-      const cacheKey = openCutCacheKey(cut.id, exportJob.id, exportJob.bytes ?? zipBuffer.byteLength);
-      emit(OPEN_CUT_PHASE.extract);
-      const extracted = await extractOpenCutZip(cacheKey, zipBuffer);
-      if (!handoff) {
-        emit(OPEN_CUT_PHASE.done, "ZIP bereit");
-        return {
-          ok: true,
-          mode: "cache_only",
-          cutId: cut.id,
-          exportId: exportJob.id,
-          xmlPath: extracted.xmlNativePath,
-          extractDir: extracted.extractDir,
-          message: `ZIP bereit:
-${extracted.xmlNativePath}`
-        };
-      }
-      emit(OPEN_CUT_PHASE.import);
-      const opened = await openCutInPremiere({
-        xmlPath: extracted.xmlNativePath,
-        extractDir: extracted.extractDir,
-        cutId: cut.id,
-        exportId: exportJob.id,
-        hostInfo: hostInfo2,
-        binName: settings.binName || "VIDEON",
-        cutName: cut.name,
-        replaceLinked,
-        link
-      });
-      if (!opened.ok) {
-        emit(OPEN_CUT_PHASE.error, opened.message || "import");
-        return opened;
-      }
-      if (opened.mode === "reveal_and_prompt") {
-        emit(OPEN_CUT_PHASE.handoff);
-      }
-      emit(OPEN_CUT_PHASE.done, opened.mode);
-      return {
-        ...opened,
-        message: opened.message
-      };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg === "aborted") {
-        emit(OPEN_CUT_PHASE.error, "abgebrochen");
-        return { ok: false, mode: "unsupported", message: "Abgebrochen." };
-      }
-      const friendly = isMissingStorageKeyError(msg) ? `Export/Medien fehlen im Storage (${msg.slice(0, 120)}). Cut-Medien pr\xFCfen oder neu hochladen.` : msg;
-      emit(OPEN_CUT_PHASE.error, friendly.slice(0, 80));
-      return { ok: false, mode: "error", message: friendly };
     }
+    if (pairs.length !== sceneList.length) {
+      const missing = sceneList.filter((_, i) => !sceneTaken.has(i)).map((s) => s.id || "?");
+      return {
+        ok: false,
+        mode: "none",
+        pairs: [],
+        message: `${missing.length} Scene(s) nicht eindeutig zuordenbar (Premiere ${clipList.length} Clip(s), Cut ${sceneList.length}).`,
+        missingSceneIds: missing,
+        diagnostics: { edgeCount: edges.length, assigned: pairs.length }
+      };
+    }
+    const usedItems = new Set(pairs.map((p) => p.itemIndex));
+    if (usedItems.size !== pairs.length) {
+      return {
+        ok: false,
+        mode: "none",
+        pairs: [],
+        message: "Match-Konflikt: mehrere Scenes auf denselben Clip."
+      };
+    }
+    const primary = modes.every((m) => m === "scene_id") ? "by_scene_id" : modes.includes("scene_id") || modes.includes("media_id") || modes.includes("scored") ? modes.includes("order_fill") ? "hybrid" : "by_signals" : "by_order";
+    return {
+      ok: true,
+      mode: primary,
+      pairs,
+      message: null,
+      extraClips: Math.max(0, clipList.length - sceneList.length)
+    };
+  }
+  function selectLinkedAudioClips(scene, videoClip, audioClips, usedIndices = /* @__PURE__ */ new Set(), opts = {}) {
+    const maxPerScene = Math.max(1, Number(opts.maxPerScene) || 4);
+    const list = Array.isArray(audioClips) ? audioClips : [];
+    const candidates = [];
+    for (let i = 0; i < list.length; i += 1) {
+      if (usedIndices.has(i)) continue;
+      const clip = { ...list[i], index: list[i].index ?? i };
+      const scored = scoreSceneAgainstClip(scene, clip, 0);
+      let score = scored.score;
+      const reasons = [...scored.reasons];
+      const tlVsVideo = absDelta(clip.timelineStartMs, videoClip?.timelineStartMs);
+      if (tlVsVideo != null && tlVsVideo <= MATCH_TIMELINE_NEAR_MS) {
+        score += 80;
+        reasons.push("av_timeline_link");
+      } else if (tlVsVideo != null && tlVsVideo <= MATCH_TIMELINE_LOOSE_MS) {
+        score += 25;
+        reasons.push("av_timeline_near");
+      }
+      const strong = reasons.includes("scene_id") || reasons.includes("media_id") || reasons.includes("filename") || reasons.includes("filename_stem");
+      if (!strong && score < MATCH_MIN_SCORE + 80) continue;
+      if (score < 40) continue;
+      candidates.push({ index: i, score, reasons });
+    }
+    candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+    if (!candidates.length) return [];
+    const top = candidates[0];
+    const cluster = candidates.filter((c) => {
+      if (c.score < top.score - 120) return false;
+      const clip = list[c.index];
+      const topClip = list[top.index];
+      if (top.reasons.includes("scene_id") && c.reasons.includes("scene_id")) return true;
+      if (topClip?.mediaAssetId && clip?.mediaAssetId && String(topClip.mediaAssetId).toLowerCase() === String(clip.mediaAssetId).toLowerCase()) {
+        return true;
+      }
+      const topKey = topClip?.filenameKey || normalizeFilenameKey(topClip?.filename || topClip?.name);
+      const clipKey = clip?.filenameKey || normalizeFilenameKey(clip?.filename || clip?.name);
+      if (topKey && clipKey && topKey === clipKey) return true;
+      const d = absDelta(clip?.timelineStartMs, videoClip?.timelineStartMs);
+      return d != null && d <= MATCH_TIMELINE_NEAR_MS && c.score >= MATCH_MIN_SCORE;
+    });
+    return cluster.slice(0, maxPerScene).map((c) => c.index);
   }
 
-  // src/premiere-capture.js
+  // src/premiere-patch-cut.js
   async function getPremiereApi3() {
     try {
       return await loadNativeModule("premierepro");
@@ -2675,121 +2989,631 @@ ${extracted.xmlNativePath}`
       return null;
     }
   }
-  async function writePathInDataFolder(fileName) {
-    const uxp = await loadNativeModule("uxp");
-    const fs = uxp.storage?.localFileSystem;
-    if (!fs?.getDataFolder) throw new Error("UXP localFileSystem fehlt");
-    const folder = await fs.getDataFolder();
-    let pushRoot = folder;
+  function runLockedTransaction2(project, name, build) {
+    let ok = false;
+    let error = null;
     try {
-      if (typeof folder.createFolder === "function") {
-        const entries = typeof folder.getEntries === "function" ? await folder.getEntries() : [];
-        const existing = entries.find((e) => e?.name === "pushback" && e.isFolder);
-        pushRoot = existing || await folder.createFolder("pushback");
+      project.lockedAccess(() => {
+        ok = project.executeTransaction((compoundAction) => {
+          build(compoundAction);
+        }, name);
+      });
+    } catch (err2) {
+      error = err2 instanceof Error ? err2 : new Error(String(err2));
+      ok = false;
+    }
+    return { ok, error };
+  }
+  function secondsFromMs2(ms) {
+    const n = Number(ms);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, n) / 1e3;
+  }
+  function sanitizeSceneTiming(scene) {
+    const startMs = Math.max(0, Math.floor(Number(scene?.startMs) || 0));
+    let endMs = Math.max(0, Math.floor(Number(scene?.endMs) || 0));
+    if (endMs <= startMs) endMs = startMs + 500;
+    const timelineStartMs = Math.max(0, Math.floor(Number(scene?.timelineStartMs) || 0));
+    const durationMs = endMs - startMs;
+    return {
+      startMs,
+      endMs,
+      timelineStartMs,
+      timelineEndMs: timelineStartMs + durationMs,
+      durationMs
+    };
+  }
+  function planClipPatch(sceneTiming, videoFp, opts = {}) {
+    const positionToleranceMs = opts.positionToleranceMs ?? 40;
+    const trimToleranceMs = opts.trimToleranceMs ?? 40;
+    const curStart = videoFp?.timelineStartMs;
+    const curEnd = videoFp?.timelineEndMs;
+    const curIn = videoFp?.inMs;
+    const curOut = videoFp?.outMs;
+    const curDur = curStart != null && curEnd != null && Number.isFinite(curStart) && Number.isFinite(curEnd) ? Math.max(0, curEnd - curStart) : null;
+    const near = (a, b) => a != null && b != null && Math.abs(a - b) <= trimToleranceMs;
+    const inSame = curIn == null || near(curIn, sceneTiming.startMs);
+    const outSame = curOut == null || near(curOut, sceneTiming.endMs);
+    const durSame = curDur == null || near(curDur, sceneTiming.durationMs);
+    const posDelta = curStart != null && Number.isFinite(curStart) ? sceneTiming.timelineStartMs - curStart : null;
+    if (posDelta != null && Math.abs(posDelta) <= positionToleranceMs && inSame && outSame && durSame) {
+      return { mode: "noop" };
+    }
+    if (posDelta != null && Math.abs(posDelta) > positionToleranceMs && inSame && outSame && durSame) {
+      return { mode: "move", deltaMs: posDelta };
+    }
+    if (curStart == null) {
+      return {
+        mode: "set_bounds",
+        timelineStartMs: sceneTiming.timelineStartMs,
+        timelineEndMs: sceneTiming.timelineEndMs,
+        startMs: sceneTiming.startMs,
+        endMs: sceneTiming.endMs,
+        applyInOut: false
+      };
+    }
+    return {
+      mode: "set_bounds",
+      timelineStartMs: sceneTiming.timelineStartMs,
+      timelineEndMs: sceneTiming.timelineEndMs,
+      startMs: sceneTiming.startMs,
+      endMs: sceneTiming.endMs,
+      // In/Out are fragile on video (Premiere bugs) — only when trim actually changed.
+      applyInOut: !(inSame && outSame)
+    };
+  }
+  function makeTickTime(TickTime, ms) {
+    const seconds = secondsFromMs2(ms);
+    if (!Number.isFinite(seconds)) {
+      throw new Error(`TickTime: ung\xFCltige ms (${ms})`);
+    }
+    try {
+      const tick = TickTime.createWithSeconds(seconds);
+      if (tick) return tick;
+    } catch {
+    }
+    if (typeof TickTime.createWithTicks === "function") {
+      const ticks = Math.round(seconds * 254016e6);
+      return TickTime.createWithTicks(String(Math.max(0, ticks)));
+    }
+    throw new Error("TickTime.createWithSeconds/Ticks fehlgeschlagen");
+  }
+  function clipTrackItemType(ppro) {
+    return ppro?.Constants?.TrackItemType?.CLIP ?? 1;
+  }
+  function tickTimeToMs(tick) {
+    if (tick == null) return null;
+    try {
+      if (typeof tick.seconds === "number" && Number.isFinite(tick.seconds)) {
+        return Math.max(0, Math.round(tick.seconds * 1e3));
+      }
+      if (typeof tick.asSeconds === "function") {
+        const s = tick.asSeconds();
+        if (typeof s === "number" && Number.isFinite(s)) return Math.max(0, Math.round(s * 1e3));
+      }
+      if (typeof tick.getSeconds === "function") {
+        const s = tick.getSeconds();
+        if (typeof s === "number" && Number.isFinite(s)) return Math.max(0, Math.round(s * 1e3));
+      }
+      const ticksRaw = tick.ticks ?? tick.tickTime;
+      if (ticksRaw != null) {
+        const ticks = Number(ticksRaw);
+        if (Number.isFinite(ticks) && ticks >= 0) {
+          return Math.max(0, Math.round(ticks / 254016e6 * 1e3));
+        }
       }
     } catch {
-      pushRoot = folder;
     }
-    const file = await pushRoot.createFile(fileName, { overwrite: true });
+    return null;
+  }
+  async function readTrackItemName(item) {
     try {
-      await file.write("", { format: uxp.storage.formats.utf8 });
+      if (typeof item.getName === "function") {
+        const n = await item.getName();
+        if (n != null && String(n).trim()) return String(n);
+      }
     } catch {
+    }
+    try {
+      if (item.name != null) return String(item.name);
+    } catch {
+    }
+    return "";
+  }
+  async function readTickMs(item, getterName, propName) {
+    try {
+      if (typeof item[getterName] === "function") {
+        const raw = item[getterName]();
+        const value = raw && typeof raw.then === "function" ? await raw : raw;
+        const ms = tickTimeToMs(value);
+        if (ms != null) return ms;
+      }
+    } catch {
+    }
+    try {
+      if (item[propName] != null) {
+        const ms = tickTimeToMs(item[propName]);
+        if (ms != null) return ms;
+      }
+    } catch {
+    }
+    try {
+      const direct = item[propName];
+      if (typeof direct === "number" && Number.isFinite(direct)) {
+        return Math.max(0, Math.round(direct * 1e3));
+      }
+    } catch {
+    }
+    return null;
+  }
+  async function readMediaPathFromTrackItem(item, ppro) {
+    try {
+      const projectItem = typeof item.getProjectItem === "function" ? await item.getProjectItem() : item.projectItem;
+      if (!projectItem) return null;
+      const clip = ppro?.ClipProjectItem?.cast?.(projectItem) || projectItem;
+      if (typeof clip.getMediaFilePath === "function") {
+        const path = await clip.getMediaFilePath();
+        if (path) return String(path);
+      }
+      if (clip.name) return String(clip.name);
+    } catch {
+    }
+    return null;
+  }
+  async function fingerprintTrackItem(item, index, ppro) {
+    const name = await readTrackItemName(item);
+    const mediaPath = await readMediaPathFromTrackItem(item, ppro);
+    const timelineStartMs = await readTickMs(item, "getStartTime", "startTime");
+    const timelineEndMs = await readTickMs(item, "getEndTime", "endTime");
+    const inMs = await readTickMs(item, "getInPoint", "inPoint");
+    const outMs = await readTickMs(item, "getOutPoint", "outPoint");
+    const filename = (mediaPath ? pathBasename(mediaPath) : "") || stripSceneIdMark(name) || name;
+    return {
+      index,
+      item,
+      name,
+      mediaPath,
+      filename,
+      filenameKey: normalizeFilenameKey(filename),
+      sceneId: sceneIdFromAnyText(name) || sceneIdFromAnyText(mediaPath || ""),
+      mediaAssetId: mediaAssetIdFromAnyText(mediaPath || "") || mediaAssetIdFromAnyText(name),
+      timelineStartMs,
+      timelineEndMs,
+      inMs,
+      outMs
+    };
+  }
+  async function getTrackItemsFromTrack(track, ppro) {
+    if (!track) return [];
+    const clipType = clipTrackItemType(ppro);
+    const attempts = [
+      () => track.getTrackItems?.(clipType, false),
+      () => track.getTrackItems?.(clipType, true),
+      () => track.getTrackItems?.(clipType),
+      () => track.getTrackItems?.(1, false),
+      () => track.getTrackItems?.(1),
+      () => track.getTrackItems?.(),
+      () => track.getClips?.()
+    ];
+    for (const attempt of attempts) {
+      if (typeof attempt !== "function") continue;
       try {
-        await file.write(new ArrayBuffer(0), { format: uxp.storage.formats.binary });
+        const result = await attempt();
+        if (Array.isArray(result) && result.length) return result.filter(Boolean);
       } catch {
       }
     }
-    if (!file.nativePath) throw new Error("nativePath f\xFCr Export fehlt");
-    return file;
+    return [];
   }
-  async function readUtf8File(file) {
-    const uxp = await loadNativeModule("uxp");
-    const data = await file.read({ format: uxp.storage.formats.utf8 });
-    return String(data || "");
-  }
-  async function captureActiveSequenceXml() {
-    const ppro = await getPremiereApi3();
-    if (!ppro) {
-      return { ok: false, mode: "unavailable", message: "premierepro Modul fehlt" };
-    }
+  async function listVideoTracks(sequence) {
+    const tracks = [];
+    if (!sequence) return tracks;
     try {
-      const project = await ppro.Project.getActiveProject();
-      if (!project) {
-        return { ok: false, mode: "unavailable", message: "Kein aktives Premiere-Projekt" };
+      if (typeof sequence.getVideoTracks === "function") {
+        const list = await sequence.getVideoTracks() || [];
+        if (Array.isArray(list) && list.length) return list.filter(Boolean);
       }
-      const sequence = typeof project.getActiveSequence === "function" && await project.getActiveSequence() || null;
-      if (!sequence) {
-        return { ok: false, mode: "unavailable", message: "Keine aktive Sequenz" };
+    } catch {
+    }
+    let trackCount = 0;
+    try {
+      if (typeof sequence.getVideoTrackCount === "function") {
+        trackCount = Number(await sequence.getVideoTrackCount()) || 0;
       }
-      const Converter = ppro.ProjectConverter;
-      const exportFn = Converter && typeof Converter.exportAsFinalCutProXML === "function" && Converter.exportAsFinalCutProXML || typeof project.exportAsFinalCutProXML === "function" && project.exportAsFinalCutProXML.bind(project) || null;
-      if (exportFn) {
-        const stamp = Date.now();
-        const file = await writePathInDataFolder(`pushback-${stamp}.xml`);
-        const path = file.nativePath;
-        let ok;
-        if (Converter && exportFn === Converter.exportAsFinalCutProXML) {
-          ok = await Converter.exportAsFinalCutProXML(sequence, path, true);
-        } else {
-          ok = await exportFn(path, true);
-        }
-        if (ok === false) {
+    } catch {
+      trackCount = 0;
+    }
+    for (let t = 0; t < Math.max(trackCount, 8); t += 1) {
+      try {
+        const track = typeof sequence.getVideoTrack === "function" ? await sequence.getVideoTrack(t) : null;
+        if (track) tracks.push(track);
+      } catch {
+      }
+    }
+    return tracks;
+  }
+  async function listAudioTracks(sequence) {
+    const tracks = [];
+    if (!sequence) return tracks;
+    try {
+      if (typeof sequence.getAudioTracks === "function") {
+        const list = await sequence.getAudioTracks() || [];
+        if (Array.isArray(list) && list.length) return list.filter(Boolean);
+      }
+    } catch {
+    }
+    let trackCount = 0;
+    try {
+      if (typeof sequence.getAudioTrackCount === "function") {
+        trackCount = Number(await sequence.getAudioTrackCount()) || 0;
+      }
+    } catch {
+      trackCount = 0;
+    }
+    for (let t = 0; t < Math.max(trackCount, 16); t += 1) {
+      try {
+        const track = typeof sequence.getAudioTrack === "function" ? await sequence.getAudioTrack(t) : null;
+        if (track) tracks.push(track);
+      } catch {
+      }
+    }
+    return tracks;
+  }
+  async function listAudioTrackItems(sequence, ppro) {
+    const tracks = await listAudioTracks(sequence);
+    const fingerprints = [];
+    let flatIndex = 0;
+    for (let t = 0; t < tracks.length; t += 1) {
+      const rawItems = await getTrackItemsFromTrack(tracks[t], ppro);
+      for (const item of rawItems) {
+        if (!item) continue;
+        const fp = await fingerprintTrackItem(item, flatIndex, ppro);
+        fingerprints.push({ ...fp, trackIndex: t, kind: "audio" });
+        flatIndex += 1;
+      }
+    }
+    return fingerprints;
+  }
+  function applyBoundsActions(compoundAction, item, startTick, endTick) {
+    if (typeof item.createSetEndAction === "function") {
+      compoundAction.addAction(item.createSetEndAction(endTick));
+    }
+    if (typeof item.createSetStartAction === "function") {
+      compoundAction.addAction(item.createSetStartAction(startTick));
+    }
+  }
+  function applyInOutActions(compoundAction, item, inTick, outTick) {
+    if (typeof item.createSetOutPointAction === "function") {
+      compoundAction.addAction(item.createSetOutPointAction(outTick));
+    }
+    if (typeof item.createSetInPointAction === "function") {
+      compoundAction.addAction(item.createSetInPointAction(inTick));
+    }
+  }
+  function trackItemHasTimingActions(item) {
+    return typeof item?.createMoveAction === "function" || typeof item?.createSetStartAction === "function" || typeof item?.createSetEndAction === "function" || typeof item?.createSetInPointAction === "function" || typeof item?.createSetOutPointAction === "function";
+  }
+  function applyPlanToItem(project, TickTime, item, plan, label) {
+    if (plan.mode === "noop") return { ok: true, mode: "noop", movedAudioHint: false };
+    if (plan.mode === "move") {
+      if (typeof item.createMoveAction !== "function") {
+        return { ok: false, error: new Error("createMoveAction fehlt"), mode: "move" };
+      }
+      const deltaSec = Number(plan.deltaMs) / 1e3;
+      if (!Number.isFinite(deltaSec) || deltaSec === 0) {
+        return { ok: true, mode: "noop", movedAudioHint: false };
+      }
+      let deltaTick;
+      try {
+        deltaTick = TickTime.createWithSeconds(deltaSec);
+      } catch (err2) {
+        return { ok: false, error: err2 instanceof Error ? err2 : new Error(String(err2)), mode: "move" };
+      }
+      const result = runLockedTransaction2(project, label, (compoundAction) => {
+        compoundAction.addAction(item.createMoveAction(deltaTick));
+      });
+      return {
+        ok: result.ok,
+        error: result.error,
+        mode: "move",
+        movedAudioHint: result.ok
+      };
+    }
+    let startTick;
+    let endTick;
+    try {
+      startTick = makeTickTime(TickTime, plan.timelineStartMs);
+      endTick = makeTickTime(TickTime, plan.timelineEndMs);
+    } catch (err2) {
+      return { ok: false, error: err2 instanceof Error ? err2 : new Error(String(err2)), mode: "set_bounds" };
+    }
+    if (plan.timelineEndMs <= plan.timelineStartMs) {
+      return { ok: false, error: new Error("timeline end <= start"), mode: "set_bounds" };
+    }
+    const bounds = runLockedTransaction2(project, `${label} bounds`, (compoundAction) => {
+      applyBoundsActions(compoundAction, item, startTick, endTick);
+    });
+    if (!bounds.ok) {
+      return { ok: false, error: bounds.error || new Error("setStart/setEnd failed"), mode: "set_bounds" };
+    }
+    if (plan.applyInOut) {
+      try {
+        const inTick = makeTickTime(TickTime, plan.startMs);
+        const outTick = makeTickTime(TickTime, plan.endMs);
+        const io = runLockedTransaction2(project, `${label} in/out`, (compoundAction) => {
+          applyInOutActions(compoundAction, item, inTick, outTick);
+        });
+        if (!io.ok) {
           return {
-            ok: false,
-            mode: "unavailable",
-            message: "exportAsFinalCutProXML hat false zur\xFCckgegeben"
+            ok: true,
+            mode: "set_bounds",
+            movedAudioHint: false,
+            warning: io.error?.message || "In/Out nicht gesetzt"
           };
         }
-        const xml = await readUtf8File(file);
-        if (!xml || xml.length < 40) {
-          return { ok: false, mode: "unavailable", message: "Export-XML leer" };
-        }
-        return { ok: true, mode: "host_export", xml, path, sequenceName: sequence.name || null };
-      }
-      return pickXmlFileFallback();
-    } catch (error) {
-      console.warn("[VIDEON] captureActiveSequenceXml failed", error);
-      return pickXmlFileFallback(error instanceof Error ? error.message : String(error));
-    }
-  }
-  async function pickXmlFileFallback(reason) {
-    try {
-      const uxp = await loadNativeModule("uxp");
-      const fs = uxp.storage?.localFileSystem;
-      if (typeof fs?.getFileForOpening !== "function") {
+      } catch (err2) {
         return {
-          ok: false,
-          mode: "unsupported",
-          message: (reason ? `${reason}. ` : "") + "Sequenz-Export API fehlt (Premiere \u2265 26.2) und kein Datei-Dialog."
+          ok: true,
+          mode: "set_bounds",
+          movedAudioHint: false,
+          warning: err2 instanceof Error ? err2.message : String(err2)
         };
       }
-      const file = await fs.getFileForOpening({
-        types: ["xml"],
-        allowMultiple: false
-      });
-      if (!file) {
-        return { ok: false, mode: "unsupported", message: "Kein XML gew\xE4hlt." };
+    }
+    return { ok: true, mode: "set_bounds", movedAudioHint: false };
+  }
+  function trackNameLooksLikeV1(name) {
+    const n = String(name || "").trim().toLowerCase();
+    return !n || n === "v1" || n === "video 1" || n === "video1" || n.startsWith("v1 ");
+  }
+  async function listVideoTrackItems(sequence, ppro, preferredCount = 0) {
+    const tracks = await listVideoTracks(sequence);
+    if (!tracks.length) return [];
+    const perTrack = [];
+    for (let t = 0; t < tracks.length; t += 1) {
+      const track = tracks[t];
+      let trackName = "";
+      try {
+        trackName = String(track.name || await track.getName?.() || "");
+      } catch {
+        trackName = String(track.name || "");
       }
-      const xml = await readUtf8File(file);
-      if (!xml) return { ok: false, mode: "unsupported", message: "XML leer." };
-      return {
-        ok: true,
-        mode: "file_pick",
-        xml,
-        path: file.nativePath || null,
-        message: reason ? `Host-Export fehlgeschlagen (${reason}) \u2014 Datei verwendet.` : void 0
-      };
-    } catch (error) {
+      const rawItems = await getTrackItemsFromTrack(track, ppro);
+      perTrack.push({ trackIndex: t, trackName, items: rawItems });
+    }
+    let chosen = perTrack.find((row) => trackNameLooksLikeV1(row.trackName) && row.items.length) || perTrack.find((row) => row.trackIndex === 0 && row.items.length) || null;
+    if (preferredCount > 0) {
+      const exact = perTrack.find((row) => row.items.length === preferredCount);
+      if (exact) chosen = exact;
+      else if (!chosen?.items?.length) {
+        const ranked = [...perTrack].filter((row) => row.items.length > 0).sort(
+          (a, b) => Math.abs(a.items.length - preferredCount) - Math.abs(b.items.length - preferredCount)
+        );
+        chosen = ranked[0] || chosen;
+      }
+    }
+    if (!chosen?.items?.length) {
+      chosen = perTrack.find((row) => row.items.length) || null;
+    }
+    if (!chosen?.items?.length) return [];
+    const fingerprints = [];
+    for (let i = 0; i < chosen.items.length; i += 1) {
+      fingerprints.push(await fingerprintTrackItem(chosen.items[i], i, ppro));
+    }
+    const ordered = [...fingerprints].sort((a, b) => {
+      if (a.timelineStartMs != null && b.timelineStartMs != null) {
+        return a.timelineStartMs - b.timelineStartMs;
+      }
+      return a.index - b.index;
+    });
+    return ordered.map((fp, index) => ({ ...fp, index, trackIndex: chosen.trackIndex }));
+  }
+  async function resolveLinkedSequence(project, link) {
+    const active = await project.getActiveSequence();
+    if (active && sequenceMatchesLink(active, link)) return active;
+    if (typeof project.getSequences !== "function") return active || null;
+    const sequences = await project.getSequences() || [];
+    for (const seq of sequences) {
+      if (sequenceMatchesLink(seq, link)) return seq;
+    }
+    return active || null;
+  }
+  async function stampSceneIdsOnLinkedSequence(input) {
+    const { cut, scenes, link } = input;
+    if (!scenes?.length) return { ok: false, stamped: 0, message: "Keine Scenes" };
+    const ppro = await getPremiereApi3();
+    if (!ppro?.Project) return { ok: false, stamped: 0, message: "Premiere UXP API fehlt" };
+    const project = await ppro.Project.getActiveProject();
+    if (!project) return { ok: false, stamped: 0, message: "Kein aktives Projekt" };
+    const sequence = await resolveLinkedSequence(project, link || { sequenceName: cut?.name });
+    if (!sequence) return { ok: false, stamped: 0, message: "Sequenz nicht gefunden" };
+    const trackItems = await listVideoTrackItems(sequence, ppro, scenes.length);
+    const paired = matchScenesToClips(scenes, trackItems);
+    if (!paired.ok || !paired.pairs.length) {
+      return { ok: false, stamped: 0, message: paired.message || "Stamp pairing failed" };
+    }
+    const audioItems = await listAudioTrackItems(sequence, ppro);
+    const usedAudio = /* @__PURE__ */ new Set();
+    let stamped = 0;
+    for (const { scene, itemIndex } of paired.pairs) {
+      const fp = trackItems[itemIndex];
+      const item = fp?.item;
+      if (item && typeof item.createSetNameAction === "function") {
+        const current = fp.name || "";
+        const base3 = stripSceneIdMark(current) || stripSceneIdMark(fp.filename) || "clip";
+        const next = encodeClipDisplayName(base3, scene.id);
+        if (next === current) {
+          stamped += 1;
+        } else {
+          const stampedTx = runLockedTransaction2(project, `VIDEON: Stamp V ${scene.id.slice(0, 8)}`, (compoundAction) => {
+            compoundAction.addAction(item.createSetNameAction(next));
+          });
+          if (stampedTx.ok) stamped += 1;
+        }
+      }
+      const audioIndices = selectLinkedAudioClips(scene, fp, audioItems, usedAudio);
+      for (const ai of audioIndices) {
+        usedAudio.add(ai);
+        const afp = audioItems[ai];
+        const aitem = afp?.item;
+        if (!aitem || typeof aitem.createSetNameAction !== "function") continue;
+        const current = afp.name || "";
+        const base3 = stripSceneIdMark(current) || stripSceneIdMark(afp.filename) || "clip";
+        const next = encodeClipDisplayName(base3, scene.id);
+        if (next === current) {
+          stamped += 1;
+          continue;
+        }
+        const stampedTx = runLockedTransaction2(project, `VIDEON: Stamp A ${scene.id.slice(0, 8)}`, (compoundAction) => {
+          compoundAction.addAction(aitem.createSetNameAction(next));
+        });
+        if (stampedTx.ok) stamped += 1;
+      }
+    }
+    return {
+      ok: stamped > 0,
+      stamped,
+      mode: paired.mode,
+      message: stamped ? `${stamped} Clip-Name(n) mit Scene-ID gestempelt` : "Kein Clip gestempelt"
+    };
+  }
+  async function patchLinkedSequenceFromCut(input) {
+    const { cut, scenes, link } = input;
+    if (!scenes?.length) {
+      return { ok: false, mode: "patch_rejected", message: "Keine Scenes zum Patch." };
+    }
+    const ppro = await getPremiereApi3();
+    if (!ppro?.Project) {
+      return { ok: false, mode: "unavailable", message: "Premiere UXP API fehlt" };
+    }
+    const project = await ppro.Project.getActiveProject();
+    if (!project) {
+      return { ok: false, mode: "unavailable", message: "Kein aktives Projekt" };
+    }
+    const sequence = await resolveLinkedSequence(project, link || { sequenceName: cut.name });
+    if (!sequence) {
+      return { ok: false, mode: "patch_rejected", message: "Keine verkn\xFCpfte Sequenz gefunden" };
+    }
+    const trackItems = await listVideoTrackItems(sequence, ppro, scenes.length);
+    if (!trackItems.length) {
+      return { ok: false, mode: "patch_rejected", message: "Keine Video-Clips auf V1" };
+    }
+    const paired = matchScenesToClips(scenes, trackItems);
+    if (!paired.ok) {
       return {
         ok: false,
-        mode: "unsupported",
-        message: error instanceof Error ? error.message : String(error)
+        mode: "patch_rejected",
+        message: paired.message || "Clips nicht zuordenbar",
+        missingSceneIds: paired.missingSceneIds,
+        diagnostics: paired.diagnostics
       };
     }
+    const TickTime = ppro.TickTime;
+    if (!TickTime?.createWithSeconds) {
+      return { ok: false, mode: "unavailable", message: "TickTime API fehlt" };
+    }
+    const audioItems = await listAudioTrackItems(sequence, ppro);
+    const usedAudio = /* @__PURE__ */ new Set();
+    let patchedVideo = 0;
+    let patchedAudio = 0;
+    let moveCount = 0;
+    const errors = [];
+    const warnings = [];
+    for (const { scene, itemIndex } of paired.pairs) {
+      const videoFp = trackItems[itemIndex];
+      const item = videoFp?.item;
+      if (!item) continue;
+      if (!trackItemHasTimingActions(item)) {
+        return {
+          ok: false,
+          mode: "unavailable",
+          message: "TrackItem Move/SetStart/SetEnd Actions fehlen"
+        };
+      }
+      const timing = sanitizeSceneTiming(scene);
+      const plan = planClipPatch(timing, videoFp);
+      const applied = applyPlanToItem(
+        project,
+        TickTime,
+        item,
+        plan,
+        `VIDEON: Patch V ${String(scene.id).slice(0, 8)}`
+      );
+      if (!applied.ok) {
+        errors.push(
+          `${scene.id.slice(0, 8)}: ${applied.error?.message || "Patch fehlgeschlagen"} (${plan.mode})`
+        );
+        continue;
+      }
+      if (applied.warning) warnings.push(applied.warning);
+      if (plan.mode === "noop") {
+        patchedVideo += 1;
+        continue;
+      }
+      patchedVideo += 1;
+      if (applied.mode === "move") moveCount += 1;
+      if (applied.movedAudioHint) {
+        const linked = selectLinkedAudioClips(scene, videoFp, audioItems, usedAudio);
+        for (const ai of linked) usedAudio.add(ai);
+        patchedAudio += linked.length;
+        continue;
+      }
+      const audioIndices = selectLinkedAudioClips(scene, videoFp, audioItems, usedAudio);
+      for (const ai of audioIndices) usedAudio.add(ai);
+      const audioPlan = {
+        mode: "set_bounds",
+        timelineStartMs: timing.timelineStartMs,
+        timelineEndMs: timing.timelineEndMs,
+        startMs: timing.startMs,
+        endMs: timing.endMs,
+        applyInOut: false
+      };
+      for (const ai of audioIndices) {
+        const aitem = audioItems[ai]?.item;
+        if (!aitem || !trackItemHasTimingActions(aitem)) continue;
+        const audioApplied = applyPlanToItem(
+          project,
+          TickTime,
+          aitem,
+          audioPlan,
+          `VIDEON: Patch A ${String(scene.id).slice(0, 8)}`
+        );
+        if (audioApplied.ok) patchedAudio += 1;
+        else if (audioApplied.error) {
+          warnings.push(`Audio ${ai}: ${audioApplied.error.message}`);
+        }
+      }
+    }
+    if (patchedVideo === 0) {
+      return {
+        ok: false,
+        mode: "patch_rejected",
+        message: errors[0] || "Kein Clip gepatcht",
+        errors
+      };
+    }
+    try {
+      await stampSceneIdsOnLinkedSequence({ cut, scenes, link });
+    } catch {
+    }
+    const modeLabel = paired.mode === "by_scene_id" ? "" : paired.mode === "by_order" ? " \xB7 Zuordnung nach Reihenfolge" : paired.mode === "hybrid" ? " \xB7 Hybrid-Match" : " \xB7 Multi-Signal-Match";
+    const moveNote = moveCount ? ` \xB7 ${moveCount}\xD7 Move` : "";
+    const audioNote = patchedAudio > 0 ? ` \xB7 ${patchedAudio} Audio` : audioItems.length ? " \xB7 Audio nicht zuordenbar" : "";
+    return {
+      ok: true,
+      mode: "in_place_patch",
+      matchMode: paired.mode,
+      message: `${patchedVideo} Video-Clip(s) in Premiere aktualisiert (Effekte bleiben)${moveNote}${audioNote}${modeLabel}.`,
+      patched: patchedVideo,
+      patchedAudio,
+      extraClips: paired.extraClips,
+      errors: errors.length ? errors : void 0,
+      warnings: warnings.length ? warnings : void 0
+    };
   }
 
   // src/xmeml-pushback.js
-  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var UUID_RE3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   function framesToMs(frames, fps) {
     const rate = fps > 0 ? fps : 25;
     const f = Number(frames);
@@ -2812,7 +3636,7 @@ ${extracted.xmlNativePath}`
       return name;
     }
   }
-  function normalizeFilenameKey(name) {
+  function normalizeFilenameKey2(name) {
     const base3 = String(name || "").split(/[/\\]/).pop()?.trim();
     if (!base3) return "";
     try {
@@ -2835,7 +3659,7 @@ ${extracted.xmlNativePath}`
     if (!raw) return null;
     const stripped = raw.replace(/^file-/i, "").trim();
     if (!stripped || stripped === raw) return null;
-    if (UUID_RE.test(stripped)) return stripped;
+    if (UUID_RE3.test(stripped)) return stripped;
     if (/^\d+$/.test(stripped)) return null;
     if (stripped.length >= 8 && /[a-z]/i.test(stripped)) return stripped;
     return null;
@@ -2931,6 +3755,11 @@ ${extracted.xmlNativePath}`
     const fileNameTag = (inlineFileName || "").trim() || fileMeta?.name || null;
     let mediaAssetId = mediaAssetIdFromFileId(fileIdAttr) || fileMeta?.mediaAssetId || null;
     const filename = pathBasenameFromUrl(pathurl) || fileNameTag || fileMeta?.filename || name || null;
+    const sceneIdFromName = sceneIdFromClipName(name);
+    const sceneIdFromComments = sceneIdFromComment(
+      firstMatch(body, /<comments>([\s\S]*?)<\/comments>/i) || ""
+    );
+    const cutSceneId = sceneIdFromName || sceneIdFromComments || sceneIdFromAnyText(body) || null;
     if (!enabled) return { skipped: true, reason: "disabled" };
     if (start < 0 || end < 0) return { skipped: true, reason: "gap" };
     let startMs = null;
@@ -2952,6 +3781,7 @@ ${extracted.xmlNativePath}`
       name,
       filename,
       mediaAssetId,
+      cutSceneId,
       fileId: fileIdAttr,
       pathurl: pathurl || null,
       startMs,
@@ -2971,6 +3801,7 @@ ${extracted.xmlNativePath}`
     "file",
     "sourcetrack",
     "link",
+    "comments",
     "pproticksin",
     "pproticksout",
     "pproticksduration"
@@ -3136,7 +3967,7 @@ ${extracted.xmlNativePath}`
   function catalogLookupKeys(clip) {
     const keys = [];
     for (const n of [clip.filename, clip.name, pathBasenameFromUrl(clip.pathurl)]) {
-      const k = normalizeFilenameKey(n);
+      const k = normalizeFilenameKey2(n);
       if (k) keys.push(k);
     }
     return [...new Set(keys)];
@@ -3179,7 +4010,30 @@ ${extracted.xmlNativePath}`
   }
   function normalizeCutDetailScenes(detail) {
     if (Array.isArray(detail?.scenes) && detail.scenes.length) {
-      return detail.scenes;
+      const byId = /* @__PURE__ */ new Map();
+      if (Array.isArray(detail?.clips)) {
+        for (const row of detail.clips) {
+          const scene = row?.scene || row;
+          const id = scene?.id;
+          if (!id) continue;
+          byId.set(id, {
+            originalFilename: row.media?.originalFilename || row.media?.filename || scene.originalFilename,
+            mediaFilename: row.media?.filename,
+            media: row.media,
+            mediaAssetId: scene.mediaAssetId || row.media?.id
+          });
+        }
+      }
+      return detail.scenes.map((scene) => {
+        const extra = byId.get(scene.id) || {};
+        return {
+          ...scene,
+          mediaAssetId: scene.mediaAssetId || extra.mediaAssetId,
+          originalFilename: scene.originalFilename || extra.originalFilename,
+          mediaFilename: scene.mediaFilename || extra.mediaFilename,
+          media: scene.media || extra.media
+        };
+      });
     }
     if (Array.isArray(detail?.clips)) {
       return detail.clips.map((row) => {
@@ -3200,7 +4054,7 @@ ${extracted.xmlNativePath}`
     return [];
   }
   function indexFilename(byFilename, name, id, { preferExisting = false } = {}) {
-    const key = normalizeFilenameKey(name);
+    const key = normalizeFilenameKey2(name);
     if (!key) return;
     if (preferExisting && byFilename[key]) return;
     byFilename[key] = id;
@@ -3303,8 +4157,9 @@ ${extracted.xmlNativePath}`
         clampedCount += 1;
       }
       const timelineStartMs = Math.max(0, Math.floor(Number(clip.timelineStartMs) || 0));
+      const stableId = clip.cutSceneId && UUID_RE3.test(String(clip.cutSceneId)) ? String(clip.cutSceneId) : newId();
       return {
-        id: newId(),
+        id: stableId,
         position,
         mediaAssetId: clip.mediaAssetId,
         startMs,
@@ -3332,6 +4187,391 @@ ${extracted.xmlNativePath}`
     const names = unmapped.slice(0, 4).map((c) => c.filename || c.name || c.fileId || "?").join(", ");
     const more = unmapped.length > 4 ? ` (+${unmapped.length - 4})` : "";
     return ` (${names}${more})`;
+  }
+
+  // src/panel-features.js
+  var ENABLE_INPLACE_PATCH = false;
+  var ENABLE_CUTS_TAB = false;
+
+  // src/open-cut.js
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error("aborted"));
+        return;
+      }
+      const t = setTimeout(resolve, ms);
+      if (signal) {
+        const prev = signal.onabort;
+        signal.onabort = (event) => {
+          try {
+            if (typeof prev === "function") prev.call(signal, event);
+          } catch {
+          }
+          clearTimeout(t);
+          reject(new Error("aborted"));
+        };
+      }
+    });
+  }
+  async function ensurePremiereExport(settings, cut, platformProjectId, signal, onPhase, forceFresh) {
+    onPhase?.(OPEN_CUT_PHASE.export);
+    if (!forceFresh) {
+      const existing = await listCutExports(settings, cut.id, platformProjectId, signal);
+      const reusable = pickReusablePremiereExport(cut, existing);
+      if (reusable) return reusable;
+    }
+    const enqueued = await enqueuePremiereExport(
+      settings,
+      cut.id,
+      platformProjectId,
+      forceFresh ? `${openCutIdempotencyKey(cut)}:force:${Date.now()}` : openCutIdempotencyKey(cut),
+      signal
+    );
+    const started = Date.now();
+    let attempt = 0;
+    let current = enqueued;
+    while (current.status !== "succeeded") {
+      if (signal?.aborted) throw new Error("aborted");
+      if (current.status === "failed" || current.status === "cancelled") {
+        throw new Error(current.errorMessage || `Export ${current.status}`);
+      }
+      if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) {
+        throw new Error("Export Timeout (10 Min.)");
+      }
+      await sleep(nextPollDelayMs(attempt), signal);
+      attempt += 1;
+      const detail = await getCutExport(settings, cut.id, current.id, platformProjectId, signal);
+      current = detail?.export || current;
+      if (detail?.export?.status === "succeeded" && detail.downloadUrl) {
+        return { ...detail.export, _downloadUrl: detail.downloadUrl };
+      }
+    }
+    const finalDetail = await getCutExport(settings, cut.id, current.id, platformProjectId, signal);
+    return {
+      ...finalDetail?.export || current,
+      _downloadUrl: finalDetail?.downloadUrl || null
+    };
+  }
+  async function runOpenCut(input) {
+    const {
+      settings,
+      cut,
+      platformProjectId,
+      hostInfo: hostInfo2,
+      signal,
+      handoff = true,
+      forceFreshExport = false,
+      replaceLinked = false,
+      forceZipReplace = false,
+      link = null,
+      onPhase
+    } = input;
+    const emit = (phase, extra) => {
+      onPhase?.(phase, phaseLabel(phase, extra));
+    };
+    if (isAfterEffectsHost(hostInfo2) || hostInfo2?.id === "AEFT") {
+      emit(OPEN_CUT_PHASE.error, "nur Premiere");
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: "Open Cut ist nur in Premiere Pro verf\xFCgbar."
+      };
+    }
+    if (!platformProjectId) {
+      emit(OPEN_CUT_PHASE.error, "Collection fehlt");
+      return { ok: false, mode: "unsupported", message: "Collection pinnen, dann Cuts \xF6ffnen." };
+    }
+    if (!cut?.id) {
+      emit(OPEN_CUT_PHASE.error, "Cut fehlt");
+      return { ok: false, mode: "unsupported", message: "Kein Cut gew\xE4hlt." };
+    }
+    try {
+      if (ENABLE_INPLACE_PATCH && handoff && replaceLinked && !forceZipReplace) {
+        emit(OPEN_CUT_PHASE.import, "Patch\u2026");
+        try {
+          const detail = await getCutDetail(settings, cut.id, platformProjectId, signal);
+          const scenes = normalizeCutDetailScenes(detail);
+          const patched = await patchLinkedSequenceFromCut({
+            cut: { ...cut, name: cut.name || detail?.name },
+            scenes,
+            link: link || { sequenceName: cut.name }
+          });
+          if (patched.ok) {
+            emit(OPEN_CUT_PHASE.done, patched.mode);
+            return {
+              ok: true,
+              mode: patched.mode,
+              cutId: cut.id,
+              sequenceName: link?.sequenceName || cut.name,
+              sequenceGuid: link?.sequenceGuid || null,
+              exportId: link?.exportId || null,
+              patched: patched.patched,
+              matchMode: patched.matchMode,
+              message: patched.message
+            };
+          }
+          emit(OPEN_CUT_PHASE.error, "Patch nein");
+          return {
+            ok: false,
+            mode: "patch_rejected",
+            cutId: cut.id,
+            message: `In-Place-Patch fehlgeschlagen: ${patched.message || "unbekannt"}. Sequenz nicht ersetzt \u2014 Live-Effekte bleiben. Nur wenn n\xF6tig: \u201ECut neu laden\u201C (zerst\xF6rt Live-Effekte).`,
+            patchMessage: patched.message
+          };
+        } catch (patchError) {
+          const patchMsg = patchError instanceof Error ? patchError.message : String(patchError);
+          emit(OPEN_CUT_PHASE.error, "Patch Fehler");
+          return {
+            ok: false,
+            mode: "patch_rejected",
+            cutId: cut.id,
+            message: `In-Place-Patch Fehler: ${patchMsg}. Sequenz nicht ersetzt \u2014 Live-Effekte bleiben. Nur wenn n\xF6tig: \u201ECut neu laden\u201C.`
+          };
+        }
+      }
+      const resolvePackage = async (forceFresh) => {
+        let exportJob2 = await ensurePremiereExport(
+          settings,
+          cut,
+          platformProjectId,
+          signal,
+          emit,
+          forceFresh
+        );
+        let downloadUrl = exportJob2._downloadUrl;
+        if (!downloadUrl) {
+          emit(OPEN_CUT_PHASE.export);
+          const detail = await getCutExport(settings, cut.id, exportJob2.id, platformProjectId, signal);
+          exportJob2 = detail?.export || exportJob2;
+          downloadUrl = detail?.downloadUrl;
+          if (exportJob2.status !== "succeeded") {
+            const started = Date.now();
+            let attempt = 0;
+            while (exportJob2.status !== "succeeded") {
+              if (exportJob2.status === "failed" || exportJob2.status === "cancelled") {
+                throw new Error(exportJob2.errorMessage || `Export ${exportJob2.status}`);
+              }
+              if (Date.now() - started > OPEN_CUT_POLL_TIMEOUT_MS) throw new Error("Export Timeout");
+              await sleep(nextPollDelayMs(attempt), signal);
+              attempt += 1;
+              const again = await getCutExport(settings, cut.id, exportJob2.id, platformProjectId, signal);
+              exportJob2 = again?.export || exportJob2;
+              downloadUrl = again?.downloadUrl;
+            }
+          }
+        }
+        if (!downloadUrl) throw new Error("downloadUrl nach Export fehlt");
+        emit(OPEN_CUT_PHASE.download);
+        const zipBuffer2 = await downloadExportZip(downloadUrl, signal);
+        return { exportJob: exportJob2, zipBuffer: zipBuffer2 };
+      };
+      let packageResult;
+      try {
+        packageResult = await resolvePackage(forceFreshExport);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!forceFreshExport && isMissingStorageKeyError(msg)) {
+          emit(OPEN_CUT_PHASE.export, "Export neu\u2026");
+          packageResult = await resolvePackage(true);
+        } else {
+          throw error;
+        }
+      }
+      const { exportJob, zipBuffer } = packageResult;
+      const cacheKey = openCutCacheKey(cut.id, exportJob.id, exportJob.bytes ?? zipBuffer.byteLength);
+      emit(OPEN_CUT_PHASE.extract);
+      const extracted = await extractOpenCutZip(cacheKey, zipBuffer);
+      if (!handoff) {
+        emit(OPEN_CUT_PHASE.done, "ZIP bereit");
+        return {
+          ok: true,
+          mode: "cache_only",
+          cutId: cut.id,
+          exportId: exportJob.id,
+          xmlPath: extracted.xmlNativePath,
+          extractDir: extracted.extractDir,
+          message: `ZIP bereit:
+${extracted.xmlNativePath}`
+        };
+      }
+      emit(OPEN_CUT_PHASE.import);
+      let opened = await openCutInPremiere({
+        xmlPath: extracted.xmlNativePath,
+        extractDir: extracted.extractDir,
+        cutId: cut.id,
+        exportId: exportJob.id,
+        hostInfo: hostInfo2,
+        binName: settings.binName || "VIDEON",
+        cutName: cut.name,
+        replaceLinked,
+        link
+      });
+      if (!opened.ok) {
+        emit(OPEN_CUT_PHASE.error, opened.message || "import");
+        return opened;
+      }
+      if (opened.mode === "auto_import" || opened.mode === "reveal_and_prompt") {
+        try {
+          const detail = await getCutDetail(settings, cut.id, platformProjectId, signal);
+          const scenes = normalizeCutDetailScenes(detail);
+          const stamped = await stampSceneIdsOnLinkedSequence({
+            cut: { ...cut, name: cut.name || detail?.name },
+            scenes,
+            link: {
+              sequenceName: opened.sequenceName || cut.name,
+              sequenceGuid: opened.sequenceGuid || null
+            }
+          });
+          if (stamped.ok) {
+            opened = {
+              ...opened,
+              message: `${opened.message || "Import OK"} \xB7 ${stamped.message}`,
+              stamped: stamped.stamped
+            };
+          }
+        } catch {
+        }
+      }
+      if (opened.mode === "reveal_and_prompt") {
+        emit(OPEN_CUT_PHASE.handoff);
+      }
+      emit(OPEN_CUT_PHASE.done, opened.mode);
+      return {
+        ...opened,
+        message: opened.message
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "aborted") {
+        emit(OPEN_CUT_PHASE.error, "abgebrochen");
+        return { ok: false, mode: "unsupported", message: "Abgebrochen." };
+      }
+      const friendly = isMissingStorageKeyError(msg) ? `Export/Medien fehlen im Storage (${msg.slice(0, 120)}). Cut-Medien pr\xFCfen oder neu hochladen.` : msg;
+      emit(OPEN_CUT_PHASE.error, friendly.slice(0, 80));
+      return { ok: false, mode: "error", message: friendly };
+    }
+  }
+
+  // src/premiere-capture.js
+  async function getPremiereApi4() {
+    try {
+      return await loadNativeModule("premierepro");
+    } catch {
+      return null;
+    }
+  }
+  async function writePathInDataFolder(fileName) {
+    const uxp = await loadNativeModule("uxp");
+    const fs = uxp.storage?.localFileSystem;
+    if (!fs?.getDataFolder) throw new Error("UXP localFileSystem fehlt");
+    const folder = await fs.getDataFolder();
+    let pushRoot = folder;
+    try {
+      if (typeof folder.createFolder === "function") {
+        const entries = typeof folder.getEntries === "function" ? await folder.getEntries() : [];
+        const existing = entries.find((e) => e?.name === "pushback" && e.isFolder);
+        pushRoot = existing || await folder.createFolder("pushback");
+      }
+    } catch {
+      pushRoot = folder;
+    }
+    const file = await pushRoot.createFile(fileName, { overwrite: true });
+    try {
+      await file.write("", { format: uxp.storage.formats.utf8 });
+    } catch {
+      try {
+        await file.write(new ArrayBuffer(0), { format: uxp.storage.formats.binary });
+      } catch {
+      }
+    }
+    if (!file.nativePath) throw new Error("nativePath f\xFCr Export fehlt");
+    return file;
+  }
+  async function readUtf8File(file) {
+    const uxp = await loadNativeModule("uxp");
+    const data = await file.read({ format: uxp.storage.formats.utf8 });
+    return String(data || "");
+  }
+  async function captureActiveSequenceXml() {
+    const ppro = await getPremiereApi4();
+    if (!ppro) {
+      return { ok: false, mode: "unavailable", message: "premierepro Modul fehlt" };
+    }
+    try {
+      const project = await ppro.Project.getActiveProject();
+      if (!project) {
+        return { ok: false, mode: "unavailable", message: "Kein aktives Premiere-Projekt" };
+      }
+      const sequence = typeof project.getActiveSequence === "function" && await project.getActiveSequence() || null;
+      if (!sequence) {
+        return { ok: false, mode: "unavailable", message: "Keine aktive Sequenz" };
+      }
+      const Converter = ppro.ProjectConverter;
+      const exportFn = Converter && typeof Converter.exportAsFinalCutProXML === "function" && Converter.exportAsFinalCutProXML || typeof project.exportAsFinalCutProXML === "function" && project.exportAsFinalCutProXML.bind(project) || null;
+      if (exportFn) {
+        const stamp = Date.now();
+        const file = await writePathInDataFolder(`pushback-${stamp}.xml`);
+        const path = file.nativePath;
+        let ok;
+        if (Converter && exportFn === Converter.exportAsFinalCutProXML) {
+          ok = await Converter.exportAsFinalCutProXML(sequence, path, true);
+        } else {
+          ok = await exportFn(path, true);
+        }
+        if (ok === false) {
+          return {
+            ok: false,
+            mode: "unavailable",
+            message: "exportAsFinalCutProXML hat false zur\xFCckgegeben"
+          };
+        }
+        const xml = await readUtf8File(file);
+        if (!xml || xml.length < 40) {
+          return { ok: false, mode: "unavailable", message: "Export-XML leer" };
+        }
+        return { ok: true, mode: "host_export", xml, path, sequenceName: sequence.name || null };
+      }
+      return pickXmlFileFallback();
+    } catch (error) {
+      console.warn("[VIDEON] captureActiveSequenceXml failed", error);
+      return pickXmlFileFallback(error instanceof Error ? error.message : String(error));
+    }
+  }
+  async function pickXmlFileFallback(reason) {
+    try {
+      const uxp = await loadNativeModule("uxp");
+      const fs = uxp.storage?.localFileSystem;
+      if (typeof fs?.getFileForOpening !== "function") {
+        return {
+          ok: false,
+          mode: "unsupported",
+          message: (reason ? `${reason}. ` : "") + "Sequenz-Export API fehlt (Premiere \u2265 26.2) und kein Datei-Dialog."
+        };
+      }
+      const file = await fs.getFileForOpening({
+        types: ["xml"],
+        allowMultiple: false
+      });
+      if (!file) {
+        return { ok: false, mode: "unsupported", message: "Kein XML gew\xE4hlt." };
+      }
+      const xml = await readUtf8File(file);
+      if (!xml) return { ok: false, mode: "unsupported", message: "XML leer." };
+      return {
+        ok: true,
+        mode: "file_pick",
+        xml,
+        path: file.nativePath || null,
+        message: reason ? `Host-Export fehlgeschlagen (${reason}) \u2014 Datei verwendet.` : void 0
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        mode: "unsupported",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
   // src/cut-pushback.js
@@ -3481,7 +4721,8 @@ ${extracted.xmlNativePath}`
       sequenceName: link.sequenceName ?? prev.sequenceName ?? null,
       sequenceGuid: link.sequenceGuid ?? prev.sequenceGuid ?? null,
       exportId: link.exportId ?? prev.exportId ?? null,
-      openedAt: link.openedAt || (/* @__PURE__ */ new Date()).toISOString()
+      openedAt: link.openedAt || prev.openedAt || (/* @__PURE__ */ new Date()).toISOString(),
+      syncedUpdatedAt: link.syncedUpdatedAt !== void 0 ? link.syncedUpdatedAt : prev.syncedUpdatedAt ?? null
     };
     writeCutLinks(map);
     return map[key];
@@ -3490,6 +4731,58 @@ ${extracted.xmlNativePath}`
     if (!platformProjectId || !cutId) return null;
     const map = readCutLinks();
     return map[`${platformProjectId}:${cutId}`] || null;
+  }
+  function markCutSequenceSynced(platformProjectId, cutId, syncedUpdatedAt) {
+    if (!platformProjectId || !cutId) return null;
+    const prev = getCutSequenceLink(platformProjectId, cutId) || {
+      cutId,
+      platformProjectId,
+      openedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return saveCutSequenceLink({
+      ...prev,
+      cutId,
+      platformProjectId,
+      syncedUpdatedAt: syncedUpdatedAt || (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+
+  // src/cut-change-watch.js
+  var CUT_CHANGE_WATCH_INTERVAL_MS = 8e3;
+  function parseIsoMs(iso) {
+    if (!iso) return null;
+    const t = Date.parse(String(iso));
+    return Number.isFinite(t) ? t : null;
+  }
+  function isCutStaleVsLink(cutUpdatedAt, syncedUpdatedAt, openedAt = null) {
+    const cutMs = parseIsoMs(cutUpdatedAt);
+    if (cutMs == null) return false;
+    const baselineMs = parseIsoMs(syncedUpdatedAt) ?? parseIsoMs(openedAt);
+    if (baselineMs == null) return false;
+    return cutMs > baselineMs;
+  }
+  function findStaleLinkedCuts(cuts2, getLink) {
+    const list = Array.isArray(cuts2) ? cuts2 : [];
+    const out = [];
+    for (const cut of list) {
+      if (!cut?.id) continue;
+      const link = typeof getLink === "function" ? getLink(cut.id) : null;
+      if (!link) continue;
+      if (isCutStaleVsLink(cut.updatedAt, link.syncedUpdatedAt, link.openedAt)) {
+        out.push({ cut, link });
+      }
+    }
+    return out;
+  }
+  function formatStaleCutsBanner(staleRows, { autoPatch = false } = {}) {
+    const n = staleRows?.length || 0;
+    if (!n) return null;
+    const names = staleRows.slice(0, 3).map((row) => row.cut?.name || row.cut?.id || "Cut").join(", ");
+    const more = n > 3 ? ` (+${n - 3})` : "";
+    if (autoPatch) {
+      return `${n} Cut(s) ge\xE4ndert \u2014 Auto-Patch\u2026 (${names}${more})`;
+    }
+    return `${n} Cut(s) in Videon neuer als Premiere (${names}${more}). \u201ECut neu laden\u201C wenn die Sequenz ersetzt werden soll.`;
   }
 
   // src/collections.js
@@ -3528,10 +4821,41 @@ ${extracted.xmlNativePath}`
     if (hit.startMs == null || hit.endMs == null || hit.endMs < hit.startMs) return null;
     return formatSceneHitClock(hit.endMs - hit.startMs);
   }
+  function sceneHitDurationMs(hit) {
+    if (hit.startMs == null || hit.endMs == null || hit.endMs <= hit.startMs) return null;
+    return hit.endMs - hit.startMs;
+  }
+  function sceneHitOrdinalLabel(hit, index = 0, formatN = (n) => `Szene ${n}`) {
+    const raw = typeof hit?.sceneKey === "string" ? hit.sceneKey.trim() : "";
+    if (raw) {
+      const match = raw.match(/(\d+)/);
+      if (match) return formatN(Number(match[1]));
+      return raw;
+    }
+    return formatN(index + 1);
+  }
+  function sceneHitBadgeLabel(hit) {
+    const timing = sceneHitTimingLabel(hit);
+    const duration = sceneHitDurationLabel(hit);
+    return [timing, duration ? `\u0394 ${duration}` : null].filter(Boolean).join(" \xB7 ") || null;
+  }
   function formatRank(rank) {
     const n = Number(rank);
     if (!Number.isFinite(n) || n <= 0) return null;
     return n.toFixed(2);
+  }
+  function sceneHitDurationDetailLabel(hit) {
+    const clock = sceneHitDurationLabel(hit);
+    const ms = sceneHitDurationMs(hit);
+    if (ms == null) return clock;
+    const sec = (ms / 1e3).toFixed(ms % 1e3 === 0 ? 0 : 1);
+    return clock ? `${clock} \xB7 ${sec} s` : `${sec} s`;
+  }
+  function sceneHitMsRangeLabel(hit) {
+    if (hit.startMs == null && hit.endMs == null) return null;
+    const a = hit.startMs == null ? "\u2014" : String(Math.floor(hit.startMs));
+    const b = hit.endMs == null ? "\u2014" : String(Math.floor(hit.endMs));
+    return `${a}\u2013${b} ms`;
   }
   function buildHitHref(hit) {
     if (!hit?.mediaAssetId || !hit?.platformProjectId) return null;
@@ -3551,16 +4875,19 @@ ${extracted.xmlNativePath}`
       id: String(raw.id || `${mediaAssetId}:${sceneKey || "asset"}`),
       mediaAssetId,
       platformProjectId,
-      sceneKey,
+      analysisRunId: raw.analysisRunId == null || raw.analysisRunId === "" ? null : String(raw.analysisRunId),
+      sceneKey: sceneKey?.trim() ? sceneKey.trim() : null,
       mediaFilename: String(raw.mediaFilename || raw.filename || "Untitled"),
       startMs: Number.isFinite(startMs) ? startMs : null,
       endMs: Number.isFinite(endMs) ? endMs : null,
-      searchText: String(raw.searchText || "").slice(0, 400),
+      searchText: String(raw.searchText || "").slice(0, 800),
       projectName: raw.projectName == null ? null : String(raw.projectName),
       rank: Number.isFinite(rank) ? rank : null,
       href: raw.href ? String(raw.href) : null
     };
     if (!hit.href) hit.href = buildHitHref(hit);
+    hit.durationMs = sceneHitDurationMs(hit);
+    hit.hasSceneBounds = hit.startMs != null && hit.endMs != null && hit.endMs > hit.startMs;
     return hit;
   }
   function dedupeSearchHits(hits2) {
@@ -3575,7 +4902,7 @@ ${extracted.xmlNativePath}`
   }
 
   // src/index.js
-  var PANEL_VERSION = "0.1.28";
+  var PANEL_VERSION = "0.1.49";
   var PREVIEW_CONCURRENCY = 2;
   var els = {};
   function queryEls() {
@@ -3592,6 +4919,8 @@ ${extracted.xmlNativePath}`
       compName: document.getElementById("comp-name"),
       premiereBinLabel: document.getElementById("premiere-bin-label"),
       aeCompLabel: document.getElementById("ae-comp-label"),
+      cutChangeWatch: document.getElementById("cut-change-watch"),
+      cutChangeAutoPatch: document.getElementById("cut-change-auto-patch"),
       settingsSave: document.getElementById("settings-save"),
       testConnection: document.getElementById("test-connection"),
       reloadCollections: document.getElementById("reload-collections"),
@@ -3621,6 +4950,7 @@ ${extracted.xmlNativePath}`
       progressBar: document.getElementById("progress-bar"),
       modeScenesBtn: document.getElementById("mode-scenes-btn"),
       modeCutsBtn: document.getElementById("mode-cuts-btn"),
+      modeTabs: document.getElementById("mode-tabs"),
       scenesMode: document.getElementById("scenes-mode"),
       cutsMode: document.getElementById("cuts-mode"),
       cutsBanner: document.getElementById("cuts-banner"),
@@ -3631,7 +4961,19 @@ ${extracted.xmlNativePath}`
       pushbackDiff: document.getElementById("pushback-diff"),
       pushbackApplyBtn: document.getElementById("pushback-apply-btn"),
       pushbackRefreshBtn: document.getElementById("pushback-refresh-btn"),
-      pushbackCancelBtn: document.getElementById("pushback-cancel-btn")
+      pushbackCancelBtn: document.getElementById("pushback-cancel-btn"),
+      hitDetail: document.getElementById("hit-detail"),
+      hitDetailScrim: document.getElementById("hit-detail-scrim"),
+      hitDetailClose: document.getElementById("hit-detail-close"),
+      hitDetailTitle: document.getElementById("hit-detail-title"),
+      hitDetailMedia: document.getElementById("hit-detail-media"),
+      hitDetailPoster: document.getElementById("hit-detail-poster"),
+      hitDetailVideo: document.getElementById("hit-detail-video"),
+      hitDetailMeta: document.getElementById("hit-detail-meta"),
+      hitDetailSnippet: document.getElementById("hit-detail-snippet"),
+      hitDetailOpenWeb: document.getElementById("hit-detail-open-web"),
+      hitDetailInsert: document.getElementById("hit-detail-insert"),
+      hitDetailSelect: document.getElementById("hit-detail-select")
     };
   }
   var REQUIRED_EL_IDS = [
@@ -3660,26 +5002,79 @@ ${extracted.xmlNativePath}`
   var openCutBusy = false;
   var pendingPushback = null;
   var hostInfo = { id: "PPRO", source: "default" };
+  var detailHitId = null;
+  var detailPreviewAbort = null;
   var aeCursorSec = 0;
+  var cutChangeWatchTimer = null;
+  var cutChangeWatchTickBusy = false;
+  var lastStaleBannerKey = "";
+  function alertClass(tone = "") {
+    if (tone === "error") return "ds-alert ds-alert--error panel-banner";
+    if (tone === "ok") return "ds-alert ds-alert--ok panel-banner";
+    return "ds-alert ds-alert--info panel-banner";
+  }
   function showBanner(message, tone = "") {
     const target = panelMode === "cuts" ? els.cutsBanner : els.banner;
     if (!target) return;
     target.hidden = !message;
     target.textContent = message || "";
-    target.className = `banner${tone ? ` ${tone}` : ""}`;
+    target.className = alertClass(tone);
+  }
+  function stopCutChangeWatch() {
+    if (cutChangeWatchTimer != null) {
+      clearInterval(cutChangeWatchTimer);
+      cutChangeWatchTimer = null;
+    }
+    cutChangeWatchTickBusy = false;
+  }
+  function startCutChangeWatch() {
+    if (!ENABLE_CUTS_TAB || !ENABLE_INPLACE_PATCH) return;
+    stopCutChangeWatch();
+    const settings = loadSettings();
+    if (settings.cutChangeWatch === false || !ENABLE_INPLACE_PATCH) return;
+    cutChangeWatchTimer = setInterval(() => {
+      void tickCutChangeWatch();
+    }, CUT_CHANGE_WATCH_INTERVAL_MS);
   }
   function setPanelMode(mode) {
+    if (!ENABLE_CUTS_TAB) {
+      panelMode = "scenes";
+      els.modeTabs?.classList.add("hidden");
+      if (els.modeTabs) els.modeTabs.hidden = true;
+      els.scenesMode?.classList.remove("hidden");
+      els.cutsMode?.classList.add("hidden");
+      if (els.cutsMode) {
+        els.cutsMode.hidden = true;
+        els.cutsMode.setAttribute("aria-hidden", "true");
+      }
+      stopCutChangeWatch();
+      cutsAbort?.abort();
+      openCutAbort?.abort();
+      openCutBusy = false;
+      hidePushbackConfirm();
+      return;
+    }
     panelMode = mode === "cuts" ? "cuts" : "scenes";
+    els.modeTabs?.classList.remove("hidden");
+    if (els.modeTabs) els.modeTabs.hidden = false;
     els.modeScenesBtn?.classList.toggle("is-active", panelMode === "scenes");
+    els.modeScenesBtn?.classList.toggle("ds-chip--selected", panelMode === "scenes");
     els.modeCutsBtn?.classList.toggle("is-active", panelMode === "cuts");
+    els.modeCutsBtn?.classList.toggle("ds-chip--selected", panelMode === "cuts");
     els.scenesMode?.classList.toggle("hidden", panelMode !== "scenes");
     els.cutsMode?.classList.toggle("hidden", panelMode !== "cuts");
+    if (els.cutsMode) {
+      els.cutsMode.hidden = panelMode !== "cuts";
+      els.cutsMode.setAttribute("aria-hidden", panelMode !== "cuts" ? "true" : "false");
+    }
     if (panelMode === "cuts") {
       searchAbort?.abort();
       openCutAbort?.abort();
       openCutBusy = false;
       void refreshCutsList();
+      startCutChangeWatch();
     } else {
+      stopCutChangeWatch();
       cutsAbort?.abort();
       openCutAbort?.abort();
       openCutBusy = false;
@@ -3782,6 +5177,14 @@ ${extracted.xmlNativePath}`
     if (els.compName) els.compName.value = settings.compName || "VIDEON";
     if (els.aeSequential) els.aeSequential.checked = settings.aeSequential !== false;
     if (els.aeGapFrames) els.aeGapFrames.value = String(settings.aeGapFrames ?? 0);
+    if (els.cutChangeWatch) {
+      els.cutChangeWatch.checked = Boolean(settings.cutChangeWatch) && ENABLE_INPLACE_PATCH;
+      els.cutChangeWatch.disabled = !ENABLE_INPLACE_PATCH;
+    }
+    if (els.cutChangeAutoPatch) {
+      els.cutChangeAutoPatch.checked = Boolean(settings.cutChangeAutoPatch) && ENABLE_INPLACE_PATCH;
+      els.cutChangeAutoPatch.disabled = !ENABLE_INPLACE_PATCH;
+    }
     syncCollectionUi(settings.defaultPlatformProjectId || "");
   }
   function readFormSettings() {
@@ -3793,7 +5196,9 @@ ${extracted.xmlNativePath}`
       binName: els.binName?.value.trim() || "VIDEON",
       compName: els.compName?.value.trim() || "VIDEON",
       aeSequential: els.aeSequential ? els.aeSequential.checked : true,
-      aeGapFrames: els.aeGapFrames ? Math.max(0, Number(els.aeGapFrames.value) || 0) : 0
+      aeGapFrames: els.aeGapFrames ? Math.max(0, Number(els.aeGapFrames.value) || 0) : 0,
+      cutChangeWatch: ENABLE_INPLACE_PATCH && els.cutChangeWatch ? els.cutChangeWatch.checked : false,
+      cutChangeAutoPatch: ENABLE_INPLACE_PATCH && els.cutChangeAutoPatch ? els.cutChangeAutoPatch.checked : false
     };
   }
   function onCollectionChange(event) {
@@ -3802,13 +5207,13 @@ ${extracted.xmlNativePath}`
     if (els.collectionSelectMain) els.collectionSelectMain.value = id;
     if (els.defaultProjectId) els.defaultProjectId.value = id;
     saveSettings({ defaultPlatformProjectId: id });
-    if (panelMode === "cuts") void refreshCutsList();
+    if (ENABLE_CUTS_TAB && panelMode === "cuts") void refreshCutsList();
   }
   function showCutsBanner(message, tone = "") {
     if (!els.cutsBanner) return;
     els.cutsBanner.hidden = !message;
     els.cutsBanner.textContent = message || "";
-    els.cutsBanner.className = `banner${tone ? ` ${tone}` : ""}`;
+    els.cutsBanner.className = alertClass(tone);
   }
   function updateCutRowStatus(cutId, text, isError = false) {
     let card = null;
@@ -3834,50 +5239,58 @@ ${extracted.xmlNativePath}`
     const card = document.createElement("article");
     card.className = "cut-card";
     card.setAttribute("data-cut-id", cut.id);
+    const settings = loadSettings();
+    const platformProjectId = settings.defaultPlatformProjectId || "";
+    const link = platformProjectId ? getCutSequenceLink(platformProjectId, cut.id) : null;
+    const stale = Boolean(
+      link && isCutStaleVsLink(cut.updatedAt, link.syncedUpdatedAt, link.openedAt)
+    );
+    if (stale) card.classList.add("is-stale");
     const title = document.createElement("div");
     title.className = "cut-card-title";
     title.textContent = cut.name;
+    if (stale) {
+      const badge = document.createElement("span");
+      badge.className = "cut-card-stale-badge";
+      badge.textContent = "neu in Videon";
+      title.append(" ", badge);
+    }
     const meta = document.createElement("div");
     meta.className = "cut-card-meta";
     const parts = [canvasLabel(cut)];
     if (cut.sceneCount != null) parts.push(`${cut.sceneCount} Szenen`);
     parts.push(formatUpdatedAt(cut.updatedAt));
+    if (link) parts.push("verkn\xFCpft");
     meta.textContent = parts.join(" \xB7 ");
     const actions = document.createElement("div");
     actions.className = "cut-card-actions";
-    const openBtn = document.createElement("button");
-    openBtn.type = "button";
-    openBtn.className = "primary";
-    openBtn.textContent = "In Premiere \xF6ffnen";
+    const openBtn = makeDsBtn("primary", "sm", "In Premiere \xF6ffnen");
     on(openBtn, "click", (event) => {
       event.stopPropagation?.();
       void startOpenCut(cut, { handoff: true, replaceLinked: false, forceFreshExport: false });
     });
-    const refreshBtn = document.createElement("button");
-    refreshBtn.type = "button";
-    refreshBtn.className = "ghost";
-    refreshBtn.textContent = "Premiere aktualisieren";
-    on(refreshBtn, "click", (event) => {
+    const replaceBtn = makeDsBtn("ghost", "sm", "Cut neu laden");
+    replaceBtn.title = "ZIP-Import \u2014 ersetzt die verkn\xFCpfte Sequenz (Live-Effekte gehen verloren)";
+    on(replaceBtn, "click", (event) => {
       event.stopPropagation?.();
-      void startOpenCut(cut, { handoff: true, replaceLinked: true, forceFreshExport: true });
+      void startOpenCut(cut, {
+        handoff: true,
+        replaceLinked: true,
+        forceFreshExport: true,
+        forceZipReplace: true
+      });
     });
-    const cacheBtn = document.createElement("button");
-    cacheBtn.type = "button";
-    cacheBtn.className = "ghost";
-    cacheBtn.textContent = "ZIP cachen";
+    const cacheBtn = makeDsBtn("ghost", "sm", "ZIP cachen");
     on(cacheBtn, "click", (event) => {
       event.stopPropagation?.();
       void startOpenCut(cut, { handoff: false, replaceLinked: false, forceFreshExport: false });
     });
-    const pushBtn = document.createElement("button");
-    pushBtn.type = "button";
-    pushBtn.className = "ghost";
-    pushBtn.textContent = "Cut aktualisieren";
+    const pushBtn = makeDsBtn("ghost", "sm", "Cut aktualisieren");
     on(pushBtn, "click", (event) => {
       event.stopPropagation?.();
       void startCutPushback(cut);
     });
-    actions.append(openBtn, refreshBtn, pushBtn, cacheBtn);
+    actions.append(openBtn, replaceBtn, pushBtn, cacheBtn);
     card.append(title, meta, actions);
     return card;
   }
@@ -3891,8 +5304,9 @@ ${extracted.xmlNativePath}`
     els.cutsList.innerHTML = "";
     for (const cut of cuts) els.cutsList.append(buildCutCard(cut));
   }
-  async function refreshCutsList() {
-    const settings = saveSettings(readFormSettings());
+  async function refreshCutsList(options = {}) {
+    const quiet = Boolean(options.quiet);
+    const settings = quiet ? loadSettings() : saveSettings(readFormSettings());
     const platformProjectId = settings.defaultPlatformProjectId || "";
     if (!platformProjectId) {
       cuts = [];
@@ -3900,32 +5314,77 @@ ${extracted.xmlNativePath}`
       if (els.cutsList) {
         els.cutsList.innerHTML = '<p class="empty">Collection pinnen (nicht \u201Ealle\u201C), dann Cuts laden.</p>';
       }
-      showCutsBanner("F\xFCr Cuts eine Collection w\xE4hlen.", "error");
+      if (!quiet) showCutsBanner("F\xFCr Cuts eine Collection w\xE4hlen.", "error");
       return;
     }
     if (!settings.apiToken) {
-      showCutsBanner("API Token in den Einstellungen setzen.", "error");
+      if (!quiet) showCutsBanner("API Token in den Einstellungen setzen.", "error");
       return;
     }
     cutsAbort?.abort();
     cutsAbort = new AbortController();
     const { signal } = cutsAbort;
-    showCutsBanner("Cuts laden\u2026");
+    if (!quiet) showCutsBanner("Cuts laden\u2026");
     try {
       cuts = await listCuts(settings, platformProjectId, signal);
       if (signal.aborted) return;
       renderCutsList();
-      showCutsBanner(cuts.length ? `${cuts.length} Cut(s)` : "Keine Cuts.", cuts.length ? "ok" : "");
+      const stale = applyStaleCutUi(settings, platformProjectId);
+      if (!quiet) {
+        if (stale.length) {
+        } else {
+          showCutsBanner(cuts.length ? `${cuts.length} Cut(s)` : "Keine Cuts.", cuts.length ? "ok" : "");
+        }
+      }
     } catch (error) {
       if (signal.aborted) return;
       const msg = error instanceof Error ? error.message : String(error);
-      showCutsBanner(msg, "error");
+      if (!quiet) showCutsBanner(msg, "error");
+    }
+  }
+  function applyStaleCutUi(settings, platformProjectId) {
+    const stale = findStaleLinkedCuts(cuts, (cutId) => getCutSequenceLink(platformProjectId, cutId));
+    const autoPatch = Boolean(settings.cutChangeAutoPatch);
+    const banner = formatStaleCutsBanner(stale, { autoPatch });
+    const key = stale.map((row) => `${row.cut.id}:${row.cut.updatedAt}`).join("|");
+    if (banner && key !== lastStaleBannerKey) {
+      lastStaleBannerKey = key;
+      showCutsBanner(banner, autoPatch ? "" : "ok");
+    }
+    if (!stale.length) lastStaleBannerKey = "";
+    return stale;
+  }
+  async function tickCutChangeWatch() {
+    if (!ENABLE_INPLACE_PATCH) return;
+    if (panelMode !== "cuts" || cutChangeWatchTickBusy || openCutBusy) return;
+    const settings = loadSettings();
+    if (settings.cutChangeWatch === false) return;
+    const platformProjectId = settings.defaultPlatformProjectId || "";
+    if (!platformProjectId || !settings.apiToken) return;
+    if (isAfterEffectsHost(hostInfo)) return;
+    cutChangeWatchTickBusy = true;
+    try {
+      await refreshCutsList({ quiet: true });
+      const stale = applyStaleCutUi(settings, platformProjectId);
+      if (!stale.length || !settings.cutChangeAutoPatch) return;
+      const next = stale[0]?.cut;
+      if (!next) return;
+      await startOpenCut(next, {
+        handoff: true,
+        replaceLinked: true,
+        forceFreshExport: false,
+        forceZipReplace: false,
+        fromChangeWatch: true
+      });
+    } finally {
+      cutChangeWatchTickBusy = false;
     }
   }
   async function startOpenCut(cut, options = {}) {
     const handoff = options.handoff !== false;
     const replaceLinked = Boolean(options.replaceLinked);
     const forceFreshExport = Boolean(options.forceFreshExport);
+    const forceZipReplace = Boolean(options.forceZipReplace);
     if (openCutBusy) {
       showCutsBanner("Bitte warten \u2014 Open Cut l\xE4uft bereits.", "error");
       return;
@@ -3954,6 +5413,7 @@ ${extracted.xmlNativePath}`
       handoff,
       forceFreshExport,
       replaceLinked: replaceLinked && Boolean(link || cut.name),
+      forceZipReplace: forceZipReplace && replaceLinked,
       link: link || { sequenceName: cut.name },
       onPhase: (_phase, label) => {
         updateCutRowStatus(cut.id, label, false);
@@ -3969,8 +5429,13 @@ ${extracted.xmlNativePath}`
           sequenceName: result.sequenceName || cut.name,
           sequenceGuid: result.sequenceGuid || null,
           exportId: result.exportId || null,
-          openedAt: (/* @__PURE__ */ new Date()).toISOString()
+          openedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          syncedUpdatedAt: cut.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
         });
+        markCutSequenceSynced(platformProjectId, cut.id, cut.updatedAt || (/* @__PURE__ */ new Date()).toISOString());
+        const idx = cuts.findIndex((c) => c.id === cut.id);
+        if (idx >= 0 && cut.updatedAt) cuts[idx] = { ...cuts[idx], updatedAt: cut.updatedAt };
+        renderCutsList();
       }
       updateCutRowStatus(cut.id, result.message || "Fertig", false);
       showCutsBanner(result.message || "Fertig", "ok");
@@ -4069,14 +5534,14 @@ ${extracted.xmlNativePath}`
         updatedAt: nowIso
       };
       if (withSequenceReplace) {
-        showCutsBanner("Cut OK \u2014 Sequenz wird ersetzt\u2026", "ok");
+        showCutsBanner("Cut OK \u2014 Premiere wird aktualisiert\u2026", "ok");
         openCutBusy = false;
         await startOpenCut(
           { ...cut, updatedAt: nowIso, name: cut.name || preview.sequenceName || cut.id },
-          { handoff: true, replaceLinked: true, forceFreshExport: true }
+          { handoff: true, replaceLinked: true, forceFreshExport: true, forceZipReplace: true }
         );
         showCutsBanner(
-          "Cut aktualisiert. Sequenz ersetzt \u2014 beide Seiten gleich (Cut-Modell inkl. gespeicherter Clip-Effekte).",
+          "Cut aktualisiert. Sequenz per ZIP ersetzt (Live-Effekte nur, wenn im Sidecar).",
           "ok"
         );
         return;
@@ -4100,12 +5565,24 @@ ${extracted.xmlNativePath}`
     els.selectAllBtn.hidden = !hasHits;
     els.selectNoneBtn.hidden = !hasHits;
   }
+  function setControlDisabled(el, disabled) {
+    if (!el) return;
+    const on2 = Boolean(disabled);
+    if (el.tagName === "BUTTON" || el.tagName === "INPUT" || el.tagName === "SELECT") {
+      el.disabled = on2;
+    }
+    el.setAttribute("aria-disabled", on2 ? "true" : "false");
+    el.classList.toggle("is-disabled", on2);
+    if (el.getAttribute("role") === "button") {
+      el.setAttribute("tabindex", on2 ? "-1" : "0");
+    }
+  }
   function setBusy(busy) {
-    els.searchBtn.disabled = busy;
-    els.dryRunBtn.disabled = busy;
-    els.insertBtn.disabled = busy;
+    setControlDisabled(els.searchBtn, busy);
+    setControlDisabled(els.dryRunBtn, busy);
+    setControlDisabled(els.insertBtn, busy);
     for (const btn of els.resultsList?.querySelectorAll(".hit-insert-btn") || []) {
-      btn.disabled = busy;
+      setControlDisabled(btn, busy);
     }
   }
   function findHitCard(hitId) {
@@ -4172,12 +5649,40 @@ ${extracted.xmlNativePath}`
       showBanner(msg, "error");
     }
   }
+  function makeDsBtn(variant, size, labelText, extraClass = "") {
+    const btn = document.createElement("div");
+    btn.setAttribute("role", "button");
+    btn.setAttribute("tabindex", "0");
+    btn.className = `ds-btn ds-btn--${variant} ds-btn--${size} ds-btn--square${extraClass ? ` ${extraClass}` : ""}`;
+    const label = document.createElement("span");
+    label.className = "ds-btn__label";
+    label.textContent = labelText;
+    btn.append(label);
+    bindRoleButtonKeys(btn);
+    return btn;
+  }
+  function bindRoleButtonKeys(el) {
+    if (!el || el.getAttribute("data-key-bound") === "1") return;
+    el.setAttribute("data-key-bound", "1");
+    on(el, "keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (el.getAttribute("aria-disabled") === "true" || el.classList.contains("is-disabled")) return;
+      event.preventDefault?.();
+      el.click?.();
+    });
+  }
+  function bindAllRoleButtons(root = document) {
+    for (const el of root.querySelectorAll?.('[role="button"]') || []) {
+      bindRoleButtonKeys(el);
+    }
+  }
   function buildHitRow(settings, hit, posterUrl) {
     const row = document.createElement("article");
-    row.className = `hit-card${selected.has(hit.id) ? " selected" : ""}`;
+    row.className = `ds-card ds-card--media ds-card--structured hit-card${selected.has(hit.id) ? " is-selected selected" : ""}`;
     row.setAttribute("data-hit-id", hit.id);
+    row.title = "Klicken: Details anzeigen";
     const media = document.createElement("div");
-    media.className = "hit-card-media";
+    media.className = "ds-card__media hit-card-media";
     const img = document.createElement("img");
     img.className = "hit-card-thumb";
     img.alt = hit.mediaFilename || "Szene";
@@ -4189,6 +5694,7 @@ ${extracted.xmlNativePath}`
     const video = document.createElement("video");
     video.className = "hit-card-preview";
     video.muted = true;
+    video.defaultMuted = true;
     video.loop = true;
     video.autoplay = true;
     video.playsInline = true;
@@ -4197,81 +5703,87 @@ ${extracted.xmlNativePath}`
     video.setAttribute("loop", "");
     video.setAttribute("autoplay", "");
     video.setAttribute("playsinline", "");
-    video.style.display = "none";
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.className = "hit-card-check";
-    check.checked = selected.has(hit.id);
-    check.title = "Ausw\xE4hlen";
-    on(check, "click", (event) => {
-      event.stopPropagation?.();
-    });
-    on(check, "change", () => {
-      if (check.checked) selected.add(hit.id);
-      else selected.delete(hit.id);
-      row.classList.toggle("selected", check.checked);
-      updateSelectionChrome();
-    });
     const timing = sceneHitTimingLabel(hit);
     const duration = sceneHitDurationLabel(hit);
-    if (duration || timing) {
+    const badgeLabel = sceneHitBadgeLabel(hit);
+    if (badgeLabel) {
       const badge = document.createElement("span");
-      badge.className = "hit-card-badge";
-      badge.textContent = duration ? `\u0394 ${duration}` : timing;
+      badge.className = "ds-badge ds-badge--neutral hit-card-badge";
+      badge.textContent = badgeLabel;
+      badge.title = [timing && `In/Out ${timing}`, duration && `Dauer ${duration}`].filter(Boolean).join(" \xB7 ");
       media.append(badge);
     }
-    media.append(img, video, check);
+    media.append(img, video);
     const body = document.createElement("div");
-    body.className = "hit-card-body";
+    body.className = "ds-card__body";
     const title = document.createElement("div");
-    title.className = "hit-title";
+    title.className = "ds-card__title";
     title.textContent = hit.mediaFilename || "Clip";
     title.title = hit.mediaFilename || "";
     const meta = document.createElement("div");
-    meta.className = "hit-meta";
+    meta.className = "ds-card__meta";
+    const ordinal = sceneHitOrdinalLabel(hit, 0);
+    const sceneBadge = document.createElement("span");
+    sceneBadge.className = "ds-badge ds-badge--neutral";
+    sceneBadge.textContent = ordinal;
+    sceneBadge.title = hit.sceneKey ? `sceneKey: ${hit.sceneKey}` : "Szene";
+    meta.append(sceneBadge);
+    if (hit.hasSceneBounds && timing) {
+      const timeBadge = document.createElement("span");
+      timeBadge.className = "ds-badge ds-badge--neutral";
+      timeBadge.textContent = timing;
+      timeBadge.title = duration ? `Dauer ${duration}` : timing;
+      meta.append(timeBadge);
+    } else {
+      const fullBadge = document.createElement("span");
+      fullBadge.className = "ds-badge ds-badge--neutral";
+      fullBadge.textContent = "voller Clip";
+      meta.append(fullBadge);
+    }
     const rank = formatRank(hit.rank);
-    meta.textContent = [hit.projectName, timing, hit.sceneKey, rank ? `rank ${rank}` : null].filter(Boolean).join(" \xB7 ");
+    const projectBits = [hit.projectName, rank ? `rank ${rank}` : null].filter(Boolean);
+    if (projectBits.length) {
+      const projectMeta = document.createElement("span");
+      projectMeta.textContent = projectBits.join(" \xB7 ");
+      meta.append(projectMeta);
+    }
     const snippet = document.createElement("div");
-    snippet.className = "hit-snippet";
-    snippet.textContent = hit.searchText || "";
-    snippet.title = hit.searchText || "";
+    snippet.className = "ds-card__snippet";
+    if (hit.searchText?.trim()) {
+      snippet.textContent = hit.searchText;
+      snippet.title = hit.searchText;
+    } else {
+      snippet.classList.add("is-empty");
+      snippet.textContent = "Kein Search-Snippet";
+    }
+    const actionsWrap = document.createElement("div");
+    actionsWrap.className = "ds-card__actions";
     const actions = document.createElement("div");
-    actions.className = "hit-actions";
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "ghost tiny";
-    open.textContent = "In VIDEON";
-    on(open, "click", (event) => {
+    actions.className = "ds-card-actions ds-card-actions--hairline";
+    const showBtn = makeDsBtn("ghost", "xs", "Anzeigen", "hit-show-btn");
+    showBtn.title = "Szene-Details & Preview";
+    on(showBtn, "click", (event) => {
       event.stopPropagation?.();
-      const href = absoluteProductHref(settings, hit.href);
-      if (!href) {
-        showBanner("Kein Deep Link am Treffer.", "error");
-        return;
-      }
-      void openExternal(href);
+      event.preventDefault?.();
+      void openHitDetail(hit.id);
     });
-    const insertOne = document.createElement("button");
-    insertOne.type = "button";
-    insertOne.className = "primary tiny hit-insert-btn";
-    insertOne.textContent = "+";
+    const insertOne = makeDsBtn("primary", "xs", "+", "hit-insert-btn");
     insertOne.title = "In Premiere / AE einf\xFCgen";
     on(insertOne, "click", (event) => {
       event.stopPropagation?.();
+      event.preventDefault?.();
       void runInsert([hit.id]);
     });
-    actions.append(open, insertOne);
-    body.append(title, meta, snippet, actions);
+    actions.append(showBtn, insertOne);
+    actionsWrap.append(actions);
+    body.append(title, meta, snippet, actionsWrap);
     row.append(media, body);
     on(row, "click", (event) => {
       const target = event.target;
-      if (target === check || target === open || target === insertOne || target && open.contains?.(target) || target && insertOne.contains?.(target)) {
+      if (target === insertOne || target === showBtn || target && insertOne.contains?.(target) || target && showBtn.contains?.(target)) {
         return;
       }
-      check.checked = !check.checked;
-      if (check.checked) selected.add(hit.id);
-      else selected.delete(hit.id);
-      row.classList.toggle("selected", check.checked);
-      updateSelectionChrome();
+      void openHitDetail(hit.id);
     });
     return row;
   }
@@ -4284,75 +5796,320 @@ ${extracted.xmlNativePath}`
     img.src = posterUrl;
     img.classList.remove("hit-ph");
   }
-  function applyPreviewToCard(hitId, previewSrcOrList) {
-    const candidates = Array.isArray(previewSrcOrList) ? previewSrcOrList.filter(Boolean) : previewSrcOrList ? [previewSrcOrList] : [];
-    if (!candidates.length) return;
-    const card = findHitCard(hitId);
-    if (!card) return;
-    const video = card.querySelector("video.hit-card-preview");
-    const img = card.querySelector("img.hit-card-thumb");
-    if (!video) return;
+  function normalizePreviewCandidates(previewSrcOrList) {
+    if (Array.isArray(previewSrcOrList)) return previewSrcOrList.filter(Boolean);
+    return previewSrcOrList ? [previewSrcOrList] : [];
+  }
+  function bindUxpVideoPreview(video, previewSrcOrList, options = {}) {
+    const candidates = normalizePreviewCandidates(previewSrcOrList);
+    const label = options.label || "video";
+    if (!video || !candidates.length) return;
     let attempt = 0;
     let settled = false;
-    const hideVideo = () => {
-      video.style.display = "none";
-      video.classList.remove("is-visible");
-      if (img) img.classList.remove("hit-thumb-under");
-    };
-    const startPlayback = () => {
-      if (settled) return;
-      settled = true;
-      video.style.display = "block";
+    let gen = (video._videonPreviewGen || 0) + 1;
+    video._videonPreviewGen = gen;
+    const reveal = () => {
       video.classList.add("is-visible");
-      if (img) img.classList.add("hit-thumb-under");
+      if (typeof options.onReveal === "function") options.onReveal();
+    };
+    const conceal = () => {
+      video.classList.remove("is-visible");
+      if (typeof options.onConceal === "function") options.onConceal();
+    };
+    const armMuted = () => {
       try {
-        void video.play?.();
+        video.muted = true;
+        video.defaultMuted = true;
+        video.volume = 0;
+        video.setAttribute("muted", "");
+        video.playsInline = true;
+        video.loop = true;
+        video.autoplay = true;
+      } catch {
+      }
+    };
+    const tryPlay = () => {
+      if (video._videonPreviewGen !== gen || settled) return;
+      armMuted();
+      try {
+        const p = video.play?.();
+        if (p && typeof p.then === "function") {
+          p.then(() => {
+            if (video._videonPreviewGen !== gen || settled) return;
+            setTimeout(() => {
+              if (video._videonPreviewGen !== gen || settled) return;
+              if (!video.paused && video.readyState >= 2) {
+                settled = true;
+                reveal();
+                return;
+              }
+              console.warn(`[VIDEON] ${label} play stalled`, video.currentSrc || video.src);
+              tryNext();
+            }, 800);
+          }).catch((error) => {
+            console.warn(`[VIDEON] ${label} play rejected`, error);
+            if (video._videonPreviewGen !== gen) return;
+            settled = false;
+            tryNext();
+          });
+        }
       } catch (error) {
-        console.warn("[VIDEON] video.play threw", hitId, error);
+        console.warn(`[VIDEON] ${label} play threw`, error);
         settled = false;
         tryNext();
       }
     };
     const tryNext = () => {
+      if (video._videonPreviewGen !== gen) return;
       if (attempt >= candidates.length) {
-        hideVideo();
-        console.warn("[VIDEON] video: all src candidates failed", hitId, candidates);
+        conceal();
+        console.warn(`[VIDEON] ${label}: all src candidates failed`, candidates);
         return;
       }
       const src = candidates[attempt];
       attempt += 1;
       settled = false;
-      console.info("[VIDEON] video try src", hitId, src);
+      conceal();
+      console.info(`[VIDEON] ${label} try src`, src);
+      armMuted();
       try {
         video.pause?.();
       } catch {
       }
+      video.removeAttribute("src");
       video.src = src;
       try {
         video.load?.();
       } catch {
       }
       setTimeout(() => {
-        if (!settled && video.readyState >= 2) startPlayback();
+        if (video._videonPreviewGen !== gen || settled) return;
+        if (video.readyState >= 2) tryPlay();
       }, 450);
     };
     video.onerror = () => {
+      if (video._videonPreviewGen !== gen) return;
       console.warn(
-        "[VIDEON] video error",
-        hitId,
+        `[VIDEON] ${label} error`,
         video.error?.message || video.error,
         "src=",
-        video.src
+        video.currentSrc || video.src
       );
-      if (settled) {
-        hideVideo();
-        return;
-      }
+      settled = false;
       tryNext();
     };
-    video.onloadeddata = () => startPlayback();
-    video.oncanplay = () => startPlayback();
+    video.onplaying = () => {
+      if (video._videonPreviewGen !== gen || settled) return;
+      settled = true;
+      reveal();
+    };
+    video.onloadeddata = () => tryPlay();
+    video.oncanplay = () => tryPlay();
     tryNext();
+  }
+  function applyPreviewToCard(hitId, previewSrcOrList) {
+    const card = findHitCard(hitId);
+    if (!card) return;
+    const video = card.querySelector("video.hit-card-preview");
+    const img = card.querySelector("img.hit-card-thumb");
+    if (!video) return;
+    bindUxpVideoPreview(video, previewSrcOrList, {
+      label: `card:${hitId}`,
+      onReveal: () => {
+        if (img) img.classList.add("hit-thumb-under");
+      },
+      onConceal: () => {
+        if (img) img.classList.remove("hit-thumb-under");
+      }
+    });
+  }
+  function appendDetailKv(key, value) {
+    if (!els.hitDetailMeta || value == null || value === "") return;
+    const row = document.createElement("div");
+    row.className = "hit-detail-kv-row";
+    const k = document.createElement("div");
+    k.className = "hit-detail-kv-key";
+    k.textContent = key;
+    const v = document.createElement("div");
+    v.className = "hit-detail-kv-val";
+    v.textContent = String(value);
+    row.append(k, v);
+    els.hitDetailMeta.append(row);
+  }
+  function sizeHitDetailMedia() {
+    const media = els.hitDetailMedia;
+    const sheet = els.hitDetail?.querySelector?.(".hit-detail-sheet");
+    if (!media || !sheet) return;
+    const width = Math.max(sheet.clientWidth || media.clientWidth || 0, 160);
+    const ideal = Math.round(width * 9 / 16);
+    const panelH = els.hitDetail?.clientHeight || 0;
+    const cap = panelH > 0 ? Math.floor(panelH * 0.5) : ideal;
+    const height = Math.max(140, Math.min(ideal, cap || ideal, 360));
+    media.style.height = `${height}px`;
+    media.style.maxHeight = `${Math.max(cap, 140)}px`;
+  }
+  function fillHitDetailMeta(hit) {
+    if (els.hitDetailMeta) els.hitDetailMeta.textContent = "";
+    appendDetailKv("Datei", hit.mediaFilename);
+    appendDetailKv("Typ", hit.hasSceneBounds ? "Szene" : "voller Clip");
+    appendDetailKv("Szene", sceneHitOrdinalLabel(hit, 0));
+    if (hit.sceneKey) appendDetailKv("sceneKey", hit.sceneKey);
+    appendDetailKv("In/Out", sceneHitTimingLabel(hit) || "\u2014");
+    appendDetailKv("Dauer", sceneHitDurationDetailLabel(hit) || sceneHitDurationLabel(hit));
+    appendDetailKv("Zeit (ms)", sceneHitMsRangeLabel(hit));
+    appendDetailKv("Collection", hit.projectName);
+    appendDetailKv("Rank", formatRank(hit.rank));
+    appendDetailKv("Analysis", hit.analysisRunId);
+    appendDetailKv("Asset", hit.mediaAssetId);
+    appendDetailKv("Project-ID", hit.platformProjectId);
+    appendDetailKv("Hit-ID", hit.id);
+    appendDetailKv("Deep Link", hit.href);
+    const q = els.searchInput?.value?.trim?.();
+    if (q) appendDetailKv("Query", q);
+  }
+  function resetDetailMedia() {
+    const video = els.hitDetailVideo;
+    const poster = els.hitDetailPoster;
+    if (video) {
+      video._videonPreviewGen = (video._videonPreviewGen || 0) + 1;
+      try {
+        video.pause?.();
+      } catch {
+      }
+      video.removeAttribute("src");
+      try {
+        video.load?.();
+      } catch {
+      }
+      video.classList.remove("is-visible");
+      video.style.display = "";
+      video.onerror = null;
+      video.onloadeddata = null;
+      video.oncanplay = null;
+      video.onplaying = null;
+    }
+    if (poster) {
+      poster.classList.remove("is-under");
+      poster.removeAttribute("src");
+      poster.alt = "";
+    }
+  }
+  function applyPreviewToDetail(previewSrcOrList) {
+    const video = els.hitDetailVideo;
+    const poster = els.hitDetailPoster;
+    if (!video) return;
+    bindUxpVideoPreview(video, previewSrcOrList, {
+      label: "detail",
+      onReveal: () => {
+        if (poster) poster.classList.add("is-under");
+      },
+      onConceal: () => {
+        if (poster) poster.classList.remove("is-under");
+      }
+    });
+  }
+  function syncDetailSelectLabel() {
+    const label = els.hitDetailSelect?.querySelector?.(".ds-btn__label");
+    if (!label || !detailHitId) return;
+    label.textContent = selected.has(detailHitId) ? "Abw\xE4hlen" : "Ausw\xE4hlen";
+  }
+  function setHitSelected(hitId, on2) {
+    if (!hitId) return;
+    if (on2) selected.add(hitId);
+    else selected.delete(hitId);
+    const card = findHitCard(hitId);
+    if (card) {
+      card.classList.toggle("selected", on2);
+      card.classList.toggle("is-selected", on2);
+    }
+    updateSelectionChrome();
+    if (detailHitId === hitId) syncDetailSelectLabel();
+  }
+  function closeHitDetail() {
+    detailHitId = null;
+    if (detailPreviewAbort) {
+      detailPreviewAbort.abort();
+      detailPreviewAbort = null;
+    }
+    resetDetailMedia();
+    if (els.hitDetail) {
+      els.hitDetail.classList.add("hidden");
+      els.hitDetail.hidden = true;
+      els.hitDetail.style.display = "none";
+      els.hitDetail.setAttribute("aria-hidden", "true");
+    }
+  }
+  async function openHitDetail(hitId) {
+    if (!els.hitDetail) {
+      els.hitDetail = document.getElementById("hit-detail");
+      els.hitDetailScrim = document.getElementById("hit-detail-scrim");
+      els.hitDetailClose = document.getElementById("hit-detail-close");
+      els.hitDetailTitle = document.getElementById("hit-detail-title");
+      els.hitDetailMedia = document.getElementById("hit-detail-media");
+      els.hitDetailPoster = document.getElementById("hit-detail-poster");
+      els.hitDetailVideo = document.getElementById("hit-detail-video");
+      els.hitDetailMeta = document.getElementById("hit-detail-meta");
+      els.hitDetailSnippet = document.getElementById("hit-detail-snippet");
+      els.hitDetailOpenWeb = document.getElementById("hit-detail-open-web");
+      els.hitDetailInsert = document.getElementById("hit-detail-insert");
+      els.hitDetailSelect = document.getElementById("hit-detail-select");
+    }
+    const hit = hits.find((item) => item.id === hitId);
+    if (!hit) {
+      showBanner("Treffer nicht gefunden.", "error");
+      return;
+    }
+    if (!els.hitDetail) {
+      showBanner("Detail-Overlay fehlt im Panel-DOM \u2014 Plugin neu laden.", "error");
+      return;
+    }
+    if (!els.hitDetailMedia) els.hitDetailMedia = document.getElementById("hit-detail-media");
+    detailHitId = hit.id;
+    const settings = readFormSettings();
+    if (els.hitDetailTitle) els.hitDetailTitle.textContent = hit.mediaFilename || "Szene";
+    fillHitDetailMeta(hit);
+    syncDetailSelectLabel();
+    if (els.hitDetailSnippet) {
+      if (hit.searchText?.trim()) {
+        els.hitDetailSnippet.classList.remove("is-empty");
+        els.hitDetailSnippet.textContent = hit.searchText;
+      } else {
+        els.hitDetailSnippet.classList.add("is-empty");
+        els.hitDetailSnippet.textContent = "Kein Index-Text (Summary/Tags)";
+      }
+    }
+    resetDetailMedia();
+    const card = findHitCard(hit.id);
+    const cardThumb = card?.querySelector?.("img.hit-card-thumb");
+    if (els.hitDetailPoster && cardThumb?.src) {
+      els.hitDetailPoster.src = cardThumb.src;
+      els.hitDetailPoster.alt = hit.mediaFilename || "Szene";
+    }
+    els.hitDetail.classList.remove("hidden");
+    els.hitDetail.hidden = false;
+    els.hitDetail.style.display = "flex";
+    els.hitDetail.setAttribute("aria-hidden", "false");
+    sizeHitDetailMedia();
+    setTimeout(() => {
+      if (detailHitId === hit.id) sizeHitDetailMedia();
+    }, 50);
+    console.info("[VIDEON] openHitDetail", hit.id);
+    const cardVideo = card?.querySelector?.("video.hit-card-preview");
+    const warmSrc = cardVideo?.classList?.contains("is-visible") && (cardVideo.currentSrc || cardVideo.src) ? [cardVideo.currentSrc || cardVideo.src] : [];
+    if (detailPreviewAbort) detailPreviewAbort.abort();
+    detailPreviewAbort = new AbortController();
+    const signal = detailPreviewAbort.signal;
+    try {
+      const materialized = await loadPreviewForHit(settings, hit, signal);
+      if (signal.aborted || detailHitId !== hit.id) return;
+      const urls = materialized?.urls?.length ? materialized.urls : materialized?.url ? [materialized.url] : [];
+      const merged = [...warmSrc, ...urls].filter((u, i, arr) => u && arr.indexOf(u) === i);
+      applyPreviewToDetail(merged);
+    } catch (error) {
+      if (signal.aborted) return;
+      console.warn("[VIDEON] detail preview failed", error);
+      if (warmSrc.length) applyPreviewToDetail(warmSrc);
+    }
   }
   async function loadPreviewForHit(settings, hit, signal) {
     const key = previewCacheKey(hit);
@@ -4424,6 +6181,7 @@ ${extracted.xmlNativePath}`
     });
   }
   async function runSearch() {
+    closeHitDetail();
     const settings = saveSettings(readFormSettings());
     const q = els.searchInput.value.trim();
     if (!q) {
@@ -4626,21 +6384,25 @@ ${extracted.xmlNativePath}`
     })();
   }
   function bindPanel() {
-    on(els.modeScenesBtn, "click", () => setPanelMode("scenes"));
-    on(els.modeCutsBtn, "click", () => setPanelMode("cuts"));
-    on(els.cutsRefreshBtn, "click", () => {
-      void refreshCutsList();
-    });
-    on(els.pushbackApplyBtn, "click", () => {
-      void confirmPushback(false);
-    });
-    on(els.pushbackRefreshBtn, "click", () => {
-      void confirmPushback(true);
-    });
-    on(els.pushbackCancelBtn, "click", () => {
-      hidePushbackConfirm();
-      showCutsBanner("Pushback abgebrochen.");
-    });
+    bindAllRoleButtons(document);
+    if (ENABLE_CUTS_TAB) {
+      on(els.modeScenesBtn, "click", () => setPanelMode("scenes"));
+      on(els.modeCutsBtn, "click", () => setPanelMode("cuts"));
+      on(els.cutsRefreshBtn, "click", () => {
+        void refreshCutsList();
+      });
+      on(els.pushbackApplyBtn, "click", () => {
+        void confirmPushback(false);
+      });
+      on(els.pushbackRefreshBtn, "click", () => {
+        void confirmPushback(true);
+      });
+      on(els.pushbackCancelBtn, "click", () => {
+        hidePushbackConfirm();
+        showCutsBanner("Pushback abgebrochen.");
+      });
+    }
+    setPanelMode("scenes");
     on(els.settingsToggle, "click", () => {
       els.settingsPanel?.classList.toggle("hidden");
       if (els.settingsPanel && !els.settingsPanel.classList.contains("hidden")) void refreshCacheUi(false);
@@ -4657,6 +6419,7 @@ ${extracted.xmlNativePath}`
       }
       const settings = saveSettings({ ...draft, productBaseUrl: urlCheck.value });
       applySettingsToForm(settings);
+      if (ENABLE_CUTS_TAB && panelMode === "cuts") startCutChangeWatch();
       if (els.settingsStatus) {
         els.settingsStatus.hidden = false;
         els.settingsStatus.textContent = looksLikeApiToken(settings.apiToken) ? "Gespeichert." : "Gespeichert \u2014 Token-Format pr\xFCfen (videon_\u2026).";
@@ -4695,23 +6458,21 @@ ${extracted.xmlNativePath}`
     on(els.collectionSelectMain, "change", onCollectionChange);
     on(els.selectAllBtn, "click", () => {
       for (const hit of hits) selected.add(hit.id);
-      for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
-        input.checked = true;
-      }
       for (const card of els.resultsList?.querySelectorAll(".hit-card") || []) {
         card.classList.add("selected");
+        card.classList.add("is-selected");
       }
       updateSelectionChrome();
+      syncDetailSelectLabel();
     });
     on(els.selectNoneBtn, "click", () => {
       selected.clear();
-      for (const input of els.resultsList?.querySelectorAll('input[type="checkbox"]') || []) {
-        input.checked = false;
-      }
       for (const card of els.resultsList?.querySelectorAll(".hit-card") || []) {
         card.classList.remove("selected");
+        card.classList.remove("is-selected");
       }
       updateSelectionChrome();
+      syncDetailSelectLabel();
     });
     on(els.searchBtn, "click", () => {
       void runSearch();
@@ -4724,6 +6485,32 @@ ${extracted.xmlNativePath}`
     });
     on(els.insertBtn, "click", () => {
       void runInsert();
+    });
+    on(els.hitDetailClose, "click", () => {
+      closeHitDetail();
+    });
+    on(els.hitDetailScrim, "click", () => {
+      closeHitDetail();
+    });
+    on(els.hitDetailSelect, "click", () => {
+      if (!detailHitId) return;
+      setHitSelected(detailHitId, !selected.has(detailHitId));
+    });
+    on(els.hitDetailOpenWeb, "click", () => {
+      const hit = hits.find((item) => item.id === detailHitId);
+      if (!hit) return;
+      const settings = readFormSettings();
+      const href = absoluteProductHref(settings, hit.href);
+      if (!href) {
+        showBanner("Kein Deep Link am Treffer.", "error");
+        return;
+      }
+      void openExternal(href);
+    });
+    on(els.hitDetailInsert, "click", () => {
+      const id = detailHitId;
+      if (!id) return;
+      void runInsert([id]);
     });
   }
   function bootPanel() {

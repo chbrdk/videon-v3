@@ -25,4 +25,6 @@ Capture **as much as XMEML exposes** from Premiere and keep it in Cut **data** (
 
 ## Operator
 
-Panel **v0.1.28** → Cut aktualisieren → Übernehmen → Premiere aktualisieren. Diff may show `Clip-Sidecar` / `Track-Sidecar` / `Sequenz-Extras`.
+Panel **v0.1.31+** → **Premiere aktualisieren** = multi-signal in-place (keeps live FX). **Sequenz ersetzen** = ZIP (destructive). Diff may show `Clip-Sidecar` / `Track-Sidecar` / `Sequenz-Extras`.
+
+See also: `knowledge/adobe-uxp-inplace-patch-premiere.md` (Wave P4).

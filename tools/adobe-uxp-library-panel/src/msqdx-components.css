@@ -1,0 +1,624 @@
+/**
+ * MSQ DX component mirror for Adobe UXP (plain CSS — no React @msqdx/ui).
+ * Class names match msqdx-ui `ds-*` public API.
+ * Sources: packages/ui/src/css/{button,field,chip,primitives,components,extended}.css
+ * Snapshot: 2026-09-10 · knowledge/adobe-uxp-panel-msqdx-ui.md
+ *
+ * No color-mix() — UXP Chromium may lack it; solid rgba fallbacks only.
+ *
+ * CRITICAL — Premiere UXP: native <button> keeps Spectrum host chrome (orange rings,
+ * grey pills). Panel uses div[role=button].ds-btn instead. See knowledge note.
+ */
+
+/* —— aliases used by Card / Alert —— */
+:root {
+  --surface-1: var(--bg1);
+  --border: var(--line);
+  --bad: var(--danger);
+  --success: var(--ok);
+  --warning: var(--warn);
+  --primary-ink: #1a150c;
+  --accent-solid: #ff6a3b;
+  --ghost-line: rgba(255, 255, 255, 0.14);
+}
+
+/* —— Button (div[role=button] — never rely on native <button> in UXP) —— */
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0;
+  font: inherit;
+  font-family: var(--font-body, system-ui, sans-serif);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 0;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  background: transparent;
+  color: #ededed;
+  outline: none;
+  box-shadow: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ds-btn:focus,
+.ds-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--accent-solid);
+}
+
+.ds-btn.is-disabled,
+.ds-btn[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ds-btn:not(.is-disabled):not([aria-disabled='true']):active {
+  transform: translateY(1px);
+}
+
+.ds-btn__label {
+  min-width: 0;
+  pointer-events: none;
+}
+
+.ds-btn--xs {
+  min-height: 1.35rem;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.03em;
+}
+
+.ds-btn--sm {
+  min-height: 1.55rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+
+.ds-btn--md {
+  min-height: 1.9rem;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.ds-btn--square {
+  border-radius: 0;
+}
+
+.ds-btn--block {
+  width: 100%;
+}
+
+.ds-btn--primary {
+  background: var(--accent-solid);
+  color: var(--primary-ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.ds-btn--primary:not(.is-disabled):not([aria-disabled='true']):hover {
+  filter: brightness(1.06);
+}
+
+.ds-btn--ghost {
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8b8b8;
+  border-color: var(--ghost-line);
+}
+
+.ds-btn--ghost:not(.is-disabled):not([aria-disabled='true']):hover {
+  color: #ededed;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.ds-btn--subtle {
+  background: var(--surface-2, #171717);
+  color: #ededed;
+  border-color: var(--ghost-line);
+}
+
+/* Legacy aliases */
+.ds-btn.primary {
+  background: var(--accent-solid);
+  color: var(--primary-ink);
+  border-color: transparent;
+  font-weight: 600;
+}
+.ds-btn.ghost {
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8b8b8;
+  border-color: var(--ghost-line);
+}
+
+/* —— Field / Input / Select —— */
+.ds-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
+  min-width: 0;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.ds-field--sm {
+  gap: 0.2rem;
+}
+
+.ds-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  font-family: var(--font-body, system-ui, sans-serif);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #8a8a8a;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.ds-field-hint {
+  margin: 0;
+  font-size: 0.65rem;
+  color: #8a8a8a;
+}
+
+.ds-input,
+.search-input,
+.ds-textarea,
+select.ds-input {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 0;
+  color: #ededed;
+  font-family: var(--font-body, system-ui, sans-serif);
+  font-weight: 400;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  padding: 0.45rem 0.55rem;
+  outline: none;
+  box-shadow: none;
+}
+
+.ds-input::placeholder,
+.search-input::placeholder {
+  color: #6f6f6f;
+  opacity: 1;
+}
+
+.ds-input:focus,
+.ds-input:focus-visible,
+.search-input:focus,
+.search-input:focus-visible,
+select.ds-input:focus,
+select.ds-input:focus-visible {
+  outline: none;
+  border-color: rgba(255, 106, 59, 0.35);
+  border-bottom-color: var(--accent-solid);
+  box-shadow: none;
+}
+
+.ds-input:disabled,
+.search-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ds-input--sm {
+  font-size: 0.75rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.ds-input--md {
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.ds-input--block,
+.search-input {
+  display: block;
+  width: 100%;
+}
+
+select.ds-input {
+  background-image: linear-gradient(45deg, transparent 50%, #8a8a8a 50%),
+    linear-gradient(135deg, #8a8a8a 50%, transparent 50%);
+  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 1.5rem;
+}
+
+/* —— Chip —— */
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: var(--type-md);
+  line-height: 1.2;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.55rem;
+}
+
+.ds-chip:focus,
+.ds-chip:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--accent-solid, #ff6a3b);
+}
+
+.ds-chip--sm {
+  padding: 0.16rem 0.4rem;
+  font-size: var(--type-xs);
+  letter-spacing: var(--track-meta);
+}
+
+.ds-chip--selected {
+  border-color: rgba(255, 106, 59, 0.45);
+  color: #ff6a3b;
+  background: rgba(255, 106, 59, 0.1);
+}
+
+.ds-chip--static {
+  cursor: default;
+}
+
+.ds-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) 0.28rem;
+  min-width: 0;
+}
+
+/* —— Badge —— */
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #9a9a9a;
+  font-family: var(--font-body, system-ui, sans-serif);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.ds-badge--accent {
+  border-color: transparent;
+  color: #ff6a3b;
+  background: rgba(255, 106, 59, 0.12);
+}
+
+.ds-badge--success {
+  border-color: transparent;
+  color: #00ca55;
+  background: rgba(0, 202, 85, 0.12);
+}
+
+.ds-badge--danger {
+  border-color: transparent;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.ds-badge--neutral {
+  /* default */
+}
+
+/* —— Alert / banner —— */
+.ds-alert {
+  margin: 0;
+  font-size: var(--type-sm);
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.ds-alert--error {
+  color: var(--danger);
+}
+
+.ds-alert--ok {
+  color: var(--ok);
+}
+
+.ds-alert--info {
+  color: var(--muted);
+}
+
+/* Boxed banner for dense UXP panel (still uses ds-alert tones) */
+.panel-banner {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--field);
+}
+
+.panel-banner.ds-alert--error {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.panel-banner.ds-alert--ok {
+  border-color: rgba(0, 202, 85, 0.35);
+  background: rgba(0, 202, 85, 0.08);
+}
+
+/* —— Panel / FormSection —— */
+.ds-panel {
+  margin: 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.ds-panel--flush {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ds-panel--card {
+  padding: 0.75rem 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ds-panel--default {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ds-form-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ds-form-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.ds-form-section__title {
+  margin: 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.ds-form-section__body {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+/* —— Card —— */
+.ds-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  background: var(--bg0);
+  border-radius: 0;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ds-card--structured {
+  gap: var(--space-2);
+}
+
+.ds-card--media {
+  padding-top: 0;
+  overflow: hidden;
+}
+
+.ds-card__media {
+  position: relative;
+  margin: 0 calc(-1 * var(--space-3, 0.75rem)) 0;
+  height: 96px;
+  overflow: hidden;
+  background: #080808;
+}
+
+.ds-card--media .ds-card__media {
+  margin-top: 0;
+}
+
+.ds-card__media > img,
+.ds-card__media > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ds-card__title {
+  margin: 0;
+  font-size: var(--type-md);
+  font-weight: var(--weight-medium);
+  line-height: 1.25;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: var(--type-xs);
+}
+
+.ds-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  min-width: 0;
+}
+
+.ds-card__snippet {
+  font-size: var(--type-2xs);
+  line-height: 1.35;
+  color: var(--muted);
+  max-height: 2.7em;
+  overflow: hidden;
+}
+
+.ds-card__snippet.is-empty {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.ds-card__actions {
+  margin-top: auto;
+  min-width: 0;
+}
+
+.ds-card-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.ds-card-actions--hairline {
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ds-card-actions .ds-btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.ds-card-actions .hit-insert-btn {
+  flex: 0 0 auto;
+  min-width: 2.25rem;
+}
+
+.ds-card.is-selected {
+  border-color: rgba(255, 106, 59, 0.55);
+  box-shadow: inset 2px 0 0 #ff6a3b;
+}
+
+.ds-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* —— Checkbox —— */
+.ds-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--type-sm);
+  color: var(--ink);
+  margin: 0;
+}
+
+.ds-checkbox {
+  width: 0.9rem;
+  height: 0.9rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+
+/* —— Empty / loading —— */
+.ds-empty {
+  margin: var(--space-2) 0;
+  color: var(--muted);
+  font-size: var(--type-sm);
+}
+
+/* —— Brand lockup (panel header — orange mark + VIDEON; no ink BrandCorner plaque) —— */
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  /* UXP: no flex gap — use margin on children */
+}
+
+.brand-lockup-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 0.55rem;
+  color: #ff6a3b;
+}
+
+.brand-lockup-mark svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.brand-lockup-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-lockup-label {
+  margin: 0 0 0.15rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  color: #ededed;
+  text-transform: uppercase;
+}

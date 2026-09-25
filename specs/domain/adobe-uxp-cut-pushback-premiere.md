@@ -100,13 +100,14 @@ Without a stable link, pushback is guesswork.
 2. Pushback prefers the **active sequence** only if it matches the linked name (or operator picks from a short list of sequences).
 3. If no link / mismatch → operator must **choose Cut** + confirm “active sequence → this Cut” (extra friction, allowed).
 
-**Replace (Cut → Premiere refresh, locked ≥ 0.1.24):**
+**Replace (Cut → Premiere refresh; Wave P4/P5 **paused** ≥ 0.1.35; Cuts tab UI paused ≥ 0.1.36 — provider-first):**
 
 1. **Cut aktualisieren → Übernehmen** MUST write Cut only — MUST NOT download ZIP / import a new sequence.
-2. **Premiere aktualisieren** / **Übernehmen + Sequenz ersetzen** MUST enqueue a **fresh** `premiere_xml` (no reuse of exports older than Cut `updatedAt`) and import it, then **remove prior linked sequences** for that Cut so the project does not accumulate duplicates.
-3. In-place clip rewrite of an open timeline is out of scope; “replace” = import new + delete previous linked sequence(s).
+2. **In-place Premiere aktualisieren** is **paused** (`ENABLE_INPLACE_PATCH = false`). Operators MUST use **Cut neu laden** (explicit ZIP replace) when the Premiere sequence should match a newer Cut.
+3. **Cut neu laden** MUST enqueue a fresh `premiere_xml` and import it, then remove prior linked sequences — destructive to live FX unless sidecars re-inject them.
+4. Outbound `premiere_xml` SHOULD still embed scene ids in clip `<name>` / `<comments>` for future identity work; post-import stamp MAY remain.
 
-**Out of scope P0:** writing custom metadata into the Premiere project file; cloud-side link table (MAY add later under Collection).
+See `knowledge/adobe-uxp-provider-first.md`.
 
 ## Capture (how we read Premiere)
 
@@ -168,7 +169,8 @@ Alternative: reuse existing PATCH scene batch APIs after client-side mapping —
 
 ## EARS (intent)
 
-1. WHEN sync runs THEN it MUST be operator-initiated (button), never background.
+1. WHEN a **mutating** sync runs (in-place patch, ZIP replace, pushback apply) THEN it MUST be operator-initiated **or** an explicit opt-in Auto-Patch (Wave P5). Background watchers MUST NOT mutate without that opt-in.
+1b. WHEN Cut-change watch is enabled THEN the panel MAY poll Cut `updatedAt` while Cuts mode is open and MUST surface stale linked Cuts (banner/badge) without mutating.
 2. WHEN Cut → Premiere sync succeeds THEN mapped timeline on the Premiere sequence MUST match the Cut.
 3. WHEN Premiere → Cut apply is requested THEN the system MUST show a diff including ignored unsupported features.
 4. WHEN apply succeeds AND unsupported leftovers existed THEN the panel MUST offer **Premiere aus Cut neu laden** before claiming full parity.
@@ -220,6 +222,33 @@ Alternative: reuse existing PATCH scene batch APIs after client-side mapping —
 - [ ] Spike: host-only state that never appears in XMEML
 
 Knowledge: `knowledge/adobe-uxp-pushback-effects-backlog.md`
+
+### Wave P4 — In-place Premiere patch by scene id (**PAUSED ≥ 0.1.35**)
+
+**Why paused:** Moves/deletes scramble positions; UXP timing APIs fragile. Product focus → clip/Cut **provider** (`knowledge/adobe-uxp-provider-first.md`).
+
+Code retained behind `ENABLE_INPLACE_PATCH = false` (modules `premiere-patch-cut.js`, `clip-match.js`). Operator path is **Cut neu laden** (ZIP).
+
+Prior ship notes (≥ 0.1.32) kept for revival:
+
+1. Export stamps `filename ⟦{sceneId}⟧` + `<comments>videon:scene:{sceneId}</comments>`.
+2. Multi-signal match + linked audio timing; no silent ZIP when gate on.
+3. Explicit ZIP replace for full re-import.
+
+- [x] Clip identity encode/decode + export stamp (kept)
+- [x] Panel in-place patch modules (kept, gated off)
+- [ ] Re-enable only after SequenceEditor insert/remove + reliable move/delete
+
+Knowledge: `knowledge/adobe-uxp-inplace-patch-premiere.md`
+
+### Wave P5 — Cut change watch (ping / optional auto-patch) (**PAUSED ≥ 0.1.35**)
+
+Depends on P4. Defaults off; settings disabled while `ENABLE_INPLACE_PATCH` is false.
+
+Knowledge: `knowledge/adobe-uxp-cut-change-watch.md`
+
+- [x] Poll + stale UI modules (kept, gated)
+- [ ] Revisit with provider-first notify-only (no mutation) if useful
 
 ### Wave P2.1 — V2 / VO apply
 

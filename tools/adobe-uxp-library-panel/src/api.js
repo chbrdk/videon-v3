@@ -17,6 +17,10 @@ const DEFAULTS = {
   compName: 'VIDEON',
   aeSequential: true,
   aeGapFrames: 0,
+  /** Wave P5 paused (provider-first): poll off by default. */
+  cutChangeWatch: false,
+  /** Wave P5 paused: auto in-place patch stays off. */
+  cutChangeAutoPatch: false,
 }
 
 export function loadSettings() {

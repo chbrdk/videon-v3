@@ -220,25 +220,48 @@ export function previewCacheKey(hit, durationMs = 2000) {
   return `${hit.mediaAssetId}:preview:t${t}:d${durationMs}`
 }
 
-/** Build a file:// URL from a native OS path (macOS/Windows). */
-function nativePathToFileUrl(nativePath) {
+/**
+ * UXP local media scheme is `file:/path` (one slash after the colon).
+ * Browser-style `file:///path` is also emitted as a fallback candidate.
+ * @see https://developer.adobe.com/premiere-pro/uxp/resources/recipes/filesystem-operations/
+ */
+export function nativePathToUxpFileUrl(nativePath) {
   if (!nativePath || typeof nativePath !== 'string') return null
   const trimmed = nativePath.trim()
   if (!trimmed) return null
   if (/^file:/i.test(trimmed)) return trimmed
+  const encoded = (path) => encodeURI(path).replace(/#/g, '%23')
+  if (trimmed.startsWith('/')) {
+    // macOS/Unix: /Users/… → file:/Users/…
+    return `file:${encoded(trimmed)}`
+  }
+  // Windows: C:\foo\bar.mp4 → file:/C:/foo/bar.mp4
+  const win = trimmed.replace(/\\/g, '/').replace(/\/{2,}/g, '/')
+  return `file:/${encoded(win)}`
+}
+
+/** Browser-style file:///… (kept as secondary <video> candidate). */
+export function nativePathToFileUrl(nativePath) {
+  if (!nativePath || typeof nativePath !== 'string') return null
+  const trimmed = nativePath.trim()
+  if (!trimmed) return null
+  if (/^file:\/\//i.test(trimmed)) return trimmed
+  if (/^file:\//i.test(trimmed) && !/^file:\/\//i.test(trimmed)) {
+    // file:/Users/x → file:///Users/x
+    return `file://${trimmed.slice('file:'.length)}`
+  }
   if (trimmed.startsWith('/')) {
     return `file://${encodeURI(trimmed).replace(/#/g, '%23')}`
   }
-  // Windows: C:\foo\bar.mp4 → file:///C:/foo/bar.mp4
   return `file:///${encodeURI(trimmed.replace(/\\/g, '/')).replace(/#/g, '%23')}`
 }
 
 /**
  * Resolve UXP-playable URL candidates for a File entry.
- * Premiere <video> often rejects blob: — try plugin-data / getFsUrl / file:// nativePath.
+ * Premiere <video> often rejects blob: — prefer plugin-data / getFsUrl / file:/ nativePath.
  * @returns {Promise<string[]>}
  */
-async function resolveEntryPlaybackUrls(file) {
+export async function resolveEntryPlaybackUrls(file) {
   if (!file) return []
   const out = []
   const push = (value) => {
@@ -246,8 +269,9 @@ async function resolveEntryPlaybackUrls(file) {
     if (s && !out.includes(s)) out.push(s)
   }
 
+  // Prefer schemes Adobe documents for panel media.
   try {
-    if (file.url) push(file.url)
+    if (file.name) push(`plugin-data:/${file.name}`)
   } catch {
     /* ignore */
   }
@@ -260,7 +284,7 @@ async function resolveEntryPlaybackUrls(file) {
   }
 
   try {
-    if (file.name) push(`plugin-data:/${file.name}`)
+    if (file.url) push(file.url)
   } catch {
     /* ignore */
   }
@@ -268,6 +292,7 @@ async function resolveEntryPlaybackUrls(file) {
   try {
     const native = file.nativePath
     if (native) {
+      push(nativePathToUxpFileUrl(native))
       push(nativePathToFileUrl(native))
       push(native)
     }

@@ -16,6 +16,7 @@ const MANAGED_CLIPITEM_TAGS = new Set([
   'file',
   'sourcetrack',
   'link',
+  'comments',
   'pproticksin',
   'pproticksout',
   'pproticksduration',
@@ -26,7 +27,7 @@ const MANAGED_CLIPITEM_TAGS = new Set([
  * primary extract when residual parsing is ambiguous.
  */
 const CLIP_SIDECAR_TAG_RE =
-  /<(filter|labels|comments|marker|markers|logginginfo|fielddominance|alphatype|pixelaspectratio|anamorphic|stillframe|historyid|masterclipid|ismasterclip|label2|pprocolorspace|filmtranslate|itemhistory|compositemode|syncoffset|softdelete|keeptime|rate|timecode|duration|mediatypes|channelcount)\b[\s\S]*?<\/\1>/gi
+  /<(filter|labels|marker|markers|logginginfo|fielddominance|alphatype|pixelaspectratio|anamorphic|stillframe|historyid|masterclipid|ismasterclip|label2|pprocolorspace|filmtranslate|itemhistory|compositemode|syncoffset|softdelete|keeptime|rate|timecode|duration|mediatypes|channelcount)\b[\s\S]*?<\/\1>/gi
 
 const TRANSITION_RE = /<transitionitem\b[\s\S]*?<\/transitionitem>/gi
 const GENERATOR_RE = /<(generatoritem|title)\b[\s\S]*?<\/\1>/gi

@@ -229,12 +229,21 @@ describe('xmeml pushback parser', () => {
     )
   })
 
-  it('panel ships pushback modules in 0.1.28', () => {
+  it('panel ships pushback modules; Cuts tab + in-place patch paused in 0.1.47 provider-first', () => {
     const root = join(__dirname, '../../../tools/adobe-uxp-library-panel')
     expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereClipSidecar')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereTrackSidecar')
-    expect(readFileSync(join(root, 'src/xmeml-pushback.js'), 'utf8')).toContain('extractPremiereSequenceExtras')
-    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.28'")
+    expect(readFileSync(join(root, 'src/clip-match.js'), 'utf8')).toContain('selectLinkedAudioClips')
+    expect(readFileSync(join(root, 'src/premiere-patch-cut.js'), 'utf8')).toContain('listAudioTrackItems')
+    expect(readFileSync(join(root, 'src/cut-change-watch.js'), 'utf8')).toContain('findStaleLinkedCuts')
+    expect(readFileSync(join(root, 'src/cut-link-store.js'), 'utf8')).toContain('syncedUpdatedAt')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain("PANEL_VERSION = '0.1.47'")
+    expect(readFileSync(join(root, 'src/panel-features.js'), 'utf8')).toContain('ENABLE_INPLACE_PATCH = false')
+    expect(readFileSync(join(root, 'src/panel-features.js'), 'utf8')).toContain('ENABLE_CUTS_TAB = false')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('Cut neu laden')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).not.toContain('Premiere aktualisieren')
+    expect(readFileSync(join(root, 'src/premiere-patch-cut.js'), 'utf8')).toContain('planClipPatch')
+    expect(readFileSync(join(root, 'src/premiere-patch-cut.js'), 'utf8')).toContain('createMoveAction')
+    expect(readFileSync(join(root, 'src/index.js'), 'utf8')).toContain('tickCutChangeWatch')
     expect(readFileSync(join(root, 'src/cuts-api.js'), 'utf8')).toContain('premiereV1TrackSidecarXml')
   })
 
@@ -301,6 +310,45 @@ describe('xmeml pushback parser', () => {
     expect(msg).toContain('Clip-Sidecar')
     expect(msg).toContain('Track-Sidecar')
     expect(msg).toContain('Sequenz-Extras')
+  })
+
+  it('reuses cutSceneId from clip name mark on restore (Wave P4)', () => {
+    const sceneId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+    const mediaId = '11111111-1111-1111-1111-111111111111'
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xmeml>
+<xmeml version="4">
+  <sequence>
+    <name>Demo</name>
+    <rate><timebase>25</timebase><ntsc>FALSE</ntsc></rate>
+    <media>
+      <video>
+        <track>
+          <clipitem id="clipitem-1">
+            <name>a.mp4 ⟦${sceneId}⟧</name>
+            <enabled>TRUE</enabled>
+            <start>0</start>
+            <end>50</end>
+            <in>0</in>
+            <out>50</out>
+            <file id="file-${mediaId}">
+              <name>a.mp4</name>
+              <pathurl>file://localhost/a.mp4</pathurl>
+            </file>
+            <sourcetrack><mediatype>video</mediatype><trackindex>1</trackindex></sourcetrack>
+            <comments>videon:scene:${sceneId}</comments>
+          </clipitem>
+        </track>
+      </video>
+    </media>
+  </sequence>
+</xmeml>`
+    const parsed = parsePremiereTimelineXml(xml)
+    expect(parsed.v1[0].cutSceneId).toBe(sceneId)
+    const { scenes } = mappedClipsToRestoreScenes([
+      { ...parsed.v1[0], mediaAssetId: mediaId },
+    ])
+    expect(scenes[0].id).toBe(sceneId)
   })
 
   it('prefers Cut media over Mediathek duplicates for the same filename', () => {

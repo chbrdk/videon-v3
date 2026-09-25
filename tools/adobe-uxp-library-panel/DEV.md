@@ -7,7 +7,7 @@ Adobe UXP does **not** support `<script type="module">`. Always ship the IIFE bu
 ```bash
 cd tools/adobe-uxp-library-panel
 npm install
-npm run build   # → src/panel.bundle.js
+npm run build   # → src/panel.bundle.js + src/styles.bundle.css
 ```
 
 Reload the plugin in UDT (or re-sync the External sideload folder) after every build.
@@ -19,9 +19,13 @@ Premiere keeps that **frozen** copy. Repo edits alone do nothing until you:
 1. `npm run build` in `tools/adobe-uxp-library-panel`
 2. UDT → **Unload** the old plugin (check version)
 3. **Load** the repo folder again (or sync into a new `…_<newVersion>` External folder)
-4. Confirm the panel header shows **`v0.1.11`** (or current) and briefly **`Bereit · v0.1.11`** — if you still see an older `v0.1.x` / `v?`, you are on a stale load (UDT watches the **repo** folder: `tools/adobe-uxp-library-panel`)
+4. Confirm the panel header shows **`v0.1.49`** (or current) and briefly **`Bereit · v0.1.49`** — if you still see an older `v0.1.x` / `v?`, you are on a stale load (UDT watches the **repo** folder: `tools/adobe-uxp-library-panel`)
 
-**UXP path quirk:** `main` is `src/index.html`, but CSS/JS hrefs resolve from the **plugin root**. Use `src/styles.css` and `src/panel.bundle.js` (not bare `styles.css`).
+**UXP path quirk:** `main` is `src/index.html`, but CSS/JS hrefs resolve from the **plugin root**. Use `src/styles.bundle.css` and `src/panel.bundle.js` (not bare filenames).
+
+**UXP CSS quirk:** `@import` in stylesheets is **ignored**. `build.cjs` concatenates tokens + components + layout into `styles.bundle.css`. Edit the source CSS files, then rebuild.
+
+**UXP control quirk:** Native `<button>` keeps Spectrum orange rings. All panel actions are `div[role="button"].ds-btn`.
 
 Panel JS MUST poll for DOM nodes via `setTimeout` — never `document.addEventListener`. Prefer element `on*` properties; fall back to element `addEventListener` only if needed. Do **not** use HTML inline `onclick` (needs `allowCodeGenerationFromStrings`). Network calls use XHR `onload`/`onerror` via `src/http.js`.
 

@@ -78,7 +78,7 @@ tools/adobe-uxp-library-panel/
 ├── package.json
 ├── README.md
 └── src/
-    ├── index.html / index.js / styles.css
+    ├── index.html / index.js / styles.css (+ styles.bundle.css from build)
     ├── api.js / hit-model.js / time.js / cache*.js
     ├── host.js            # PPRO vs AEFT detection
     ├── ae-placement.js    # pure AE timing planner

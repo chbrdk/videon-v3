@@ -40,6 +40,8 @@ export function PlatformAssistantHost({
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [themeId, setThemeId] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [embedSrc, setEmbedSrc] = useState<string | null>(null)
+  const embedSrcLockedRef = useRef(false)
 
   const plexonOrigin = useMemo(() => {
     const base = getPlexonPublicBaseUrl()
@@ -60,15 +62,27 @@ export function PlatformAssistantHost({
     return () => observer.disconnect()
   }, [])
 
-  const embedSrc = useMemo(() => {
-    if (!open) return null
-    return buildPlatformAssistantEmbedUrl({
+  /**
+   * Freeze iframe src while open — conversation assignment must not remount
+   * the embed (wipes mid-turn state). Spec: assistant-embed.md § Iframe stability.
+   */
+  useEffect(() => {
+    if (!open) {
+      embedSrcLockedRef.current = false
+      setEmbedSrc(null)
+      return
+    }
+    if (embedSrcLockedRef.current) return
+    const next = buildPlatformAssistantEmbedUrl({
       platformProjectId,
       capability,
       pathname,
       conversationId,
       theme: themeId,
     })
+    if (!next) return
+    embedSrcLockedRef.current = true
+    setEmbedSrc(next)
   }, [open, platformProjectId, capability, pathname, conversationId, themeId])
 
   const navigateExpand = useCallback(() => {

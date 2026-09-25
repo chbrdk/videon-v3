@@ -98,16 +98,17 @@ Hard limit Wave 1: ≤ **40** hits returned to the panel UI. Product `GET /api/m
 1. Timing source of truth is **milliseconds** (`startMs` / `endMs`) from the hit; host adapter converts to frames using the **footage** frame rate (not only sequence/comp FPS).
 2. WHEN `endMs` ≤ `startMs` or timing is missing THEN insert MUST import the full media (or refuse with explicit reason) — MUST NOT invent scene bounds.
 3. Multi-select: insert in list order; optional gap frames/seconds between clips (Legacy sequential placement).
-4. Panel MUST keep a deep link action (“In VIDEON öffnen”) using Product `href` + configured `VIDEON` public base from settings.
+4. Panel MUST keep a deep link into Product VIDEON (`href` + configured public base). On hit **cards**, the primary secondary action is **Anzeigen** (detail overlay). “In VIDEON öffnen” lives on the **detail** sheet (not as a wide card button).
 
 ### Premiere (Wave 1)
 
 1. Requires Premiere Pro **UXP** with host id `premierepro` (manifest `minVersion` ≥ 25.2). Do **not** use CEP host code `PPRO`.
 2. Import into a dedicated Bin via `importFiles(paths, suppressUI=true, targetBin|null, false)` — never pass `undefined` as `targetBin`.
-3. Resolve the imported `ClipProjectItem` by media path / name; set scene bounds with `createSetInOutPointsAction` when `startMs`/`endMs` are valid.
-4. Optional: append to the active Sequence with `SequenceEditor.createInsertProjectItemAction` at playhead (V1/A1). Bin-only remains acceptable if Sequence insert fails.
+3. Resolve the imported `ClipProjectItem` by media path / name (Bin-first, settle retries); set scene bounds with `createClearInOutPointsAction` (when present) then `createSetInOutPointsAction` when `startMs`/`endMs` are valid. Prefer verifying In/Out via `getInPoint`/`getOutPoint` when available.
+4. Optional (default **on** in panel ≥ 0.1.37): append to the active Sequence with `SequenceEditor.createInsertProjectItemAction` at playhead (V1/A1); on failure MAY try `createOverwriteItemAction`. Bin-only remains acceptable if Sequence insert fails — banner MUST say so.
 5. Markers optional (sceneKey / search snippet) — nice-to-have, not MVP-blocking.
 6. Import MUST use a **local filesystem path** from the panel cache — signed HTTPS URLs are invalid for `importFiles`.
+7. Hit cards MUST surface timing (In/Out + duration), scene ordinal (`sceneHitOrdinalLabel`), filename, project, and search snippet (or an explicit empty-snippet hint).
 
 ### After Effects (Wave 1.5)
 
@@ -124,11 +125,14 @@ Minimum surface:
 
 1. Settings: Product base URL (from env/docs, no hardcode in source defaults beyond staging documented in `knowledge/paths.md`), API token, default Collection, default Bin/Comp name, cache path reveal/clear.
 2. Search field + Enter; loading and empty states.
-3. Result **card grid** (UXP-safe flex wrap): fixed-height poster (84px) then progressive muted MP4 preview (`/preview`, ≤3s loop) written to the UXP data folder and played via `file.url`/`getFsUrl` (blob URLs are unreliable for `<video>` in Premiere UXP); filename, project, scene/timing badge, snippet; multi-select; per-card **+** insert. Cards render **before** media fetch.
-4. Insert options: Bin only vs Bin+Sequence (Premiere); target Comp (AE); sequential + gap.
-5. Progress for multi-insert downloads.
+3. Result **card grid** (UXP-safe flex wrap + **margins**, not `gap`): fixed-height poster then progressive muted MP4 preview; filename, project, scene ordinal + In/Out + duration, snippet; multi-select; per-card **Anzeigen** (opens detail overlay) + compact **+** insert. Cards render **before** media fetch.
+4. **Hit detail overlay** (≥ 0.1.48): width-scaled looping preview (`sizeHitDetailMedia`, 16:9 from panel width), richer scene/collection metadata (incl. `analysisRunId`, ms range, deep link, query), index snippet; actions **Einfügen** + **In VIDEON**. Overlay is plain HTML/CSS (UXP-safe), not a browser `<dialog>` dependency.
+5. Insert options: Bin only vs Bin+Sequence (Premiere; Sequence append **default on** ≥ 0.1.37); target Comp (AE); sequential + gap.
+6. Progress for multi-insert downloads.
 
 UI may be plain UXP HTML/CSS in Wave 1. Do **not** bundle `@msqdx/ui` into Adobe unless a later wave explicitly adopts a build that supports it — keep the panel thin.
+
+**Visual language (≥ 0.1.46):** Snapshot MSQ DX tokens + a plain-CSS **`ds-*` component mirror**, shipped as **`styles.bundle.css`**. Header uses an inline **brand-lockup** (orange mark + VIDEON). UXP spacing uses **margins** (no flex `gap`). Controls are compact **`div[role="button"].ds-btn`** (`--xs` / `--sm`). Documented in `knowledge/adobe-uxp-panel-msqdx-ui.md`. Do **not** invent a parallel class language — keep public `ds-*` names aligned with `msqdx-ui`. Do **not** bundle `@msqdx/ui`.
 
 ## Packaging & distribution
 
@@ -204,8 +208,14 @@ Product routes remain those in `apps/web/lib/paths.ts` (`apiMediaSearch`, `apiMe
 |-------------------|----------|
 | `videon.media.search` | Same Product search the panel calls; MCP remains agent-only and MUST NOT return signed download URLs |
 | In-app `/chat` | Same retrieval semantics; different chrome |
-| Cut `premiere_xml` export | Complementary (project handoff); panel is live search/insert |
-| Open Cut in Premiere | Later wave — `adobe-uxp-open-cut-premiere.md` (ZIP → sequence; not scene insert) |
+| Cut `premiere_xml` export | Complementary (web/export handoff); panel Wave 1 is live search/insert |
+| Open Cut / Cuts tab | **Paused** in panel UI ≥ 0.1.36 (`ENABLE_CUTS_TAB`) — modules retained; see `knowledge/adobe-uxp-provider-first.md` |
+
+## Provider-first (locked 2026-09-10)
+
+1. Panel primary job = **clip & scene provider** (search → preview → insert).
+2. Cuts tab, Open Cut, and in-place Cut→Premiere sync MUST NOT ship in the default operator UI while `ENABLE_CUTS_TAB` / `ENABLE_INPLACE_PATCH` are false.
+3. Cut package delivery MAY return later as an explicit operator action — never as silent timeline sync.
 
 ## Open questions (resolve before Wave 1 code freeze)
 

@@ -1,124 +1,219 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="msqdx-ui-dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VIDEON Library</title>
-    <link rel="stylesheet" href="src/styles.css" />
+    <link rel="stylesheet" href="src/styles.bundle.css" />
   </head>
   <body>
     <div id="app">
       <header class="header">
-        <div class="brand">VIDEON <span id="panel-version" class="panel-version">v0.1.28</span></div>
-        <button type="button" id="settings-toggle" class="ghost">Einstellungen</button>
+        <div class="brand-lockup" aria-label="VIDEON">
+          <span class="brand-lockup-mark" aria-hidden="true">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 143 145"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              focusable="false"
+            >
+              <path
+                fill="#ff6a3b"
+                d="M32.5825 0H7.74219C3.46629 0 0 3.51478 0 7.85047V33.0382C0 37.3739 3.46629 40.8887 7.74219 40.8887H32.5825C36.8584 40.8887 40.3247 37.3739 40.3247 33.0382V7.85047C40.3247 3.51478 36.8584 0 32.5825 0Z"
+              />
+              <path
+                fill="#ff6a3b"
+                d="M133.855 0H104.395C99.3421 0 95.2501 4.14926 95.2501 9.27252V36.8953C95.2501 43.1873 90.2167 48.2911 84.0114 48.2911H56.7697C51.7171 48.2911 47.625 52.4404 47.625 57.5636V85.1864C47.625 91.4785 42.5917 96.5823 36.3864 96.5823H9.14462C4.09203 96.5823 0 100.732 0 105.855V135.727C0 140.851 4.09203 145 9.14462 145H38.6053C43.6579 145 47.7499 140.851 47.7499 135.727V108.105C47.7499 101.813 52.7833 96.7089 58.9886 96.7089H86.2303C91.2829 96.7089 95.3749 92.5596 95.3749 87.4363V59.8136C95.3749 53.5215 100.408 48.4177 106.614 48.4177H133.855C138.908 48.4177 143 44.2685 143 39.1452V9.27252C143 4.14926 138.908 0 133.855 0Z"
+              />
+              <path
+                fill="#ff6a3b"
+                d="M133.827 96.5627H104.404C99.338 96.5627 95.231 100.727 95.231 105.864V135.698C95.231 140.835 99.338 145 104.404 145H133.827C138.893 145 143 140.835 143 135.698V105.864C143 100.727 138.893 96.5627 133.827 96.5627Z"
+              />
+            </svg>
+          </span>
+          <div class="brand-lockup-copy">
+            <div class="brand-lockup-label">VIDEON</div>
+            <p class="panel-meta">
+              <span>Library</span>
+              <span class="brand-dot" aria-hidden="true">·</span>
+              <span id="panel-version" class="panel-version">v0.1.49</span>
+            </p>
+          </div>
+        </div>
+        <div role="button" tabindex="0" id="settings-toggle" class="ds-btn ds-btn--ghost ds-btn--sm ds-btn--square">
+          <span class="ds-btn__label">Einstellungen</span>
+        </div>
       </header>
-      <p id="boot-status" class="status">Panel wird geladen…</p>
+      <p id="boot-status" class="status ds-alert ds-alert--info">Panel wird geladen…</p>
 
-      <section id="settings-panel" class="settings hidden">
-        <label>
-          Product Base URL
-          <input id="product-base-url" type="url" placeholder="https://videon.projects-a.plygrnd.tech" />
-        </label>
-        <label>
-          API Token
-          <input id="api-token" type="password" placeholder="videon_…" autocomplete="off" />
-        </label>
-        <label>
-          Collection
-          <select id="collection-select">
-            <option value="">— alle zugänglichen —</option>
-          </select>
-        </label>
-        <label>
-          Collection-ID (Fallback)
-          <input id="default-project-id" type="text" placeholder="uuid" />
-        </label>
-        <label id="premiere-bin-label">
-          Premiere Bin
-          <input id="bin-name" type="text" value="VIDEON" />
-        </label>
-        <label id="ae-comp-label" class="host-ae hidden">
-          After Effects Comp
-          <input id="comp-name" type="text" value="VIDEON" />
-        </label>
-        <div class="cache-box">
-          <div class="cache-meta">
-            <strong>Lokaler Media-Cache</strong>
-            <span id="cache-stats">—</span>
-          </div>
-          <div class="row">
-            <button type="button" id="cache-refresh" class="ghost">Aktualisieren</button>
-            <button type="button" id="cache-clear" class="ghost">Cache leeren</button>
+      <section id="settings-panel" class="ds-panel ds-panel--card hidden">
+        <div class="ds-form-section">
+          <h2 class="ds-form-section__title">Verbindung</h2>
+          <div class="ds-form-section__body">
+            <div class="ds-field ds-field--sm">
+              <label class="ds-field-label" for="product-base-url">Product Base URL</label>
+              <input
+                id="product-base-url"
+                class="ds-input ds-input--sm ds-input--block"
+                type="url"
+                placeholder="https://videon.projects-a.plygrnd.tech"
+              />
+            </div>
+            <div class="ds-field ds-field--sm">
+              <label class="ds-field-label" for="api-token">API Token</label>
+              <input
+                id="api-token"
+                class="ds-input ds-input--sm ds-input--block"
+                type="password"
+                placeholder="videon_…"
+                autocomplete="off"
+              />
+            </div>
+            <div class="ds-field ds-field--sm">
+              <label class="ds-field-label" for="collection-select">Collection</label>
+              <select id="collection-select" class="ds-input ds-input--sm ds-input--block">
+                <option value="">— alle zugänglichen —</option>
+              </select>
+            </div>
+            <div class="ds-field ds-field--sm">
+              <label class="ds-field-label" for="default-project-id">Collection-ID (Fallback)</label>
+              <input
+                id="default-project-id"
+                class="ds-input ds-input--sm ds-input--block"
+                type="text"
+                placeholder="uuid"
+              />
+            </div>
           </div>
         </div>
+
+        <div class="ds-form-section">
+          <h2 class="ds-form-section__title">Host</h2>
+          <div class="ds-form-section__body">
+            <div class="ds-field ds-field--sm" id="premiere-bin-label">
+              <label class="ds-field-label" for="bin-name">Premiere Bin</label>
+              <input id="bin-name" class="ds-input ds-input--sm ds-input--block" type="text" value="VIDEON" />
+            </div>
+            <div class="ds-field ds-field--sm host-ae hidden" id="ae-comp-label">
+              <label class="ds-field-label" for="comp-name">After Effects Comp</label>
+              <input id="comp-name" class="ds-input ds-input--sm ds-input--block" type="text" value="VIDEON" />
+            </div>
+            <label class="ds-check-label experimental-paused hidden" id="cut-change-watch-label">
+              <input id="cut-change-watch" class="ds-checkbox" type="checkbox" />
+              Cut-Änderungen pollen (pausiert)
+            </label>
+            <label class="ds-check-label experimental-paused hidden" id="cut-change-auto-patch-label">
+              <input id="cut-change-auto-patch" class="ds-checkbox" type="checkbox" disabled />
+              Auto-Patch (pausiert)
+            </label>
+          </div>
+        </div>
+
+        <div class="ds-form-section">
+          <h2 class="ds-form-section__title">Cache</h2>
+          <div class="ds-form-section__body">
+            <div class="cache-meta">
+              <strong>Lokaler Media-Cache</strong>
+              <span id="cache-stats">—</span>
+            </div>
+            <div class="row">
+              <div role="button" tabindex="0" id="cache-refresh" class="ds-btn ds-btn--ghost ds-btn--sm">
+                <span class="ds-btn__label">Aktualisieren</span>
+              </div>
+              <div role="button" tabindex="0" id="cache-clear" class="ds-btn ds-btn--ghost ds-btn--sm">
+                <span class="ds-btn__label">Cache leeren</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="row">
-          <button type="button" id="settings-save" class="primary">Speichern</button>
-          <button type="button" id="test-connection" class="ghost">Verbindung testen</button>
-          <button type="button" id="reload-collections" class="ghost">Collections laden</button>
+          <div role="button" tabindex="0" id="settings-save" class="ds-btn ds-btn--primary ds-btn--sm ds-btn--square">
+            <span class="ds-btn__label">Speichern</span>
+          </div>
+          <div role="button" tabindex="0" id="test-connection" class="ds-btn ds-btn--ghost ds-btn--sm">
+            <span class="ds-btn__label">Verbindung testen</span>
+          </div>
+          <div role="button" tabindex="0" id="reload-collections" class="ds-btn ds-btn--ghost ds-btn--sm">
+            <span class="ds-btn__label">Collections laden</span>
+          </div>
         </div>
-        <p id="settings-status" class="status" hidden></p>
+        <p id="settings-status" class="ds-alert ds-alert--info" hidden></p>
       </section>
 
-      <section class="workspace-bar">
-        <label>
-          Aktive Collection
-          <select id="collection-select-main">
+      <section class="ds-panel ds-panel--card workspace-bar">
+        <div class="ds-field ds-field--sm">
+          <label class="ds-field-label" for="collection-select-main">Aktive Collection</label>
+          <select id="collection-select-main" class="ds-input ds-input--sm ds-input--block">
             <option value="">— alle zugänglichen —</option>
           </select>
-        </label>
-        <div class="mode-tabs" role="tablist">
-          <button type="button" id="mode-scenes-btn" class="mode-tab is-active" data-mode="scenes">
+        </div>
+        <div id="mode-tabs" class="ds-chip-row mode-tabs hidden" role="tablist" hidden>
+          <div role="button" tabindex="0" id="mode-scenes-btn" class="ds-chip ds-chip--sm ds-chip--selected" data-mode="scenes">
             Szenen
-          </button>
-          <button type="button" id="mode-cuts-btn" class="mode-tab" data-mode="cuts">Cuts</button>
+          </div>
+          <div role="button" tabindex="0" id="mode-cuts-btn" class="ds-chip ds-chip--sm" data-mode="cuts">Cuts</div>
         </div>
       </section>
 
       <section id="scenes-mode" class="mode-panel">
-        <section class="search">
-          <input id="search-input" type="search" placeholder="Szenen suchen…" />
-          <button type="button" id="search-btn" class="primary">Suchen</button>
+        <section class="ds-panel ds-panel--card search">
+          <input
+            id="search-input"
+            class="ds-input ds-input--sm search-input"
+            type="search"
+            placeholder="Clips & Szenen suchen…"
+          />
+          <div role="button" tabindex="0" id="search-btn" class="ds-btn ds-btn--primary ds-btn--sm ds-btn--square">
+            <span class="ds-btn__label">Suchen</span>
+          </div>
         </section>
 
-        <p id="banner" class="banner" hidden></p>
+        <p id="banner" class="ds-alert ds-alert--info panel-banner" hidden></p>
 
-        <section class="results">
+        <section class="ds-panel ds-panel--flush results">
           <div class="results-meta">
-            <strong>Treffer</strong>
+            <strong>Clips &amp; Szenen</strong>
             <div class="results-meta-actions">
-              <button type="button" id="select-all-btn" class="ghost tiny" hidden>Alle</button>
-              <button type="button" id="select-none-btn" class="ghost tiny" hidden>Keine</button>
-              <span id="results-count">0</span>
+              <div role="button" tabindex="0" id="select-all-btn" class="ds-btn ds-btn--ghost ds-btn--sm" hidden>
+                <span class="ds-btn__label">Alle</span>
+              </div>
+              <div role="button" tabindex="0" id="select-none-btn" class="ds-btn ds-btn--ghost ds-btn--sm" hidden>
+                <span class="ds-btn__label">Keine</span>
+              </div>
+              <span id="results-count" class="ds-badge ds-badge--neutral">0</span>
             </div>
           </div>
           <div id="results-list" class="results-list">
-            <p class="empty">Token setzen, Collection wählen, dann suchen.</p>
+            <p class="ds-empty empty">Token setzen, Collection wählen, dann suchen.</p>
           </div>
         </section>
 
-        <section id="insert-bar" class="insert-bar hidden">
-          <p id="host-badge" class="host-badge" hidden></p>
-          <label id="premiere-insert-opts" class="check">
-            <input id="append-sequence" type="checkbox" />
-            Auch auf aktive Sequence (wenn Host-API erlaubt)
+        <section id="insert-bar" class="ds-panel ds-panel--default insert-bar hidden">
+          <p id="host-badge" class="ds-badge ds-badge--accent" hidden></p>
+          <label id="premiere-insert-opts" class="ds-check-label">
+            <input id="append-sequence" class="ds-checkbox" type="checkbox" checked />
+            Auf aktive Sequence (In/Out am Clip, Playhead)
           </label>
           <div id="ae-insert-opts" class="host-ae hidden">
-            <label class="check">
-              <input id="ae-sequential" type="checkbox" checked />
+            <label class="ds-check-label">
+              <input id="ae-sequential" class="ds-checkbox" type="checkbox" checked />
               Sequenziell platzieren
             </label>
-            <label>
-              Gap (Frames)
-              <input id="ae-gap-frames" type="number" min="0" step="1" value="0" />
-            </label>
+            <div class="ds-field ds-field--sm">
+              <label class="ds-field-label" for="ae-gap-frames">Gap (Frames)</label>
+              <input id="ae-gap-frames" class="ds-input ds-input--sm" type="number" min="0" step="1" value="0" />
+            </div>
           </div>
-          <div class="row">
-            <button type="button" id="dry-run-btn" class="ghost">
-              Download prüfen
-            </button>
-            <button type="button" id="insert-btn" class="primary">
-              Einfügen (<span id="selected-count">0</span>)
-            </button>
+          <div class="ds-card-actions">
+            <div role="button" tabindex="0" id="dry-run-btn" class="ds-btn ds-btn--ghost ds-btn--sm">
+              <span class="ds-btn__label">Download prüfen</span>
+            </div>
+            <div role="button" tabindex="0" id="insert-btn" class="ds-btn ds-btn--primary ds-btn--sm ds-btn--square">
+              <span class="ds-btn__label">Einfügen (<span id="selected-count">0</span>)</span>
+            </div>
           </div>
           <div id="progress" class="progress hidden">
             <div id="progress-bar" class="progress-bar"></div>
@@ -126,33 +221,104 @@
         </section>
       </section>
 
-      <section id="cuts-mode" class="mode-panel hidden">
-        <p id="cuts-banner" class="banner" hidden></p>
-        <section class="cuts-panel">
+      <section id="cuts-mode" class="mode-panel hidden" hidden aria-hidden="true">
+        <p id="cuts-banner" class="ds-alert ds-alert--info panel-banner" hidden></p>
+        <section class="ds-panel ds-panel--card cuts-panel">
           <div class="results-meta">
             <strong>Cuts</strong>
             <div class="results-meta-actions">
-              <button type="button" id="cuts-refresh-btn" class="ghost tiny">Aktual.</button>
-              <span id="cuts-count">0</span>
+              <div role="button" tabindex="0" id="cuts-refresh-btn" class="ds-btn ds-btn--ghost ds-btn--sm">
+                <span class="ds-btn__label">Aktual.</span>
+              </div>
+              <span id="cuts-count" class="ds-badge ds-badge--neutral">0</span>
             </div>
           </div>
           <div id="cuts-list" class="cuts-list">
-            <p class="empty">Collection pinnen, dann Cuts laden.</p>
+            <p class="ds-empty empty">Collection pinnen, dann Cuts laden.</p>
           </div>
         </section>
-        <section id="pushback-confirm" class="pushback-confirm hidden">
+        <section id="pushback-confirm" class="ds-panel ds-panel--default pushback-confirm hidden">
           <strong>Cut aktualisieren?</strong>
           <pre id="pushback-diff" class="pushback-diff"></pre>
-          <div class="row">
-            <button type="button" id="pushback-apply-btn" class="primary">Übernehmen</button>
-            <button type="button" id="pushback-refresh-btn" class="ghost">
-              Übernehmen + Sequenz ersetzen
-            </button>
-            <button type="button" id="pushback-cancel-btn" class="ghost">Abbrechen</button>
+          <div class="ds-card-actions">
+            <div role="button" tabindex="0" id="pushback-apply-btn" class="ds-btn ds-btn--primary ds-btn--sm">
+              <span class="ds-btn__label">Übernehmen</span>
+            </div>
+            <div role="button" tabindex="0" id="pushback-refresh-btn" class="ds-btn ds-btn--ghost ds-btn--sm">
+              <span class="ds-btn__label">Übernehmen + Cut neu laden</span>
+            </div>
+            <div role="button" tabindex="0" id="pushback-cancel-btn" class="ds-btn ds-btn--ghost ds-btn--sm">
+              <span class="ds-btn__label">Abbrechen</span>
+            </div>
           </div>
         </section>
       </section>
+
+      <div id="hit-detail" class="hit-detail hidden" hidden aria-hidden="true">
+        <div id="hit-detail-scrim" class="hit-detail-scrim" aria-hidden="true"></div>
+        <div
+          class="hit-detail-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hit-detail-title"
+        >
+          <header class="hit-detail-header">
+            <h2 id="hit-detail-title" class="hit-detail-title">Szene</h2>
+            <div
+              role="button"
+              tabindex="0"
+              id="hit-detail-close"
+              class="ds-btn ds-btn--ghost ds-btn--xs ds-btn--square"
+            >
+              <span class="ds-btn__label">Schließen</span>
+            </div>
+          </header>
+          <div id="hit-detail-media" class="hit-detail-media">
+            <img id="hit-detail-poster" alt="" />
+            <video
+              id="hit-detail-video"
+              class="hit-detail-video"
+              muted
+              loop
+              autoplay
+              playsinline
+              preload="auto"
+            ></video>
+          </div>
+          <div class="hit-detail-body">
+            <div id="hit-detail-meta" class="hit-detail-kv"></div>
+            <p id="hit-detail-snippet" class="hit-detail-snippet"></p>
+          </div>
+          <div class="hit-detail-actions">
+            <div
+              role="button"
+              tabindex="0"
+              id="hit-detail-select"
+              class="ds-btn ds-btn--ghost ds-btn--xs ds-btn--square"
+            >
+              <span class="ds-btn__label">Auswählen</span>
+            </div>
+            <div
+              role="button"
+              tabindex="0"
+              id="hit-detail-open-web"
+              class="ds-btn ds-btn--ghost ds-btn--xs ds-btn--square"
+            >
+              <span class="ds-btn__label">In VIDEON</span>
+            </div>
+            <div
+              role="button"
+              tabindex="0"
+              id="hit-detail-insert"
+              class="ds-btn ds-btn--primary ds-btn--xs ds-btn--square"
+            >
+              <span class="ds-btn__label">Einfügen</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
     <script src="src/panel.bundle.js"></script>
   </body>
 </html>

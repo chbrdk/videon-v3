@@ -18,11 +18,11 @@ describe('premiere NLE sidecars', () => {
       <sourcetrack><mediatype>video</mediatype></sourcetrack>
       <filter><effect><name>Opacity</name></effect></filter>
       <labels><label2>Lavender</label2></labels>
-      <comments>note</comments>`
+      <comments>videon:scene:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</comments>`
     const sidecar = extractPremiereClipSidecar(body)
     expect(sidecar).toContain('Opacity')
     expect(sidecar).toContain('labels')
-    expect(sidecar).toContain('comments')
+    expect(sidecar).not.toContain('comments')
     expect(sidecar).not.toContain('<file ')
     expect(extractPremiereFilterBlocks(body)).toContain('Opacity')
     expect(sanitizePremiereClipSidecarXml('<script>x</script>')).toBeNull()
