@@ -433,7 +433,7 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
         kind: 'analysis_run',
         status: 'succeeded',
         subjectRef: analysisRunId,
-        title: media.filename || 'Media analysis',
+        title: media.originalFilename || 'Media analysis',
         href: `${paths.routes.analyses}?run=${encodeURIComponent(analysisRunId)}`,
         actorUserId: analysis.requestedByPlexonUserId,
       })
