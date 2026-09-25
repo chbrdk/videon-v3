@@ -107,6 +107,16 @@ Spec: [`specs/domain/project-team.md`](../specs/domain/project-team.md).
 
 Outbound team/auth mail is **Plexon-only** (no Videon `SMTP_*`). Login deep-links to Plexon `/forgot-password` via `lib/plexon-links.ts` + `NEXT_PUBLIC_PLEXON_URL`. See `plexon-v3/specs/domain/transactional-email.md`.
 
+## Suite Enterprise (E2 ClientRoom)
+
+| Key | Value |
+|-----|-------|
+| Slot | `videon_cut` |
+| Client | `apps/web/lib/plexon-client-room.ts` |
+| Approve API | `POST /api/cuts/:cutId/client-room-approve?platformProjectId=` · `paths.routes.apiCutClientRoomApprove` |
+| Gate | Brand-Check pass + succeeded export (`lib/cut-client-room-approve.ts`) |
+| Persist | `cut_client_room_approvals` · migration `0023_cut_client_room_approvals.sql` |
+| Plexon PUT | `{PLEXON}/api/platform/provisioning/collections/:id/client-room/slots/videon_cut` |
 ## Adobe UXP Library Panel
 
 | Key / path | Meaning |

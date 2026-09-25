@@ -265,7 +265,12 @@
     "exportReady": "Export fertig — Download verfügbar",
     "exportFailed": "Export fehlgeschlagen",
     "downloadMp4": "MP4 herunterladen",
-    "downloadXml": "Premiere-Paket herunterladen"
+    "downloadXml": "Premiere-Paket herunterladen",
+    "clientRoomApprove": "Kundenraum",
+    "clientRoomHint": "Nach Export und bestandenem Brand-Check für den Kundenraum freigeben",
+    "clientRoomPublished": "Cut für den Kundenraum freigegeben",
+    "clientRoomApprovedLocal": "Freigabe gespeichert (kein aktiver Kundenraum oder Federation offline)",
+    "clientRoomFailed": "Kundenraum-Freigabe fehlgeschlagen (Brand-Check oder Export prüfen)"
   },
   "home": {
     "kicker": "VIDEON",

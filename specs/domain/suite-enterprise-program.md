@@ -1,6 +1,6 @@
 # VIDEON — Suite Enterprise Program
 
-**Status:** Accepted (program) — 2026-09-25. E4/E1 Plexon-Clients; Hook: Pipeline nach `markAnalysisFinished(…, succeeded)` (Actor: `requestedByPlexonUserId`). Client-Room `videon_cut` folgt.  
+**Status:** Accepted (program) — 2026-09-25. E4/E1 Plexon-Clients; E2 Slot `videon_cut` via Export-Freigabe (`plexon-client-room.ts` + `POST …/client-room-approve`). Hook Analyse: Pipeline nach `markAnalysisFinished(…, succeeded)`.  
 **Programm:** `plexon-v3/specs/domain/suite-enterprise-program.md`  
 **Federation:** `2026-05-plexon-federation-v3`
 
@@ -14,6 +14,14 @@
 | E5 | Brand-Check vor Export ist eine Sperre: ohne bestandene Messung gegen die aktive Guideline kein freigegebener Export. Dieselbe BRANDION-Messung, kein eigenes Pass. |
 | E7 | `mediaRefs` am Kampagnenbrief. |
 | E8 | Deep-Link auf den Cut in der Krisenvorlage. |
+
+## E2 — Export-Freigabe
+
+- Client: `apps/web/lib/plexon-client-room.ts` → `PUT …/client-room/slots/videon_cut`
+- API: `POST /api/cuts/:cutId/client-room-approve?platformProjectId=`
+- Gate: bestandener Brand-Check auf allen Medien im Cut + mindestens ein erfolgreicher Export
+- Persistenz: `cut_client_room_approvals` (`guidelineId`, Version, Analysis-Run-IDs) — Migration `0023_cut_client_room_approvals.sql`
+- Skip Slot-Put: Federation nicht live / fehlender Actor / `404 room_missing` (lokale Freigabe bleibt gespeichert)
 
 ## Sperre
 

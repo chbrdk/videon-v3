@@ -265,7 +265,12 @@
     "exportReady": "Export ready — download available",
     "exportFailed": "Export failed",
     "downloadMp4": "Download MP4",
-    "downloadXml": "Download Premiere package"
+    "downloadXml": "Download Premiere package",
+    "clientRoomApprove": "Client room",
+    "clientRoomHint": "Approve for client room after export and a passing brand check",
+    "clientRoomPublished": "Cut published to the client room",
+    "clientRoomApprovedLocal": "Approval saved (no active client room or federation offline)",
+    "clientRoomFailed": "Client room approval failed (check brand check or export)"
   },
   "home": {
     "kicker": "VIDEON",

@@ -197,6 +197,7 @@ export function CutEditorView({
     toast.push({ message, tone: 'error' })
   }, [toast])
   const [exportBusy, setExportBusy] = useState(false)
+  const [clientRoomBusy, setClientRoomBusy] = useState(false)
   const [latestExport, setLatestExport] = useState<{
     id: string
     status: string
@@ -1551,6 +1552,32 @@ export function CutEditorView({
     }
   }
 
+  const approveClientRoom = async () => {
+    setClientRoomBusy(true)
+    setError(null)
+    try {
+      const response = await fetch(paths.routes.apiCutClientRoomApprove(cutId, platformProjectId), {
+        method: 'POST',
+      })
+      const body = (await response.json()) as {
+        clientRoomPublished?: boolean
+        error?: { message?: string; code?: string }
+      }
+      if (!response.ok) {
+        throw new Error(body.error?.message || t('cutEditor.clientRoomFailed'))
+      }
+      notifyOk(
+        body.clientRoomPublished
+          ? t('cutEditor.clientRoomPublished')
+          : t('cutEditor.clientRoomApprovedLocal'),
+      )
+    } catch (err) {
+      notifyError(err instanceof Error ? err.message : t('cutEditor.clientRoomFailed'))
+    } finally {
+      setClientRoomBusy(false)
+    }
+  }
+
   useEffect(() => {
     if (!latestExport || (latestExport.status !== 'queued' && latestExport.status !== 'running')) return
     const timer = window.setInterval(() => {
@@ -1875,6 +1902,23 @@ export function CutEditorView({
             {exportBusy || latestExport?.status === 'queued' || latestExport?.status === 'running'
               ? '…'
               : 'Export'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="cut-client-room-approve"
+            onClick={() => void approveClientRoom()}
+            disabled={
+              busy ||
+              clientRoomBusy ||
+              exportBusy ||
+              clips.length === 0 ||
+              latestExport?.status !== 'succeeded'
+            }
+            title={t('cutEditor.clientRoomHint')}
+          >
+            {clientRoomBusy ? '…' : t('cutEditor.clientRoomApprove')}
           </Button>
         </div>
         <div className="videon-nle__tool-cluster">
