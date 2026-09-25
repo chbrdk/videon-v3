@@ -24,6 +24,14 @@ export { Card } from '../../../../msqdx-ui/packages/ui/src/components/Card'
 export type { CardProps } from '../../../../msqdx-ui/packages/ui/src/components/Card'
 export { CardActions } from '../../../../msqdx-ui/packages/ui/src/components/CardActions'
 export type { CardActionsProps } from '../../../../msqdx-ui/packages/ui/src/components/CardActions'
+export {
+  CollectionHubCard,
+  CollectionHubMetric,
+} from '../../../../msqdx-ui/packages/ui/src/components/CollectionHubCard'
+export type {
+  CollectionHubCardProps,
+  CollectionHubMetricProps,
+} from '../../../../msqdx-ui/packages/ui/src/components/CollectionHubCard'
 export { Field } from '../../../../msqdx-ui/packages/ui/src/components/Field'
 export { HubIndexCard } from '../../../../msqdx-ui/packages/ui/src/components/HubIndexCard'
 export type { HubIndexCardProps } from '../../../../msqdx-ui/packages/ui/src/components/HubIndexCard'

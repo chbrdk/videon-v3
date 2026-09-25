@@ -4,11 +4,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Button,
+  CardActions,
+  CollectionHubCard,
   EmptyState,
-  HubIndexCard,
   LoadingText,
-  RankedList,
-  RankedRow,
   Text,
 } from '@msqdx/ui'
 import { useActiveCollection } from '@/components/collection-context'
@@ -90,38 +89,64 @@ export function CollectionPicker() {
         <HubIndexLayoutSwitch layout={layout} onChange={setLayout} />
       </div>
       {layout === 'cards' ? (
-        <ul className="ds-hub-index-grid" aria-label={t('collections.listAria')}>
+        <div className="ds-collection-hub-grid" aria-label={t('collections.listAria')}>
           {items.map((item) => (
-            <li key={item.id}>
-              <HubIndexCard
-                href={paths.routes.libraryFor(item.id)}
-                onClick={() => setPlatformProjectId(item.id)}
-                title={item.name}
-                meta={
-                  <>
-                    <span>{item.domain || item.companyId}</span>
-                    <span aria-hidden>·</span>
-                    <span>{item.status}</span>
-                  </>
-                }
-              />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <RankedList>
-          {items.map((item, index) => (
-            <RankedRow
+            <CollectionHubCard
               key={item.id}
-              index={index + 1}
-              label={item.name}
-              secondary={`${item.domain || item.companyId} · ${item.status}`}
-              href={paths.routes.libraryFor(item.id)}
-              linkComponent={Link}
-              onActivate={() => setPlatformProjectId(item.id)}
+              kicker={item.domain || item.companyId}
+              badge={item.status}
+              title={item.name}
+              actions={
+                <CardActions>
+                  <Link
+                    href={paths.routes.libraryFor(item.id)}
+                    onClick={() => setPlatformProjectId(item.id)}
+                  >
+                    <Button variant="ghost">{t('library.open')}</Button>
+                  </Link>
+                  <Link
+                    href={paths.routes.uploadFor(item.id)}
+                    onClick={() => setPlatformProjectId(item.id)}
+                  >
+                    <Button variant="ghost">{t('nav.upload')}</Button>
+                  </Link>
+                </CardActions>
+              }
             />
           ))}
-        </RankedList>
+        </div>
+      ) : (
+        <ol className="ds-collection-hub-list" aria-label={t('collections.listAria')}>
+          {items.map((item, index) => (
+            <li key={item.id} className="ds-collection-hub-list-row">
+              <span className="ds-collection-hub-list-num" aria-hidden>
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <div className="ds-collection-hub-list-row__main">
+                <Link
+                  href={paths.routes.libraryFor(item.id)}
+                  className="ds-collection-hub-list-row__title"
+                  onClick={() => setPlatformProjectId(item.id)}
+                >
+                  {item.name}
+                </Link>
+                <Text role="meta" as="p">
+                  {item.domain || item.companyId} · {item.status}
+                </Text>
+              </div>
+              <div className="ds-collection-hub-list-row__trail">
+                <Link
+                  href={paths.routes.libraryFor(item.id)}
+                  onClick={() => setPlatformProjectId(item.id)}
+                >
+                  <Button variant="ghost" size="sm">
+                    {t('library.open')}
+                  </Button>
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ol>
       )}
       <div className="videon-hub__actions videon-hub__actions--spaced">
         {items.slice(0, 1).map((item) => (
