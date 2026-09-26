@@ -361,6 +361,33 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
             cachedTokens: result.provenance.usage.cachedTokens,
             providerCostUsd: result.provenance.usage.costUsd,
           })
+          try {
+            const { reportLlmUsage, reportVendorCostUsd } = await import('../usage-report')
+            const userId = analysis.requestedByPlexonUserId
+            const inputTok = result.provenance.usage.promptTokens ?? 0
+            const outputTok = result.provenance.usage.completionTokens ?? 0
+            reportLlmUsage({
+              userId,
+              usage: {
+                input_tokens: inputTok,
+                output_tokens: outputTok,
+                model: result.provenance.actualModel,
+              },
+              surface: 'videon.vision',
+              idempotencyKey: `vision:${analysisRunId}:${entry.scene.key}`,
+            })
+            if (typeof result.provenance.usage.costUsd === 'number') {
+              reportVendorCostUsd({
+                userId,
+                costUsd: result.provenance.usage.costUsd,
+                surface: 'videon.vision',
+                model: result.provenance.actualModel,
+                idempotencyKey: `vision_cost:${analysisRunId}:${entry.scene.key}`,
+              })
+            }
+          } catch {
+            /* never affect analysis */
+          }
           completed += 1
           await upsertStageRun({
             analysisRunId,
