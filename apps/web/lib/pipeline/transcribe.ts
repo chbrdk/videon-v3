@@ -16,6 +16,14 @@ export type TranscriptSegment = {
 export type TranscriptResult = {
   text: string
   segments: TranscriptSegment[]
+  /** Present when OpenRouter (or similar) returned provider metering. */
+  billing?: {
+    provider: 'openrouter' | 'local'
+    model?: string
+    promptTokens?: number
+    completionTokens?: number
+    costUsd?: number
+  }
 }
 
 function excerptForRange(segments: TranscriptSegment[], startMs: number, endMs: number): string {
@@ -52,6 +60,7 @@ async function transcribeAudioLocally(audioPath: string): Promise<TranscriptResu
   return {
     text: parsed.text?.trim() ?? '',
     segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+    billing: { provider: 'local', model: config.whisperModel },
   }
 }
 
@@ -61,7 +70,26 @@ async function runTranscriptionAttempt(
   errors: string[],
 ): Promise<TranscriptResult | null> {
   try {
-    return await fn()
+    const result = await fn()
+    // Normalize OpenRouter result shape onto TranscriptResult.billing
+    if (result && 'model' in result && typeof (result as { model?: string }).model === 'string') {
+      const or = result as TranscriptResult & {
+        model: string
+        usage?: { promptTokens?: number; completionTokens?: number; costUsd?: number }
+      }
+      return {
+        text: or.text,
+        segments: or.segments,
+        billing: {
+          provider: 'openrouter',
+          model: or.model,
+          promptTokens: or.usage?.promptTokens,
+          completionTokens: or.usage?.completionTokens,
+          costUsd: or.usage?.costUsd,
+        },
+      }
+    }
+    return result
   } catch (error) {
     const message = error instanceof Error ? error.message : `${label} failed`
     errors.push(message)

@@ -302,6 +302,58 @@ export async function runMediaAnalysis(analysisRunId: string): Promise<void> {
             transcriptText: transcript.text,
             segments: transcript.segments,
           })
+          try {
+            const { reportLlmUsage, reportUsage, reportVendorCostUsd } = await import(
+              '../usage-report'
+            )
+            const userId = analysis.requestedByPlexonUserId
+            const billing = transcript.billing
+            if (billing?.provider === 'openrouter') {
+              const hasTok =
+                (billing.promptTokens ?? 0) > 0 || (billing.completionTokens ?? 0) > 0
+              if (hasTok) {
+                reportLlmUsage({
+                  userId,
+                  usage: {
+                    input_tokens: billing.promptTokens ?? 0,
+                    output_tokens: billing.completionTokens ?? 0,
+                    model: billing.model,
+                  },
+                  surface: 'videon.transcribe',
+                  idempotencyKey: `transcribe:${analysisRunId}`,
+                })
+              } else {
+                // Whisper often has no token block — billable audio minute proxy.
+                const durationMs = transcript.segments.reduce(
+                  (max, s) => Math.max(max, s.endMs),
+                  0,
+                )
+                const minutes = Math.max(1, Math.ceil(durationMs / 60_000) || 1)
+                reportUsage({
+                  userId: userId ?? '',
+                  eventType: 'transcription',
+                  rawUnits: {
+                    minutes,
+                    model: billing.model,
+                    surface: 'videon.transcribe',
+                  },
+                  idempotencyKey: `transcribe:${analysisRunId}`,
+                })
+              }
+              if (typeof billing.costUsd === 'number') {
+                reportVendorCostUsd({
+                  userId,
+                  costUsd: billing.costUsd,
+                  surface: 'videon.transcribe',
+                  model: billing.model,
+                  idempotencyKey: `transcribe_cost:${analysisRunId}`,
+                })
+              }
+            }
+            // Local Whisper: no cloud spend — skip ledger.
+          } catch {
+            /* never affect analysis */
+          }
           const transcriptLabel = transcript.segments.length > 0 ? 'transcribed' : 'transcribed_empty'
           return `${transcriptLabel}:${stemResult}:${mixPeakResult}`
         } catch (error) {

@@ -428,6 +428,25 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
         draftBytes: outBytes,
         providerRequestId: providerResult.requestId,
       })
+      try {
+        const { reportUsage } = await import('../usage-report')
+        if (job.requestedByPlexonUserId) {
+          reportUsage({
+            userId: job.requestedByPlexonUserId,
+            eventType: 'video_generation',
+            rawUnits: {
+              runs: 1,
+              model: job.modelId,
+              surface: 'videon.generate.draft',
+              provider_request_id: providerResult.requestId,
+              duration_ms: Math.max(0, job.endMs - job.startMs),
+            },
+            idempotencyKey: `video_gen:${jobId}`,
+          })
+        }
+      } catch {
+        /* never affect generation */
+      }
       return
     }
 
@@ -462,6 +481,25 @@ export async function runMediaGenerate(jobId: string): Promise<void> {
       promotedMediaAssetId: promoted.mediaAssetId,
       providerRequestId: providerResult.requestId,
     })
+    try {
+      const { reportUsage } = await import('../usage-report')
+      if (job.requestedByPlexonUserId) {
+        reportUsage({
+          userId: job.requestedByPlexonUserId,
+          eventType: 'video_generation',
+          rawUnits: {
+            runs: 1,
+            model: job.modelId,
+            surface: 'videon.generate',
+            provider_request_id: providerResult.requestId,
+            duration_ms: Math.max(0, job.endMs - job.startMs),
+          },
+          idempotencyKey: `video_gen:${jobId}`,
+        })
+      }
+    } catch {
+      /* never affect generation */
+    }
     await maybeInsertTargetCut({ job, promotedMediaAssetId: promoted.mediaAssetId })
   } catch (error) {
     const message =

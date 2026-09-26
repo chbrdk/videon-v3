@@ -11,7 +11,17 @@ type VerboseSegment = {
 type VerboseTranscriptionResponse = {
   text?: string
   segments?: VerboseSegment[]
+  usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number }
   error?: { message?: string }
+}
+
+export type OpenRouterTranscriptionResult = TranscriptResult & {
+  model: string
+  usage?: {
+    promptTokens?: number
+    completionTokens?: number
+    costUsd?: number
+  }
 }
 
 function mapVerboseSegments(segments: VerboseSegment[] | undefined): TranscriptSegment[] {
@@ -30,7 +40,7 @@ function mapVerboseSegments(segments: VerboseSegment[] | undefined): TranscriptS
 export async function transcribeAudioWithOpenRouter(
   audioPath: string,
   options: { fetcher?: typeof fetch } = {},
-): Promise<TranscriptResult> {
+): Promise<OpenRouterTranscriptionResult> {
   const apiKey = openRouterApiKey()
   const apiBase = openRouterApiBaseUrl()
   if (!apiKey || !apiBase) {
@@ -83,7 +93,25 @@ export async function transcribeAudioWithOpenRouter(
 
     const segments = mapVerboseSegments(body.segments)
     const text = body.text?.trim() || segments.map((segment) => segment.text).join(' ').trim()
-    return { text, segments }
+    const usageRoot = body.usage
+    return {
+      text,
+      segments,
+      model,
+      ...(usageRoot
+        ? {
+            usage: {
+              promptTokens:
+                typeof usageRoot.prompt_tokens === 'number' ? usageRoot.prompt_tokens : undefined,
+              completionTokens:
+                typeof usageRoot.completion_tokens === 'number'
+                  ? usageRoot.completion_tokens
+                  : undefined,
+              costUsd: typeof usageRoot.cost === 'number' ? usageRoot.cost : undefined,
+            },
+          }
+        : {}),
+    }
   }
 
   throw new Error(`OpenRouter transcription failed: ${errors.join(' · ')}`)
