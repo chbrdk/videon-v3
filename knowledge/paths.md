@@ -195,3 +195,5 @@ Outbound team/auth mail is **Plexon-only** (no Videon `SMTP_*`). Login deep-link
 | Coolify Postgres | `qvh3hghdbjggzs8bysk9qrqc` |
 | Legacy v2 app (freeze) | `q8c8gwwck404k04okkkwskgk` |
 | Staging exercise runner | `node scripts/v7-staging-exercises.mjs` |
+
+- Jev System One (shadow stub): `specs/domain/jev-decisions.md` · OpenRouter Decisions (same key as vision) · `JEV_SHADOW_ENABLED` · model `typesafe/jev-1.13`
