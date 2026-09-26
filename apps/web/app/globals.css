@@ -1290,34 +1290,6 @@ main {
   min-width: 0;
 }
 
-.videon-nle__toolbar-menu {
-  position: relative;
-}
-
-.videon-nle__toolbar-menu > summary {
-  list-style: none;
-  cursor: pointer;
-}
-
-.videon-nle__toolbar-menu > summary::-webkit-details-marker {
-  display: none;
-}
-
-.videon-nle__toolbar-menu-body {
-  position: absolute;
-  top: calc(100% + 0.35rem);
-  right: 0;
-  z-index: 12;
-  display: grid;
-  gap: 0.25rem;
-  min-width: 11rem;
-  padding: 0.45rem;
-  border: 1px solid var(--nle-border);
-  border-radius: 0.35rem;
-  background: var(--nle-panel-2);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-}
-
 .videon-nle__toolbar-check {
   display: flex;
   align-items: center;
