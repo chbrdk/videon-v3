@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { postCollectionActivityDistillate } from '../lib/plexon-collection-activity'
 import {
   CLIENT_ROOM_SLOT_VIDEON_CUT,
   clientRoomSlotApiPath,
   putClientRoomSlot,
 } from '../lib/plexon-client-room'
+import { shareLinksApiPath, upsertShareLink } from '../lib/plexon-share-links'
 import { suiteAuditApiPath } from '../lib/plexon-suite-audit'
+
+const root = path.join(__dirname, '..')
 
 describe('plexon suite enterprise clients (videon)', () => {
   afterEach(() => {
@@ -97,5 +102,40 @@ describe('plexon suite enterprise clients (videon)', () => {
       subjectRef: 'cut-1',
       title: 'Cut A',
     })
+  })
+
+  it('builds share-links path and POSTs cut projection', async () => {
+    vi.stubEnv('PLEXON_AUTH_URL', 'https://plexon.test')
+    vi.stubEnv('PLEXON_SERVICE_SECRET', 'sec')
+    vi.stubEnv('PLEXON_FEDERATION_MODE', 'live')
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(shareLinksApiPath('pp-9')).toContain('/share-links')
+    expect(
+      await upsertShareLink({
+        platformProjectId: 'pp-9',
+        productId: 'videon',
+        shareId: 'cut-1',
+        kind: 'cut',
+        title: 'Cut A',
+        href: 'https://videon.test/cuts/cut-1',
+        actorUserId: 'user-1',
+      }),
+    ).toBe(true)
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toMatchObject({
+      productId: 'videon',
+      kind: 'cut',
+      shareId: 'cut-1',
+    })
+  })
+
+  it('client-room-approve dual-writes share-links', () => {
+    const route = readFileSync(
+      path.join(root, 'app/api/cuts/[cutId]/client-room-approve/route.ts'),
+      'utf8',
+    )
+    expect(route).toContain('scheduleUpsertShareLink')
+    expect(route).toContain("kind: 'cut'")
   })
 })

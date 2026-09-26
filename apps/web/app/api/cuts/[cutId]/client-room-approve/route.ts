@@ -9,6 +9,7 @@ import {
   CLIENT_ROOM_SLOT_VIDEON_CUT,
   putClientRoomSlot,
 } from '@/lib/plexon-client-room'
+import { scheduleUpsertShareLink } from '@/lib/plexon-share-links'
 import { scheduleSuiteAuditEvent } from '@/lib/plexon-suite-audit'
 import { requireSessionUserId } from '@/lib/session-user'
 
@@ -100,6 +101,21 @@ export async function POST(request: Request, context: RouteContext) {
       guidelineVersion: gate.guidelineVersion,
       analysisRunIds: gate.analysisRunIds,
       clientRoomPublished,
+    },
+  })
+
+  scheduleUpsertShareLink({
+    platformProjectId,
+    productId: 'videon',
+    shareId: cut.id,
+    kind: 'cut',
+    title: cut.name || 'Cut',
+    href,
+    actorUserId: userId,
+    meta: {
+      slotId: CLIENT_ROOM_SLOT_VIDEON_CUT,
+      exportId: gate.exportJob.id,
+      source: 'videon_client_room',
     },
   })
 
