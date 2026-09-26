@@ -9,7 +9,7 @@
 | Home magazine spine | **Reshape** | Layout app-local; tiles → `HubIndexCard`; titles → `Text` |
 | Collection / media / cuts lists | **Reshape** | Media browse → native `Card` + toned `Badge` status; hubs → `HubIndexCard`; dense rows → `RankedList` |
 | `EntityCard` in Mediathek | **Drop** | Brandion catalog chrome — wrong for media browse |
-| Uncolored status `Chip` + always-green `StatusDot` | **Drop** | Status → `Badge` tones; filter facets stay `Chip` |
+| Uncolored status `Chip` + always-green `StatusDot` | **Drop** ✅ 2026-09-26 | Status → `Badge` tones; filter facets stay `Chip` |
 | Analyses pipeline UI | **Reshape** | `StepStrip` + `Chip` / `StatusDot` / `Meter` |
 | Settings stub | **Reshape** | `SettingsShell` / `SettingsBand` |
 | Native search inputs | **Drop** | `Field` + `Input` |
@@ -17,10 +17,10 @@
 | NLE edit logic / waveform data | **Keep** app-domain | |
 | NLE tool / transport / monitor chrome | **Reshape** | Promote to `msqdx-ui` primitives |
 | Native `<details>` “Mehr”-Menü | **Drop** | `useFlyout` + `Button` + `ds-flyover` (`EditorOverflowMenu`) |
-| Native `<select>` in Editor | **Drop** | `Field` + `Select` |
-| `ToolButton` mit Text-Label (Bin/Inspect) | **Drop** | `Button` ghost/sm — `ToolButton` nur Icon |
+| Native `<select>` in Editor | **Drop** ✅ AI dialogs 2026-09-26 | `Field` + `Select` |
+| `ToolButton` mit Text-Label (Bin/Inspect) | **Drop** ✅ | `Button` ghost/sm — `ToolButton` nur Icon (`label=` = aria) |
 | `ContextMenu` für Toolbar-Overflow | **Drop** | ContextMenu = Rechtsklick; Toolbar = Flyout |
-| Parallel NLE hex palette | **Drop** | Map to theme tokens |
+| Parallel NLE hex palette | **Drop** ✅ 2026-09-26 | Mapped to theme tokens (`--nle-*` aliases) |
 | PlatformAssistantHost | **Defer** | Out of scope for this rebuild |
 
 ## Waves

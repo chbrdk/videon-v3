@@ -1,7 +1,8 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Button, Chip, StatusDot, Text, type StatusLevel } from '@msqdx/ui'
+import { Badge, Button, Text, type StatusLevel } from '@msqdx/ui'
+import { statusLevelToBadgeTone } from '@/lib/status-badge-tone'
 
 export function EditorStatusStrip({
   level = 'ok',
@@ -19,10 +20,7 @@ export function EditorStatusStrip({
   return (
     <div className="videon-nle__status-strip" role="status">
       <div className="videon-nle__status-strip-main">
-        <StatusDot level={level} />
-        <Chip static size="sm">
-          {label}
-        </Chip>
+        <Badge tone={statusLevelToBadgeTone(level)}>{label}</Badge>
         {detail != null ? (
           <Text role="meta" as="span">
             {detail}

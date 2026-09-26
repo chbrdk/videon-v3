@@ -23,11 +23,9 @@ import {
   InspectSection,
   ScrollArea,
   Stack,
-  StatusDot,
   Text,
   Timecode,
   type BadgeTone,
-  type StatusLevel,
 } from '@msqdx/ui'
 import { ChatCollapsible } from '@msqdx/ui-client'
 import { TimelineClipThumbnail } from '@/components/timeline-clip-thumbnail'
@@ -110,17 +108,12 @@ function entityIcon(kind: EntityKind): ComponentType<EntityIconProps> {
   }
 }
 
-function brandStatusLevel(status: BrandCheckStatus | 'unchecked'): StatusLevel {
-  if (status === 'fail') return 'critical'
-  if (status === 'pass') return 'ok'
-  if (status === 'warn' || status === 'running' || status === 'queued_pending_brandion') return 'warn'
-  return 'warn'
-}
-
 function brandBadgeTone(status: BrandCheckStatus | 'unchecked'): BadgeTone {
   if (status === 'fail') return 'danger'
   if (status === 'pass') return 'success'
-  if (status === 'warn') return 'warning'
+  if (status === 'warn' || status === 'running' || status === 'queued_pending_brandion') {
+    return 'warning'
+  }
   return 'neutral'
 }
 
@@ -289,10 +282,9 @@ export function SceneInsightInspector(props: {
 
         <InspectSection title="Brand">
           <Stack direction="row" gap="xs" align="center" wrap className="videon-scene-inspect__brand-row">
-            <StatusDot level={brandStatusLevel(brandStatus)} />
-            <Chip static size="sm">
+            <Badge tone={brandBadgeTone(brandStatus)}>
               {BRAND_STATUS_LABELS[brandStatus]}
-            </Chip>
+            </Badge>
             {brandCheck && (brandCheck.failed > 0 || brandCheck.passed > 0 || brandCheck.skipped > 0) ? (
               <Badge tone={brandBadgeTone(brandStatus)}>
                 {brandCheck.passed} ok · {brandCheck.failed} fail

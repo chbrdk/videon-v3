@@ -1,10 +1,9 @@
 'use client'
 
 import {
-  Chip,
+  Badge,
   Meter,
   MeterList,
-  StatusDot,
   StepStrip,
   StepStripItem,
   Text,
@@ -22,6 +21,7 @@ import {
   type AnalysisStatusSnapshot,
   type PipelineStageSnapshot,
 } from '@/lib/pipeline/pipeline-status'
+import { statusLevelToBadgeTone } from '@/lib/status-badge-tone'
 
 type PipelineStatusTrackProps = {
   analysis: AnalysisStatusSnapshot | null
@@ -58,14 +58,11 @@ export function PipelineStatusTrack({
     return (
       <div className="videon-pipeline videon-pipeline--compact">
         <div className="videon-pipeline__summary">
-          <StatusDot level={statusLevel(analysis?.status ?? 'none')} />
-          <Chip static size="sm">
+          <Badge tone={statusLevelToBadgeTone(statusLevel(analysis?.status ?? 'none'))}>
             {analysisStatusLabel(analysis?.status)}
-          </Chip>
+          </Badge>
           {showLifecycle && mediaLifecycleState ? (
-            <Chip static size="sm">
-              {mediaLifecycleLabel(mediaLifecycleState)}
-            </Chip>
+            <Badge tone="neutral">{mediaLifecycleLabel(mediaLifecycleState)}</Badge>
           ) : null}
           <Text role="meta" as="span">
             {headline}
@@ -82,14 +79,11 @@ export function PipelineStatusTrack({
     <div className="videon-pipeline videon-pipeline--detailed">
       <div className="videon-pipeline__summary">
         <div className="videon-pipeline__summary-row">
-          <StatusDot level={statusLevel(analysis?.status ?? 'none')} />
-          <Chip static size="sm">
+          <Badge tone={statusLevelToBadgeTone(statusLevel(analysis?.status ?? 'none'))}>
             {analysisStatusLabel(analysis?.status)}
-          </Chip>
+          </Badge>
           {showLifecycle && mediaLifecycleState ? (
-            <Chip static size="sm">
-              Medien: {mediaLifecycleLabel(mediaLifecycleState)}
-            </Chip>
+            <Badge tone="neutral">Medien: {mediaLifecycleLabel(mediaLifecycleState)}</Badge>
           ) : null}
         </div>
         <Text role="body" as="p">

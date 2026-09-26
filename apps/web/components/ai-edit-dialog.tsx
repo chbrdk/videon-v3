@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Field, Input, Stack, Text } from '@msqdx/ui'
-import { Dialog } from '@msqdx/ui-client'
+import { Dialog, Select } from '@msqdx/ui-client'
 import { useT } from '@/lib/user-prefs'
 import { formatClock } from '@/lib/editor-time'
 import { recommendEditModelId } from '@/lib/generation/recommend'
@@ -154,21 +154,18 @@ export function AiEditDialog({
           />
         </Field>
         <Field label={t('aiEdit.model')}>
-          <select
+          <Select
             aria-label={t('aiEdit.model')}
             disabled={busy}
             value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-            style={{ width: '100%', minHeight: '2.25rem' }}
-          >
-            {modelChoices
+            options={modelChoices
               .filter((model) => model.role === 'edit')
-              .map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label}
-              </option>
-            ))}
-          </select>
+              .map((model) => ({
+                value: model.id,
+                label: model.label,
+              }))}
+            onChange={setModelId}
+          />
         </Field>
         <Field label={t('aiEdit.referenceUrl')}>
           <Input

@@ -24,7 +24,7 @@ VIDEON v3 must **compose** shared chrome, not fork a second design language.
 
 App barrels: `apps/web/lib/msqdx-ui.ts`, `msqdx-ui-shell.ts`, `msqdx-ui-client.ts`.
 
-Editor status strip is app-local (`EditorStatusStrip`) composing `StatusDot` + `Text`.
+Editor status strip is app-local (`EditorStatusStrip`) composing `Badge` + `Text`.
 
 ## Mirror from Audion / Checkion (pattern, not npm import)
 

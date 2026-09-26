@@ -13,10 +13,10 @@
 | `knowledge/v7-production-runbook.md` (legacy v2 Coolify UUID `q8c8gwwck404k04okkkwskgk`) | keep | `paths.md` · V7 archive procedure | Freeze/archive instructions for legacy island — live ops, not obsolete knowledge. |
 | `apps/web/lib/msqdx-ui.ts` (`EntityCard` re-exports) | drop_safe **done** 2026-09-26 | No app imports | Barrel lines removed (Querschnitt). |
 | `apps/web/app/globals.css` (`.videon-nle__toolbar-menu*`) | drop_safe **done** 2026-09-26 | No TSX/HTML class refs; `editor-overflow-menu.tsx` replaced native `<details>` | Removed orphan CSS block. |
-| `apps/web/components/ai-create-dialog.tsx` · `ai-edit-dialog.tsx` (native `<select>`) | drop_needs_rebuild | Runtime UI; keep-drop **Drop** native `<select>` in Editor | Replace with `Field` + `Select` before class becomes `drop_safe`. |
-| `apps/web/components/pipeline-status-track.tsx` · `editor-status-strip.tsx` · `scene-inspect-navigator.tsx` · `scene-insight-inspector.tsx` (`StatusDot` + static `Chip` for pipeline/brand status) | drop_needs_rebuild | Imported in editor/media/scene surfaces; keep-drop **Drop** „Uncolored status Chip + always-green StatusDot“ | Filter facets in `media-library.tsx` correctly keep `Chip`; status rows need `Badge` tones per backlog. |
-| `apps/web/components/editor-transport.tsx` · `cut-editor-view.tsx` · `media-editor-view.tsx` · … (`ToolButton` with `label=` + visible text children) | drop_needs_rebuild | Widespread runtime; keep-drop **Drop** „ToolButton mit Text-Label“ | Icon-only ghost `Button` / icon-only `ToolButton` per Wave 2–3 NLE primitives. |
-| `apps/web/app/globals.css` (`.videon-nle` `--nle-*` hex fallbacks, e.g. `#f8f6f0`, `#ff6b00`) | reshape | Active editor CSS; keep-drop **Drop** „Parallel NLE hex palette“ | Map fallbacks to theme tokens (Wave 3 token unify); do not delete until replacements land. |
+| `apps/web/components/ai-create-dialog.tsx` · `ai-edit-dialog.tsx` (native `<select>`) | drop_needs_rebuild **done** 2026-09-26 | `Field` + `@msqdx/ui` `Select` | Native `<select>` removed from AI dialogs. |
+| `apps/web/components/pipeline-status-track.tsx` · `editor-status-strip.tsx` · `scene-inspect-navigator.tsx` · `scene-insight-inspector.tsx` (`StatusDot` + static `Chip` for pipeline/brand status) | drop_needs_rebuild **done** 2026-09-26 | Status → `Badge` tones | Filter `Chip` in `media-library.tsx` kept. |
+| `apps/web/components/editor-transport.tsx` · `cut-editor-view.tsx` · `media-editor-view.tsx` · … (`ToolButton` with `label=` + visible text children) | keep (icon-only) | `label=` = aria/title only; children are icons | Text actions (Bin/Inspect/Clip) already `Button` ghost/sm. |
+| `apps/web/app/globals.css` (`.videon-nle` `--nle-*` hex fallbacks, e.g. `#f8f6f0`, `#ff6b00`) | reshape **done** 2026-09-26 | Theme vars only (`--nle-void` / `--nle-warn` / `--nle-signal`) | Parallel hex palette removed from NLE aliases + playhead/clip fallbacks. |
 | `knowledge/staging-coolify-fal-generation.md` | reshape | Referenced from `paths.md` + `ai-clip-generation.md`; body documents OpenRouter | Filename is legacy (fal.ai); content is current. Rename + path needle update is doc-only reshape, not drop. |
 | `apps/web/components/platform-assistant-host.tsx` (+ mount in `app-shell.tsx`) | defer | Live AppShell; keep-drop **Defer** PlatformAssistantHost | Spec/knowledge: `knowledge/platform-assistant-host.md`. Out of UI-rebuild scope — keep until product defers embed. |
 | `tools/adobe-uxp-library-panel/` | keep | Spec `specs/domain/adobe-uxp-library-panel.md`; many `knowledge/adobe-uxp-*.md` | Active UXP client — not legacy CEP/PrismVid port. Spec explicitly **Drop** CEP for new work only. |
@@ -29,13 +29,13 @@
 |---|---|
 | **Drop** `EntityCard` in Mediathek | **Done** in `media-library.tsx` + barrel export removed. |
 | **Drop** native `<details>` toolbar menu | **Done** in components + orphan CSS removed. |
-| **Drop** native `<select>` in Editor | **Partial** — AI dialogs still use `<select>`. |
-| **Drop** status `Chip`/`StatusDot` | **Not done** — pipeline/editor/scene status still uses pair. |
-| **Drop** text `ToolButton` labels | **Not done** — transport and toolbars still pass labels. |
+| **Drop** native `<select>` in Editor | **Done** in AI create/edit dialogs (`Select` from `@msqdx/ui-client`). |
+| **Drop** status `Chip`/`StatusDot` | **Done** 2026-09-26 — pipeline/editor/scene status use `Badge` tones. |
+| **Drop** text `ToolButton` labels | **Done** — `label=` is aria only; Bin/Inspect/Clip are ghost `Button`. |
 | **Defer** PlatformAssistantHost | **Mounted** — intentional. |
 
 ## Suggested Gatekeeper `drop_safe` candidates (this repo)
 
 1. ~~`apps/web/app/globals.css` — `.videon-nle__toolbar-menu`~~ **done** 2026-09-26.
 
-Not yet `drop_safe`: status UI, selects, hex token CSS.
+Not yet `drop_safe`: — (NLE hex reshape done; remaining polish is optional).

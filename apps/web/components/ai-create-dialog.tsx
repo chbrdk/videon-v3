@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Field, Input, Stack, Text } from '@msqdx/ui'
-import { Dialog } from '@msqdx/ui-client'
+import { Dialog, Select } from '@msqdx/ui-client'
 import { estimateGenerationCostUsd } from '@/lib/generation/model-catalog'
 import { useT } from '@/lib/user-prefs'
 import { recommendCreateModelId } from '@/lib/generation/recommend'
@@ -119,19 +119,16 @@ export function AiCreateDialog({
           />
         </Field>
         <Field label={t('aiCreate.model')}>
-          <select
+          <Select
             aria-label={t('aiCreate.model')}
             disabled={busy}
             value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-            style={{ width: '100%', minHeight: '2.25rem' }}
-          >
-            {modelChoices.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label}
-              </option>
-            ))}
-          </select>
+            options={modelChoices.map((model) => ({
+              value: model.id,
+              label: model.label,
+            }))}
+            onChange={setModelId}
+          />
         </Field>
         <Field label={t('aiCreate.duration')}>
           <Input
@@ -144,17 +141,17 @@ export function AiCreateDialog({
           />
         </Field>
         <Field label={t('aiCreate.aspect')}>
-          <select
+          <Select
             aria-label={t('aiCreate.aspect')}
             disabled={busy}
             value={aspectRatio}
-            onChange={(event) => setAspectRatio(event.target.value as '16:9' | '9:16' | '1:1')}
-            style={{ width: '100%', minHeight: '2.25rem' }}
-          >
-            <option value="16:9">16:9</option>
-            <option value="9:16">9:16</option>
-            <option value="1:1">1:1</option>
-          </select>
+            options={[
+              { value: '16:9', label: '16:9' },
+              { value: '9:16', label: '9:16' },
+              { value: '1:1', label: '1:1' },
+            ]}
+            onChange={(value) => setAspectRatio(value as '16:9' | '9:16' | '1:1')}
+          />
         </Field>
         <Field label={t('aiCreate.referenceUrl')}>
           <Input

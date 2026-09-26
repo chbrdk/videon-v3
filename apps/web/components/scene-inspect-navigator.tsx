@@ -1,6 +1,6 @@
 'use client'
 
-import { Badge, Chip, StatusDot, Text, Timecode, type BadgeTone, type StatusLevel } from '@msqdx/ui'
+import { Badge, Text, Timecode, type BadgeTone } from '@msqdx/ui'
 import type { BrandCheckView } from '@/lib/brand-findings'
 import type { BrandCheckStatus } from '@/lib/db/brand-checks'
 import { formatClock } from '@/lib/editor-time'
@@ -18,17 +18,12 @@ const BRAND_STATUS_LABELS: Record<BrandCheckStatus | 'unchecked', string> = {
   skipped: 'skip',
 }
 
-function brandStatusLevel(status: BrandCheckStatus | 'unchecked'): StatusLevel {
-  if (status === 'fail') return 'critical'
-  if (status === 'pass') return 'ok'
-  if (status === 'warn' || status === 'running' || status === 'queued_pending_brandion') return 'warn'
-  return 'warn'
-}
-
 function brandBadgeTone(status: BrandCheckStatus | 'unchecked'): BadgeTone {
   if (status === 'fail') return 'danger'
   if (status === 'pass') return 'success'
-  if (status === 'warn') return 'warning'
+  if (status === 'warn' || status === 'running' || status === 'queued_pending_brandion') {
+    return 'warning'
+  }
   return 'neutral'
 }
 
@@ -76,10 +71,9 @@ export function SceneInspectNavigator({ scenes, activeSceneKey, onSelect }: Prop
                   separator="–"
                 />
                 <span className="videon-scene-inspect__nav-brand">
-                  <StatusDot level={brandStatusLevel(brandStatus)} />
-                  <Chip static size="sm">
+                  <Badge tone={brandBadgeTone(brandStatus)}>
                     {BRAND_STATUS_LABELS[brandStatus]}
-                  </Chip>
+                  </Badge>
                   {scene.brand && (scene.brand.failed > 0 || scene.brand.passed > 0) ? (
                     <Badge tone={brandBadgeTone(brandStatus)}>
                       {scene.brand.passed}/{scene.brand.failed}
