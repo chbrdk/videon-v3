@@ -18,8 +18,6 @@ export type { ChipProps, ChipSize } from '../../../../msqdx-ui/packages/ui/src/c
 export { Badge } from '../../../../msqdx-ui/packages/ui/src/components/Badge'
 export type { BadgeProps, BadgeTone } from '../../../../msqdx-ui/packages/ui/src/components/Badge'
 export { EmptyState, LoadingText } from '../../../../msqdx-ui/packages/ui/src/components/LoadingText'
-export { EntityCard } from '../../../../msqdx-ui/packages/ui/src/components/EntityCard'
-export type { EntityCardProps } from '../../../../msqdx-ui/packages/ui/src/components/EntityCard'
 export { Card } from '../../../../msqdx-ui/packages/ui/src/components/Card'
 export type { CardProps } from '../../../../msqdx-ui/packages/ui/src/components/Card'
 export { CardActions } from '../../../../msqdx-ui/packages/ui/src/components/CardActions'

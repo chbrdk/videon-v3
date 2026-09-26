@@ -11,7 +11,7 @@
 | `packages/contracts/src/legacy-migration.ts` (+ `dist/legacy-migration.*`) | keep | Exported from `packages/contracts/src/index.ts`; Vitest in `index.test.ts` | Live schema `videon.legacy-migration.v1`; not orphaned code. |
 | `knowledge/v7-staging-exercise-log.md` | keep | Runbook companion; records `Legacy mapping: N/A` | Operational evidence for staging gate; do not drop with runbook. |
 | `knowledge/v7-production-runbook.md` (legacy v2 Coolify UUID `q8c8gwwck404k04okkkwskgk`) | keep | `paths.md` · V7 archive procedure | Freeze/archive instructions for legacy island — live ops, not obsolete knowledge. |
-| `apps/web/lib/msqdx-ui.ts` (`EntityCard` re-exports, L21–22) | drop_needs_rebuild | Repo grep: no `EntityCard` imports outside barrel; keep-drop **Drop** Mediathek `EntityCard` | Mediathek already uses `Card` (`media-library.tsx`). Remove barrel lines after Gatekeeper confirms no external importers. |
+| `apps/web/lib/msqdx-ui.ts` (`EntityCard` re-exports) | drop_safe **done** 2026-09-26 | No app imports | Barrel lines removed (Querschnitt). |
 | `apps/web/app/globals.css` (`.videon-nle__toolbar-menu*`) | drop_safe **done** 2026-09-26 | No TSX/HTML class refs; `editor-overflow-menu.tsx` replaced native `<details>` | Removed orphan CSS block. |
 | `apps/web/components/ai-create-dialog.tsx` · `ai-edit-dialog.tsx` (native `<select>`) | drop_needs_rebuild | Runtime UI; keep-drop **Drop** native `<select>` in Editor | Replace with `Field` + `Select` before class becomes `drop_safe`. |
 | `apps/web/components/pipeline-status-track.tsx` · `editor-status-strip.tsx` · `scene-inspect-navigator.tsx` · `scene-insight-inspector.tsx` (`StatusDot` + static `Chip` for pipeline/brand status) | drop_needs_rebuild | Imported in editor/media/scene surfaces; keep-drop **Drop** „Uncolored status Chip + always-green StatusDot“ | Filter facets in `media-library.tsx` correctly keep `Chip`; status rows need `Badge` tones per backlog. |
@@ -27,7 +27,7 @@
 
 | Backlog decision | Code reality (2026-09-26) |
 |---|---|
-| **Drop** `EntityCard` in Mediathek | **Done** in `media-library.tsx`; stale **barrel export** remains. |
+| **Drop** `EntityCard` in Mediathek | **Done** in `media-library.tsx` + barrel export removed. |
 | **Drop** native `<details>` toolbar menu | **Done** in components + orphan CSS removed. |
 | **Drop** native `<select>` in Editor | **Partial** — AI dialogs still use `<select>`. |
 | **Drop** status `Chip`/`StatusDot` | **Not done** — pipeline/editor/scene status still uses pair. |
@@ -38,4 +38,4 @@
 
 1. ~~`apps/web/app/globals.css` — `.videon-nle__toolbar-menu`~~ **done** 2026-09-26.
 
-Not yet `drop_safe`: EntityCard barrel lines (low risk but cross-barrel contract), status UI, selects, hex token CSS.
+Not yet `drop_safe`: status UI, selects, hex token CSS.
