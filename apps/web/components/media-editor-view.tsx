@@ -17,9 +17,11 @@ import {
 } from '@msqdx/ui'
 import { ContextMenu, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AnalysisOptionsDialog } from '@/components/analysis-options-dialog'
+import { AssistantPageContextPublisher } from '@/components/assistant-page-context'
 import { AiEditDialog, type AiEditOptions } from '@/components/ai-edit-dialog'
 import { ReframeOptionsDialog, type ReframeOptions } from '@/components/reframe-options-dialog'
 import { useActiveCollection } from '@/components/collection-context'
+import { ASSISTANT_ENTITY_VIDEON_MEDIA } from '@/lib/assistant-page-context'
 import { useT } from '@/lib/user-prefs'
 import { EditorMonitor } from '@/components/editor-monitor'
 import { EditorSideDrawer, type EditorSidePanel } from '@/components/editor-side-drawer'
@@ -921,6 +923,11 @@ export function MediaEditorView({
 
   return (
     <div className="videon-nle videon-nle--player-first">
+      <AssistantPageContextPublisher
+        platformProjectId={platformProjectId}
+        entityType={ASSISTANT_ENTITY_VIDEON_MEDIA}
+        entityId={mediaAssetId}
+      />
       <div className="videon-nle__top">
       <header className="videon-nle__toolbar">
         <div className="videon-nle__toolbar-title">

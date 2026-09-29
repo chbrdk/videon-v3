@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Button, Input, Text, ToggleGroup, ToolButton } from '@msqdx/ui'
 import { ContextMenu, Select, useToast, type ContextMenuItem } from '@msqdx/ui-client'
 import { AspectPresetChips } from '@/components/aspect-preset-chips'
+import { AssistantPageContextPublisher } from '@/components/assistant-page-context'
 import { CutTimeline, type CutTimelineViewportApi } from '@/components/cut-timeline'
 import { type CutSelection } from '@/lib/cut-timeline-selection'
 import { CUT_EDITOR_SHORTCUTS } from '@/lib/cut-editor-shortcuts'
@@ -52,6 +53,7 @@ import {
 import { EditorTransport } from '@/components/editor-transport'
 import { IconRedo, IconSplit, IconUndo } from '@/components/editor-icons'
 import { writeStoredActiveCut } from '@/lib/active-cut'
+import { ASSISTANT_ENTITY_VIDEON_CUT } from '@/lib/assistant-page-context'
 import { frameDurationMs, formatClock } from '@/lib/editor-time'
 import { mediaStreamPlaybackUrl } from '@/lib/media-playback-url'
 import {
@@ -2011,6 +2013,11 @@ export function CutEditorView({
           : 'videon-nle videon-nle--player-first'
       }
     >
+      <AssistantPageContextPublisher
+        platformProjectId={platformProjectId}
+        entityType={ASSISTANT_ENTITY_VIDEON_CUT}
+        entityId={cutId}
+      />
       {topbarTrailHost ? createPortal(toolbarChrome, topbarTrailHost) : null}
       {showEditorTopStrip ? (
         <div className="videon-nle__top">
