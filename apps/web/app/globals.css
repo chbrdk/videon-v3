@@ -3438,3 +3438,17 @@ a.videon-cut-timeline__track-btn--link {
     border-bottom: 1px solid var(--nle-border, var(--line));
   }
 }
+
+/* Suite Help Host (Wave 2) — plexon-v3/specs/domain/suite-help-docs.md */
+.platform-help-trigger--fixed.ds-btn {
+  position: fixed;
+  top: 0.85rem;
+  right: 0.85rem;
+  z-index: 45;
+}
+.platform-help-embed-frame {
+  width: min(40rem, 92vw);
+  height: min(70vh, 36rem);
+  border: 0;
+  background: transparent;
+}

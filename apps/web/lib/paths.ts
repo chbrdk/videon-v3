@@ -66,6 +66,9 @@ export const paths = {
   /** Browser iframe origin for central assistant (falls back to base/auth). */
   envPlexonPublicUrl: 'NEXT_PUBLIC_PLEXON_URL',
   pathAssistantEmbed: '/assistant/embed',
+  pathHelpEmbed: '/help/embed',
+  pathHelp: '/help',
+  pathDocsPublic: '/docs',
   pathAssistantExpand: '/assistant',
   envPlexonBaseUrl: 'NEXT_PLEXON_BASE_URL',
   envPlexonAuthUrl: 'PLEXON_AUTH_URL',

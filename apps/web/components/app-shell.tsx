@@ -19,6 +19,7 @@ import { workspaceHref } from '../lib/collection-context'
 import { ShellBrandCorner } from './shell-brand-corner'
 import { AssistantPageContextProvider } from './assistant-page-context'
 import { PlatformAssistantHost } from './platform-assistant-host'
+import { PlatformHelpHost } from './platform-help-host'
 import { TopbarTrailHostProvider } from './topbar-trail-host'
 import { useUserPrefs } from '../lib/user-prefs'
 
@@ -179,6 +180,11 @@ export function AppShell({
             {children}
           </div>
           <PlatformAssistantHost platformProjectId={platformProjectId} />
+          <PlatformHelpHost
+            placement="fixed"
+            platformProjectId={platformProjectId}
+            capability="videon"
+          />
         </AppFrame>
       </TopbarTrailHostProvider>
     </AssistantPageContextProvider>
